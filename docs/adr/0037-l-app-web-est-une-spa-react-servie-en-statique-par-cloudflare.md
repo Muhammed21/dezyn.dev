@@ -1,6 +1,6 @@
 # 0037 — L'app web est une SPA React servie en statique par Cloudflare
 
-- Statut : Accepté — §3 amendé par [0044](0044-l-app-web-appelle-v1-avec-le-cookie-de-session-controle-par-l-origine-et-partage-les-contrats-de-l-api.md)
+- Statut : Accepté — §3 amendé par [0044](0044-l-app-web-appelle-v1-avec-le-cookie-de-session-controle-par-l-origine-et-partage-les-contrats-de-l-api.md) ; §2 et le risque des previews amendés par [0045](0045-l-app-web-est-servie-sur-app-dezyn-dev-et-ses-previews-sous-dezyn-dev-par-un-worker-routeur.md)
 - Date : 2026-10-26
 - Décideurs : Muhammed Cavus
 
