@@ -5,6 +5,7 @@ import {
   createRoute,
   createRouter,
   RouterProvider,
+  type RouterHistory,
 } from "@tanstack/react-router";
 import { describe, expect, it } from "vitest";
 import { render } from "vitest-browser-react";
@@ -28,7 +29,12 @@ const sentTo = (email: string): SentInvitation => ({
   expiresAt: new Date("2026-11-21T10:00:00.000Z"),
 });
 
-const renderInviteMember = async (inviteMember: InviteMember) => {
+const renderInviteMember = async (
+  inviteMember: InviteMember,
+  {
+    history = createMemoryHistory({ initialEntries: [`/espaces/${SPACE_ID}`] }),
+  }: { readonly history?: RouterHistory } = {},
+) => {
   const InviteMember = inviteMemberForm({ inviteMember });
   const root = createRootRoute();
   const spacePage = createRoute({
@@ -45,7 +51,7 @@ const renderInviteMember = async (inviteMember: InviteMember) => {
   });
   const router = createRouter({
     routeTree: root.addChildren([spacePage, signIn]),
-    history: createMemoryHistory({ initialEntries: [`/espaces/${SPACE_ID}`] }),
+    history,
   });
   return render(
     <QueryClientProvider client={new QueryClient()}>
@@ -148,6 +154,27 @@ describe("formulaire d'invitation d'un membre (ADR 0011, ADR 0017 §1)", () => {
       .toHaveTextContent("Invitation envoyée à alan@dezyn.test.");
     expect(screen.getByRole("alert").query()).toBeNull();
   });
+
+  const SENT: Result<SentInvitation, InvitationFailure> = ok(sentTo(GRACE_EMAIL));
+  const REFUSED: Result<SentInvitation, InvitationFailure> = err("already_member");
+
+  it.each([
+    ["l'invitation envoyée", SENT, "status"],
+    ["l'échec", REFUSED, "alert"],
+  ] as const)(
+    "%s dans un espace n'est plus annoncé dans l'espace suivant",
+    async (_case, outcome, role) => {
+      const history = createMemoryHistory({ initialEntries: [`/espaces/${SPACE_ID}`] });
+      const screen = await renderInviteMember(() => Promise.resolve(outcome), { history });
+      await invite(screen, GRACE_EMAIL);
+      await expect.element(screen.getByRole(role)).toBeVisible();
+
+      history.push("/espaces/9b8a7f6e-5d4c-4b3a-8f2e-1d0c9b8a7f6e");
+
+      await expect.poll(() => screen.getByRole(role).elements()).toHaveLength(0);
+      await expect.element(emailField(screen)).toHaveValue("");
+    },
+  );
 
   it("renvoie vers la connexion quand le membre n'a plus de session", async () => {
     const screen = await renderInviteMember(() => Promise.resolve(err("unauthenticated")));

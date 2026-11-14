@@ -39,8 +39,12 @@ const InvitationOutcome = ({
   );
 };
 
-export const inviteMemberForm = ({ inviteMember }: { readonly inviteMember: InviteMember }) =>
-  function InviteMember({ spaceId }: { readonly spaceId: string }) {
+export const inviteMemberForm = ({ inviteMember }: { readonly inviteMember: InviteMember }) => {
+  const InviteMemberInSpace = function InviteMemberInSpace({
+    spaceId,
+  }: {
+    readonly spaceId: string;
+  }) {
     const [email, setEmail] = useState("");
     const { data, isPending, mutate } = useMutation({
       mutationFn: inviteMember,
@@ -75,3 +79,7 @@ export const inviteMemberForm = ({ inviteMember }: { readonly inviteMember: Invi
       </section>
     );
   };
+  return function InviteMember({ spaceId }: { readonly spaceId: string }) {
+    return <InviteMemberInSpace key={spaceId} spaceId={spaceId} />;
+  };
+};

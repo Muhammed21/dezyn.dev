@@ -136,8 +136,8 @@ export const spaceMembers = ({
   readonly listMembers: ListMembers;
   readonly readSpace: ReadSpace;
   readonly changeRole: ChangeRole;
-}) =>
-  function SpaceMembers({ spaceId }: { readonly spaceId: string }) {
+}) => {
+  const SpaceMembersOf = function SpaceMembersOf({ spaceId }: { readonly spaceId: string }) {
     const queryClient = useQueryClient();
     const { data } = useQuery({
       queryKey: ["members", spaceId],
@@ -179,3 +179,7 @@ export const spaceMembers = ({
       </section>
     );
   };
+  return function SpaceMembers({ spaceId }: { readonly spaceId: string }) {
+    return <SpaceMembersOf key={spaceId} spaceId={spaceId} />;
+  };
+};

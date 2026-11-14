@@ -371,6 +371,52 @@ describe("changement de rôle d'un membre (ADR 0017)", () => {
     await expect.element(demoteAdaButton(screen)).toBeEnabled();
   });
 
+  it("l'échec d'un changement dans un espace n'est plus annoncé dans l'espace suivant", async () => {
+    const otherSpaceId = "9b8a7f6e-5d4c-4b3a-8f2e-1d0c9b8a7f6e";
+    const history = createMemoryHistory({ initialEntries: [`/espaces/${SPACE_ID}`] });
+    const listed: string[] = [];
+    const { changeRole } = answeringChange(err("last_owner"));
+    const screen = await renderSpaceMembers({
+      listMembers: ({ spaceId }) => {
+        listed.push(spaceId);
+        return Promise.resolve(ok([ADA, GRACE]));
+      },
+      readSpace: readOwnerSpace,
+      changeRole,
+      history,
+    });
+    await demoteAdaButton(screen).click();
+    await expect.element(membersSection(screen).getByRole("alert")).toBeVisible();
+
+    history.push(`/espaces/${otherSpaceId}`);
+
+    await expect.poll(() => listed).toEqual([SPACE_ID, otherSpaceId]);
+    await expect.element(demoteAdaButton(screen)).toBeVisible();
+    expect(membersSection(screen).getByRole("alert").elements()).toHaveLength(0);
+  });
+
+  it("un changement en cours dans un espace ne désactive pas le bouton du même membre dans l'espace suivant", async () => {
+    const otherSpaceId = "9b8a7f6e-5d4c-4b3a-8f2e-1d0c9b8a7f6e";
+    const history = createMemoryHistory({ initialEntries: [`/espaces/${SPACE_ID}`] });
+    const listed: string[] = [];
+    const screen = await renderSpaceMembers({
+      listMembers: ({ spaceId }) => {
+        listed.push(spaceId);
+        return Promise.resolve(ok([ADA, GRACE]));
+      },
+      readSpace: readOwnerSpace,
+      changeRole: pending,
+      history,
+    });
+    await demoteAdaButton(screen).click();
+    await expect.element(demoteAdaButton(screen)).toBeDisabled();
+
+    history.push(`/espaces/${otherSpaceId}`);
+
+    await expect.poll(() => listed).toEqual([SPACE_ID, otherSpaceId]);
+    await expect.element(demoteAdaButton(screen)).toBeEnabled();
+  });
+
   it("un échec ne relit ni les membres ni l'espace", async () => {
     const listed: string[] = [];
     const reads: string[] = [];
