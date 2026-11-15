@@ -1,0 +1,10 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "dezyn-preview-router",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-10-20",
+  "compatibility_flags": ["global_fetch_strictly_public"],
+  "workers_dev": false,
+  "routes": [{ "pattern": "*-preview.dezyn.dev/*", "zone_name": "dezyn.dev" }],
+  "observability": { "enabled": true },
+}
