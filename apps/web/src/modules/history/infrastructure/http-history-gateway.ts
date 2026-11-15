@@ -3,13 +3,17 @@ import type { z } from "zod";
 import { HistoryOutput } from "@repo/contracts";
 import { err, ok } from "@repo/result";
 
-import { failureOf, type Fetch, parseJson, send } from "../../../platform/http.ts";
+import {
+  failureOf,
+  type Fetch,
+  NOT_FOUND,
+  OK,
+  parseJson,
+  send,
+  UNAUTHORIZED,
+} from "../../../platform/http.ts";
 import type { HistoryGateway } from "../application/history-gateway.ts";
 import type { HistoryAuthor, HistoryEntry } from "../domain/history.ts";
-
-const OK = 200;
-const UNAUTHORIZED = 401;
-const NOT_FOUND = 404;
 
 type EntryOutput = z.infer<typeof HistoryOutput>["entries"][number];
 

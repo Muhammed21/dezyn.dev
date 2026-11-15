@@ -14,7 +14,21 @@ import {
 } from "@repo/contracts";
 import { err, ok } from "@repo/result";
 
-import { failureOf, type Fetch, parseJson, send } from "../../../platform/http.ts";
+import {
+  BAD_REQUEST,
+  CONFLICT,
+  CREATED,
+  failureOf,
+  type Fetch,
+  FORBIDDEN,
+  GONE,
+  NO_CONTENT,
+  NOT_FOUND,
+  OK,
+  parseJson,
+  send,
+  UNAUTHORIZED,
+} from "../../../platform/http.ts";
 import type { SpaceGateway } from "../application/space-gateway.ts";
 import {
   type AcceptanceFailure,
@@ -26,16 +40,6 @@ import {
   roleOf,
   type Space,
 } from "../domain/space.ts";
-
-const OK = 200;
-const CREATED = 201;
-const NO_CONTENT = 204;
-const BAD_REQUEST = 400;
-const UNAUTHORIZED = 401;
-const FORBIDDEN = 403;
-const NOT_FOUND = 404;
-const CONFLICT = 409;
-const GONE = 410;
 
 const spaceOf = ({
   id,

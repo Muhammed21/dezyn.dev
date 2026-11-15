@@ -3,13 +3,17 @@ import type { z } from "zod";
 import { type TokenOutput, TokensOutput } from "@repo/contracts";
 import { err, ok } from "@repo/result";
 
-import { failureOf, type Fetch, parseJson, send } from "../../../platform/http.ts";
+import {
+  failureOf,
+  type Fetch,
+  NOT_FOUND,
+  OK,
+  parseJson,
+  send,
+  UNAUTHORIZED,
+} from "../../../platform/http.ts";
 import type { TokenGateway } from "../application/token-gateway.ts";
 import { type Token, tokenTypeOf } from "../domain/token.ts";
-
-const OK = 200;
-const UNAUTHORIZED = 401;
-const NOT_FOUND = 404;
 
 const tokenOf = ({
   id,
