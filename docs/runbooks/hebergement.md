@@ -26,7 +26,7 @@ Les étapes suivent l'ordre des dépendances. Les commandes `pnpm` se lancent de
    - Account : Workers Scripts Edit ;
    - Account : Hyperdrive Read ;
    - Zone `dezyn.dev` : Zone Read et Workers Routes Edit.
-5. **Le jeton de preview**, distinct, rangé dans le secret `CLOUDFLARE_API_TOKEN` de l'environnement `preview` : le modèle « Edit Cloudflare Workers ».
+5. **Le jeton de preview**, distinct, rangé dans le secret `CLOUDFLARE_API_TOKEN` de l'environnement `preview` : le modèle « Edit Cloudflare Workers », qui doit couvrir la zone `dezyn.dev` en Workers Routes Edit pour que `deploy.yml` pose la route du Worker `dezyn-preview-router`.
 
 Workers Logs est activé par `observability` dans `apps/api/wrangler.jsonc` : il n'y a rien à créer. Les logs d'une URL de preview n'y passent pas.
 
