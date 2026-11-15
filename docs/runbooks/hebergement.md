@@ -2,7 +2,7 @@
 
 **Type:** how-to
 
-L'API tourne dans le Worker Cloudflare `dezyn-api`, sur `api.dezyn.dev`, et joint la branche Neon `production` par Hyperdrive (ADR 0034). Chaque PR a sa preview, sur le Worker `dezyn-api-preview` et sa propre branche Neon, servie sur `pr-<N>-api-preview.dezyn.dev` par le Worker `dezyn-preview-router` (ADR 0045). Le déploiement, le rollback et les rôles PostgreSQL : voir [RELIABILITY](../RELIABILITY.md#deploy-vs-release).
+L'API tourne dans le Worker Cloudflare `dezyn-api`, sur `api.dezyn.dev`, et joint la branche Neon `production` par Hyperdrive (ADR 0034). Chaque PR a sa preview : l'API sur le Worker `dezyn-api-preview` et sa propre branche Neon, servie sur `pr-<N>-api-preview.dezyn.dev`, et l'app web sur le Worker `dezyn-web-preview`, servie sur `pr-<N>-preview.dezyn.dev`, toutes deux par le Worker `dezyn-preview-router` (ADR 0045). Le déploiement, le rollback et les rôles PostgreSQL : voir [RELIABILITY](../RELIABILITY.md#deploy-vs-release).
 
 Les étapes suivent l'ordre des dépendances. Les commandes `pnpm` se lancent depuis la racine du dépôt, dans un vrai terminal : elles demandent des confirmations et des valeurs masquées, et n'affichent ni secret ni URL de connexion. Chaque commande est relançable : sur une ressource déjà en place, elle ne change rien sans confirmation.
 
@@ -130,11 +130,14 @@ Laisser `DEPLOY_ENABLED` à `false` jusqu'à l'étape 5.
 
 ## 6. La preview
 
-`preview.yml` publie des versions du Worker `dezyn-api-preview`, qui doit donc exister avant le premier run. Le créer une fois, sans secret ni binding de production (ADR 0034) :
+`preview.yml` publie des versions des Workers `dezyn-api-preview` et `dezyn-web-preview`, qui doivent donc exister avant le premier run. Les créer une fois, sans secret ni binding de production (ADR 0034) :
 
 ```
 (cd apps/api && npx wrangler deploy --env preview)
+(cd apps/web && VITE_API_URL=https://api.dezyn.dev pnpm build && npx wrangler deploy --env preview)
 ```
+
+La CI de chaque PR construit l'app web avec `VITE_API_URL=https://pr-<N>-api-preview.dezyn.dev` ; `preview.yml` téléverse ce build dans `dezyn-web-preview` sous l'alias `pr-<N>`, puis vérifie que `https://pr-<N>-preview.dezyn.dev` sert l'app et que l'API de preview autorise son origine avec les cookies.
 
 Le Worker `dezyn-preview-router` se déploie depuis `main`, dans le job `preview-router` de `deploy.yml`, avec le jeton et `WORKERS_SUBDOMAIN` de l'environnement `preview`. Il relaie `pr-<N>-api-preview.dezyn.dev` vers l'alias `pr-<N>` de `dezyn-api-preview`, `pr-<N>-preview.dezyn.dev` vers celui de `dezyn-web-preview`, et répond 404 à tout autre hôte. Il joint les alias par l'Internet public (`global_fetch_strictly_public`) : sans ce drapeau, un Worker n'atteint pas une URL `workers.dev` du même compte.
 

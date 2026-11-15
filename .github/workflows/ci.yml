@@ -169,6 +169,18 @@ jobs:
           name: preview-bundle
           path: ${{ runner.temp }}/preview-bundle/worker.js
           retention-days: 3
+      - name: Web preview build
+        if: github.event_name == 'pull_request'
+        working-directory: apps/web
+        run: pnpm exec vite build --outDir "$RUNNER_TEMP/web-preview"
+        env:
+          VITE_API_URL: https://pr-${{ github.event.pull_request.number }}-api-preview.dezyn.dev
+      - if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-preview
+          path: ${{ runner.temp }}/web-preview
+          retention-days: 3
 
   infra:
     name: Infra (Compose)
