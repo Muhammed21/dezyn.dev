@@ -2,7 +2,9 @@ name: Deploy
 
 # Une CI verte sur main migre la base de production, déploie le Worker dezyn-api, puis vérifie /health ;
 # un /health en échec remet la version précédente (ADR 0034). Le Worker dezyn-purge se déploie ensuite,
-# quand PURGE_DEPLOY_ENABLED vaut true (ADR 0042). Un commit dépassé par un plus récent ne déploie pas.
+# quand PURGE_DEPLOY_ENABLED vaut true (ADR 0042). L'app web est construite pour api.dezyn.dev et
+# déployée sur app.dezyn.dev ; une adresse profonde qui ne sert pas l'app remet la version précédente
+# (ADR 0045). Un commit dépassé par un plus récent ne déploie pas.
 
 on:
   workflow_run:
@@ -31,6 +33,7 @@ jobs:
       url: https://api.dezyn.dev
     env:
       HEALTH_URL: https://api.dezyn.dev/health
+      WEB_CHECK_URL: https://app.dezyn.dev/espaces/00000000-0000-4000-8000-000000000000
       HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
     steps:
       - uses: actions/checkout@v5
@@ -74,6 +77,37 @@ jobs:
         if: steps.latest.outputs.head == 'true' && vars.PURGE_DEPLOY_ENABLED == 'true'
         working-directory: apps/api
         run: pnpm exec wrangler deploy --config wrangler.purge.jsonc --message "$HEAD_SHA"
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      - name: Build web app
+        if: steps.latest.outputs.head == 'true'
+        run: pnpm --filter @repo/web build
+        env:
+          VITE_API_URL: https://api.dezyn.dev
+      - name: Deploy web app
+        if: steps.latest.outputs.head == 'true'
+        working-directory: apps/web
+        run: pnpm exec wrangler deploy --message "$HEAD_SHA"
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      - id: web
+        name: Web app check
+        if: steps.latest.outputs.head == 'true'
+        run: |
+          page="$RUNNER_TEMP/web-page.html"
+          for attempt in 1 2 3 4 5; do
+            if curl --fail --silent --show-error --max-time 10 --output "$page" "$WEB_CHECK_URL" &&
+              grep -q 'id="root"' "$page"; then
+              exit 0
+            fi
+            sleep 6
+          done
+          echo "::error::$WEB_CHECK_URL does not serve the web app after the deploy."
+          exit 1
+      - name: Roll back web app
+        if: failure() && steps.web.outcome == 'failure'
+        working-directory: apps/web
+        run: pnpm exec wrangler rollback --yes --message "web app check failed for $HEAD_SHA"
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       - name: Roll back
