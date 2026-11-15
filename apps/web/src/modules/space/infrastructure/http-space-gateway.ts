@@ -22,6 +22,7 @@ import {
   type Fetch,
   FORBIDDEN,
   GONE,
+  type HttpFailure,
   NO_CONTENT,
   NOT_FOUND,
   OK,
@@ -96,37 +97,39 @@ const invitationRefusalOf = async (response: Response): Promise<InvitationFailur
   return failureOf(response);
 };
 
-const roleChangeRefusalOf = async (response: Response): Promise<RoleChangeFailure> => {
-  if (response.status === UNAUTHORIZED) {
-    return "unauthenticated";
-  }
-  if (response.status === NOT_FOUND) {
-    return "not_found";
-  }
-  if (response.status === FORBIDDEN) {
-    return "forbidden";
-  }
-  if (response.status === CONFLICT) {
-    return (await parseJson(response, LastOwnerProblem)).ok ? "last_owner" : "invalid_response";
-  }
-  return failureOf(response);
-};
+const memberChangeRefusalOf =
+  <Conflict extends string>({
+    conflictProblem,
+    conflict,
+  }: {
+    readonly conflictProblem: z.ZodType<unknown>;
+    readonly conflict: Conflict;
+  }) =>
+  async (
+    response: Response,
+  ): Promise<"unauthenticated" | "not_found" | "forbidden" | Conflict | HttpFailure> => {
+    if (response.status === UNAUTHORIZED) {
+      return "unauthenticated";
+    }
+    if (response.status === NOT_FOUND) {
+      return "not_found";
+    }
+    if (response.status === FORBIDDEN) {
+      return "forbidden";
+    }
+    if (response.status === CONFLICT) {
+      return (await parseJson(response, conflictProblem)).ok ? conflict : "invalid_response";
+    }
+    return failureOf(response);
+  };
 
-const removalRefusalOf = async (response: Response): Promise<RemovalFailure> => {
-  if (response.status === UNAUTHORIZED) {
-    return "unauthenticated";
-  }
-  if (response.status === NOT_FOUND) {
-    return "not_found";
-  }
-  if (response.status === FORBIDDEN) {
-    return "forbidden";
-  }
-  if (response.status === CONFLICT) {
-    return (await parseJson(response, SelfRemovalProblem)).ok ? "self_removal" : "invalid_response";
-  }
-  return failureOf(response);
-};
+const roleChangeRefusalOf: (response: Response) => Promise<RoleChangeFailure> =
+  memberChangeRefusalOf({ conflictProblem: LastOwnerProblem, conflict: "last_owner" });
+
+const removalRefusalOf: (response: Response) => Promise<RemovalFailure> = memberChangeRefusalOf({
+  conflictProblem: SelfRemovalProblem,
+  conflict: "self_removal",
+});
 
 export const createHttpSpaceGateway = ({
   apiUrl,
