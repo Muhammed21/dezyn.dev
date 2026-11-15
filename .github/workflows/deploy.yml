@@ -4,7 +4,8 @@ name: Deploy
 # un /health en échec remet la version précédente (ADR 0034). Le Worker dezyn-purge se déploie ensuite,
 # quand PURGE_DEPLOY_ENABLED vaut true (ADR 0042). L'app web est construite pour api.dezyn.dev et
 # déployée sur app.dezyn.dev ; une adresse profonde qui ne sert pas l'app remet la version précédente
-# (ADR 0045). Un commit dépassé par un plus récent ne déploie pas.
+# (ADR 0045). Le Worker dezyn-preview-router se déploie ensuite, avec le jeton et le sous-domaine
+# workers.dev de l'environnement preview. Un commit dépassé par un plus récent ne déploie pas.
 
 on:
   workflow_run:
@@ -28,6 +29,8 @@ jobs:
       github.event.workflow_run.event == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    outputs:
+      head: ${{ steps.latest.outputs.head }}
     environment:
       name: production
       url: https://api.dezyn.dev
@@ -116,3 +119,37 @@ jobs:
         run: pnpm exec wrangler rollback --yes --message "health check failed for $HEAD_SHA"
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+  preview-router:
+    name: Preview router
+    needs: production
+    if: needs.production.outputs.head == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: preview
+    env:
+      HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+      CHECK_URL: https://router-check-preview.dezyn.dev/
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.HEAD_SHA }}
+      - uses: ./.github/actions/install
+      - name: Deploy
+        working-directory: apps/preview-router
+        run: pnpm exec wrangler deploy --message "$HEAD_SHA" --var "WORKERS_SUBDOMAIN:$WORKERS_SUBDOMAIN"
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          WORKERS_SUBDOMAIN: ${{ vars.WORKERS_SUBDOMAIN }}
+      - name: Router check
+        run: |
+          page="$RUNNER_TEMP/router-page.txt"
+          for attempt in 1 2 3 4 5; do
+            status=$(curl --silent --show-error --max-time 10 --output "$page" --write-out '%{http_code}' "$CHECK_URL" || true)
+            if [ "$status" = 404 ] && grep -q 'No preview on this host' "$page"; then
+              exit 0
+            fi
+            sleep 6
+          done
+          echo "::error::$CHECK_URL is not answered by the preview router after the deploy."
+          exit 1

@@ -2,7 +2,7 @@
 
 **Type:** how-to
 
-L'API tourne dans le Worker Cloudflare `dezyn-api`, sur `api.dezyn.dev`, et joint la branche Neon `production` par Hyperdrive (ADR 0034). Chaque PR a sa preview, sur le Worker `dezyn-api-preview` et sa propre branche Neon. Le déploiement, le rollback et les rôles PostgreSQL : voir [RELIABILITY](../RELIABILITY.md#deploy-vs-release).
+L'API tourne dans le Worker Cloudflare `dezyn-api`, sur `api.dezyn.dev`, et joint la branche Neon `production` par Hyperdrive (ADR 0034). Chaque PR a sa preview, sur le Worker `dezyn-api-preview` et sa propre branche Neon, servie sur `pr-<N>-api-preview.dezyn.dev` par le Worker `dezyn-preview-router` (ADR 0045). Le déploiement, le rollback et les rôles PostgreSQL : voir [RELIABILITY](../RELIABILITY.md#deploy-vs-release).
 
 Les étapes suivent l'ordre des dépendances. Les commandes `pnpm` se lancent depuis la racine du dépôt, dans un vrai terminal : elles demandent des confirmations et des valeurs masquées, et n'affichent ni secret ni URL de connexion. Chaque commande est relançable : sur une ressource déjà en place, elle ne change rien sans confirmation.
 
@@ -20,12 +20,13 @@ Les étapes suivent l'ordre des dépendances. Les commandes `pnpm` se lancent de
 ## 2. Cloudflare : la zone et les jetons
 
 1. **La zone `dezyn.dev`** doit être active dans le compte. Sans elle, `wrangler deploy` échoue avec « Can't infer zone from route », car la route `api.dezyn.dev` de `apps/api/wrangler.jsonc` est un domaine personnalisé de cette zone. Le premier déploiement crée le domaine `api.dezyn.dev` et le Worker `dezyn-api`.
-2. **Le sous-domaine `workers.dev`** du compte : il donne les URLs de preview, `https://pr-<N>-dezyn-api-preview.<sous-domaine>.workers.dev`. Le noter pour l'étape 4.
-3. **Le jeton de production**, rangé dans le secret GitHub `CLOUDFLARE_API_TOKEN` de l'environnement `production` (étape 4), avec ces permissions :
+2. **Le sous-domaine `workers.dev`** du compte : il donne les URLs des alias de preview, `https://pr-<N>-dezyn-api-preview.<sous-domaine>.workers.dev`. Le noter pour l'étape 4.
+3. **L'enregistrement DNS `*`** de la zone, de type `AAAA`, vers `100::`, proxifié. Il fait aboutir chez Cloudflare les hôtes de preview, que la route `*-preview.dezyn.dev/*` donne au Worker `dezyn-preview-router`. Les enregistrements explicites gardent la priorité sur lui.
+4. **Le jeton de production**, rangé dans le secret GitHub `CLOUDFLARE_API_TOKEN` de l'environnement `production` (étape 4), avec ces permissions :
    - Account : Workers Scripts Edit ;
    - Account : Hyperdrive Read ;
    - Zone `dezyn.dev` : Zone Read et Workers Routes Edit.
-4. **Le jeton de preview**, distinct, rangé dans le secret `CLOUDFLARE_API_TOKEN` de l'environnement `preview` : le modèle « Edit Cloudflare Workers ».
+5. **Le jeton de preview**, distinct, rangé dans le secret `CLOUDFLARE_API_TOKEN` de l'environnement `preview` : le modèle « Edit Cloudflare Workers », qui doit couvrir la zone `dezyn.dev` en Workers Routes Edit pour que `deploy.yml` pose la route du Worker `dezyn-preview-router`.
 
 Workers Logs est activé par `observability` dans `apps/api/wrangler.jsonc` : il n'y a rien à créer. Les logs d'une URL de preview n'y passent pas.
 
@@ -134,6 +135,8 @@ Laisser `DEPLOY_ENABLED` à `false` jusqu'à l'étape 5.
 ```
 (cd apps/api && npx wrangler deploy --env preview)
 ```
+
+Le Worker `dezyn-preview-router` se déploie depuis `main`, dans le job `preview-router` de `deploy.yml`, avec le jeton et `WORKERS_SUBDOMAIN` de l'environnement `preview`. Il relaie `pr-<N>-api-preview.dezyn.dev` vers l'alias `pr-<N>` de `dezyn-api-preview`, `pr-<N>-preview.dezyn.dev` vers celui de `dezyn-web-preview`, et répond 404 à tout autre hôte. Il joint les alias par l'Internet public (`global_fetch_strictly_public`) : sans ce drapeau, un Worker n'atteint pas une URL `workers.dev` du même compte.
 
 Puis la branche Neon `preview` :
 
