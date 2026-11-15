@@ -12,7 +12,16 @@ import {
 } from "@repo/contracts";
 import { err, ok, type Result } from "@repo/result";
 
-import { failureOf, type Fetch, parseJson, send } from "../../../platform/http.ts";
+import {
+  CONFLICT,
+  failureOf,
+  type Fetch,
+  NOT_FOUND,
+  OK,
+  parseJson,
+  send,
+  UNAUTHORIZED,
+} from "../../../platform/http.ts";
 import type { ProposalGateway } from "../application/proposal-gateway.ts";
 import type {
   BatchState,
@@ -24,11 +33,6 @@ import type {
   ProposalStatus,
   ReviewFailure,
 } from "../domain/proposal.ts";
-
-const OK = 200;
-const UNAUTHORIZED = 401;
-const NOT_FOUND = 404;
-const CONFLICT = 409;
 
 type BatchSummaryOutput = z.infer<typeof ProposalBatchesOutput>["batches"][number];
 

@@ -3,12 +3,15 @@ import { z } from "zod";
 import { err, ok, type Result } from "@repo/result";
 
 import {
+  BAD_REQUEST,
   failureOf,
   type Fetch,
   type HttpFailure,
   parseJson,
   send,
   TOO_MANY_REQUESTS,
+  UNAUTHORIZED,
+  UNPROCESSABLE_ENTITY,
 } from "../../../platform/http.ts";
 import type { IdentityGateway, SignUpFailure } from "../application/identity-gateway.ts";
 import type { Session } from "../domain/session.ts";
@@ -20,10 +23,6 @@ const SignInResponse = z.object({ user: AuthUser });
 const GetSessionResponse = z.object({ user: AuthUser }).nullable();
 
 const BetterAuthRefusal = z.object({ code: z.string() });
-
-const UNAUTHORIZED = 401;
-const BAD_REQUEST = 400;
-const UNPROCESSABLE_ENTITY = 422;
 
 const REFUSALS: ReadonlyMap<string, SignUpFailure> = new Map([
   ["USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL", "email_taken"],

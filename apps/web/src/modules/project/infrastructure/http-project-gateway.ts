@@ -1,16 +1,20 @@
 import { CreatedProjectOutput, PlanRequiredProblem, ProjectsOutput } from "@repo/contracts";
 import { err, ok } from "@repo/result";
 
-import { failureOf, type Fetch, parseJson, send } from "../../../platform/http.ts";
+import {
+  BAD_REQUEST,
+  CREATED,
+  failureOf,
+  type Fetch,
+  FORBIDDEN,
+  NOT_FOUND,
+  OK,
+  parseJson,
+  send,
+  UNAUTHORIZED,
+} from "../../../platform/http.ts";
 import type { ProjectGateway } from "../application/project-gateway.ts";
 import type { ProjectCreationFailure } from "../domain/project.ts";
-
-const OK = 200;
-const CREATED = 201;
-const BAD_REQUEST = 400;
-const UNAUTHORIZED = 401;
-const FORBIDDEN = 403;
-const NOT_FOUND = 404;
 
 const refusalOf = async (response: Response): Promise<ProjectCreationFailure> => {
   if (response.status === BAD_REQUEST) {
