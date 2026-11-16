@@ -23,5 +23,8 @@ export const postgresStorageMeter = (tx: PostgresTransaction): StorageMeter => {
     remove: async (projectId, rows) => {
       await shift(projectId, -sizeOfRows(rows));
     },
+    resize: async (projectId, { removed, added }) => {
+      await shift(projectId, sizeOfRows(added) - sizeOfRows(removed));
+    },
   };
 };

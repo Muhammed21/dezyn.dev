@@ -244,10 +244,10 @@ describe("l'IA lit l'historique d'un projet par le MCP (ADR 0004 ยง3, ADR 0021 ย
       },
       {
         wrapHistoryWriter: (writer) => ({
-          append: (entry) =>
-            entry.action.startsWith("mcp.")
+          append: (entries) =>
+            entries.some((entry) => entry.action.startsWith("mcp."))
               ? Promise.reject(new Error("historique indisponible"))
-              : writer.append(entry),
+              : writer.append(entries),
         }),
       },
     ));

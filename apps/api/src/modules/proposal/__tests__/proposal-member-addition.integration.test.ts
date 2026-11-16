@@ -134,10 +134,10 @@ describe("l'ajout d'un membre remplace la proposition en attente sur le même no
       },
       {
         wrapHistoryWriter: (writer) => ({
-          append: (entry) =>
-            entry.action === "token.created"
+          append: (entries) =>
+            entries.some((entry) => entry.action === "token.created")
               ? Promise.reject(new Error("historique indisponible"))
-              : writer.append(entry),
+              : writer.append(entries),
         }),
       },
     ));

@@ -62,7 +62,7 @@ export const historyModule = ({
   readHistory: readHistory({ access, history: postgresHistoryReader(db) }),
   recordProjectCall: recordProjectCall({
     access,
-    history: { append: (entry) => db.orm.transaction((tx) => writerOn(tx).append(entry)) },
+    history: { append: (entries) => db.orm.transaction((tx) => writerOn(tx).append(entries)) },
     now,
   }),
 });

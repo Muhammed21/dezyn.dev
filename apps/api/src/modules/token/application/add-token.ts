@@ -127,17 +127,19 @@ export const addToken =
           return err("name_taken");
         }
         const replaced = await proposals.replace({ projectId, name: token.name });
-        await history.append({
-          spaceId: project.spaceId,
-          projectId,
-          action: "token.created",
-          userId,
-          clientId: null,
-          before: null,
-          after: { ...token, replaced },
-          correlationId,
-          occurredAt: added.createdAt,
-        });
+        await history.append([
+          {
+            spaceId: project.spaceId,
+            projectId,
+            action: "token.created",
+            userId,
+            clientId: null,
+            before: null,
+            after: { ...token, replaced },
+            correlationId,
+            occurredAt: added.createdAt,
+          },
+        ]);
         return ok({
           token: { ...added, replaced },
           alert: await storageAlert(project.spaceId),

@@ -463,10 +463,10 @@ describe("chaque relecture entre dans l'historique avec l'éditeur (ADR 0012 §7
       },
       {
         wrapHistoryWriter: (writer) => ({
-          append: (entry) =>
-            entry.action.startsWith("proposal.")
+          append: (entries) =>
+            entries.some((entry) => entry.action.startsWith("proposal."))
               ? Promise.reject(new Error("historique indisponible"))
-              : writer.append(entry),
+              : writer.append(entries),
         }),
       },
     ));

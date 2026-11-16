@@ -37,17 +37,19 @@ export const recordProjectCall =
     }
     const outcome = await run(project);
     const written = await history
-      .append({
-        spaceId: project.spaceId,
-        projectId,
-        action: `mcp.${tool}`,
-        userId,
-        clientId,
-        before: null,
-        after: { outcome: outcome.ok ? "success" : "error", input },
-        correlationId,
-        occurredAt: now(),
-      })
+      .append([
+        {
+          spaceId: project.spaceId,
+          projectId,
+          action: `mcp.${tool}`,
+          userId,
+          clientId,
+          before: null,
+          after: { outcome: outcome.ok ? "success" : "error", input },
+          correlationId,
+          occurredAt: now(),
+        },
+      ])
       .then(
         () => true,
         () => false,

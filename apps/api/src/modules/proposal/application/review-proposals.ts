@@ -54,12 +54,16 @@ export interface ProposalReader {
 }
 
 export interface FigmaStateSynchronizer {
-  proposalValidated(proposalId: string): Promise<void>;
-  proposalRejected(rejected: {
-    readonly proposalId: string;
-    readonly token: TokenDefinition;
-  }): Promise<void>;
+  proposalsValidated(proposalIds: readonly string[]): Promise<void>;
+  proposalsRejected(
+    rejected: readonly { readonly proposalId: string; readonly token: TokenDefinition }[],
+  ): Promise<void>;
 }
+
+export type Settlement = {
+  readonly proposalId: string;
+  readonly status: "validated" | "rejected";
+};
 
 export type ReviewUnit = {
   readonly proposals: {
@@ -67,7 +71,7 @@ export type ReviewUnit = {
     lockBatch(
       batchId: string,
     ): Promise<readonly { readonly id: string; readonly status: ProposalStatus }[]>;
-    settle(proposalId: string, status: "validated" | "rejected"): Promise<void>;
+    settle(settlements: readonly Settlement[]): Promise<void>;
   };
   readonly tokens: ValidatedTokenWriter;
   readonly figmaStates: FigmaStateSynchronizer;
@@ -235,22 +239,24 @@ export const reviewProposal =
           if (failure !== undefined) {
             return err(failure);
           }
-          await unit.figmaStates.proposalValidated(proposalId);
+          await unit.figmaStates.proposalsValidated([proposalId]);
         } else {
-          await unit.figmaStates.proposalRejected({ proposalId, token: proposal.token });
+          await unit.figmaStates.proposalsRejected([{ proposalId, token: proposal.token }]);
         }
-        await unit.proposals.settle(proposalId, reviewed.status);
-        await unit.history.append({
-          spaceId,
-          projectId,
-          action: `proposal.${reviewed.status}`,
-          userId,
-          clientId: null,
-          before: before === null ? null : definitionOf(before),
-          after: { proposalId, token: proposal.token },
-          correlationId,
-          occurredAt,
-        });
+        await unit.proposals.settle([{ proposalId, status: reviewed.status }]);
+        await unit.history.append([
+          {
+            spaceId,
+            projectId,
+            action: `proposal.${reviewed.status}`,
+            userId,
+            clientId: null,
+            before: before === null ? null : definitionOf(before),
+            after: { proposalId, token: proposal.token },
+            correlationId,
+            occurredAt,
+          },
+        ]);
         return ok({
           value: { ...proposal, status: reviewed.status },
           alert: await unit.storageAlert(spaceId),
@@ -370,30 +376,29 @@ export const validateBatch =
           ...plan.toValidate.map((proposal): Decided => ({ proposal, status: "validated" })),
           ...plan.toReject.map((proposal): Decided => ({ proposal, status: "rejected" })),
         ];
-        await inSequence(decided, async ({ proposal, status }) => {
-          const before = validatedOf(validated, proposal);
-          await unit.proposals.settle(proposal.id, status);
-          if (status === "validated") {
-            await unit.figmaStates.proposalValidated(proposal.id);
-          } else {
-            await unit.figmaStates.proposalRejected({
-              proposalId: proposal.id,
-              token: proposal.token,
-            });
-          }
-          await unit.history.append({
-            spaceId,
-            projectId,
-            action: `proposal.${status}`,
-            userId,
-            clientId: null,
-            before: before === null ? null : definitionOf(before),
-            after: { proposalId: proposal.id, token: proposal.token },
-            correlationId,
-            occurredAt,
-          });
-          return undefined;
-        });
+        await unit.proposals.settle(
+          decided.map(({ proposal, status }) => ({ proposalId: proposal.id, status })),
+        );
+        await unit.figmaStates.proposalsValidated(plan.toValidate.map(({ id }) => id));
+        await unit.figmaStates.proposalsRejected(
+          plan.toReject.map((proposal) => ({ proposalId: proposal.id, token: proposal.token })),
+        );
+        await unit.history.append(
+          decided.map(({ proposal, status }) => {
+            const before = validatedOf(validated, proposal);
+            return {
+              spaceId,
+              projectId,
+              action: `proposal.${status}`,
+              userId,
+              clientId: null,
+              before: before === null ? null : definitionOf(before),
+              after: { proposalId: proposal.id, token: proposal.token },
+              correlationId,
+              occurredAt,
+            };
+          }),
+        );
         return ok({
           value: {
             id: batchId,
