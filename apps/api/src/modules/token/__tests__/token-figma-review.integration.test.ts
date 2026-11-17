@@ -200,6 +200,47 @@ describe("rejeter la valeur Figma garde le token divergent, et la même valeur n
       expect(redeclared.states).toMatchObject([{ name: "couleur.bord", proposal: null }]);
     }));
 
+  it("des tokens rejetés ensemble dans un lot retiennent chacun leur propre valeur rejetée", () =>
+    withClock(async (app, db, clock) => {
+      const { accessToken, projectId, fond, bord } = await seedDivergence(app, db, clock);
+      await callTool(app, {
+        token: accessToken,
+        name: "close_proposal_batch",
+        args: { projectId },
+      });
+      await request(app, {
+        accessToken,
+        path: `/proposal-batches/${fond.batch.id}/validate`,
+        body: { rejected: [fond.id, bord.id] },
+      });
+
+      const ownValues = await declareFigmaStates(app, {
+        token: accessToken,
+        projectId,
+        states: [
+          { name: "couleur.fond", state: "diverged", figmaValue: { $value: NIGHT_BLUE } },
+          { name: "couleur.bord", state: "diverged", figmaValue: { $value: SKY_BLUE } },
+        ],
+      });
+      const swappedValues = await declareFigmaStates(app, {
+        token: accessToken,
+        projectId,
+        states: [
+          { name: "couleur.fond", state: "diverged", figmaValue: { $value: SKY_BLUE } },
+          { name: "couleur.bord", state: "diverged", figmaValue: { $value: NIGHT_BLUE } },
+        ],
+      });
+
+      expect(ownValues.states).toMatchObject([
+        { name: "couleur.fond", proposal: null },
+        { name: "couleur.bord", proposal: null },
+      ]);
+      expect(swappedValues.states).toMatchObject([
+        { name: "couleur.fond", proposal: { id: expect.any(String) } },
+        { name: "couleur.bord", proposal: { id: expect.any(String) } },
+      ]);
+    }));
+
   it("une valeur Figma différente de la valeur rejetée fait encore naître une proposition", () =>
     withClock(async (app, db, clock) => {
       const { accessToken, projectId, fond } = await seedDivergence(app, db, clock);
