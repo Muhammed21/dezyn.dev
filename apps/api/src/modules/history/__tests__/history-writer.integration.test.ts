@@ -5,8 +5,8 @@ import { describe, expect, it } from "vitest";
 
 import type { PostgresDatabase } from "#db";
 import { GRACE, obtainAccessToken, withIdentityApp } from "#testing/authorization-flow.ts";
-import { seedProject } from "#testing/project-fixtures.ts";
-import { storageMeterOn } from "#testing/project-storage.ts";
+import { seedProject, seedProjectAsEditor } from "#testing/project-fixtures.ts";
+import { bytesOfProjectRows, storageMeterOn, storedBytesOf } from "#testing/project-storage.ts";
 import { schema } from "@repo/db";
 
 import type { HistoryEntryDraft } from "../domain/history-writer.ts";
@@ -45,12 +45,24 @@ const makeEntryDraft = (
   ...overrides,
 });
 
+const authorsByCorrelation = async (db: PostgresDatabase) => {
+  const rows = await db.orm
+    .select({
+      correlationId: schema.historyEntry.correlationId,
+      spaceId: schema.historyAuthor.spaceId,
+      userId: schema.historyAuthor.userId,
+    })
+    .from(schema.historyEntry)
+    .innerJoin(schema.historyAuthor, eq(schema.historyAuthor.id, schema.historyEntry.authorId));
+  return new Map(rows.map(({ correlationId, ...author }) => [correlationId, author]));
+};
+
 const appendEntry = (
   db: PostgresDatabase,
   { entry, newId }: { readonly entry: HistoryEntryDraft; readonly newId: () => string },
 ) =>
   db.orm.transaction((tx) =>
-    postgresHistoryWriter(tx, { newId, meter: storageMeterOn(tx) }).append(entry),
+    postgresHistoryWriter(tx, { newId, meter: storageMeterOn(tx) }).append([entry]),
   );
 
 describe("l'écriture d'une entrée d'historique en base", () => {
@@ -66,5 +78,48 @@ describe("l'écriture d'une entrée d'historique en base", () => {
           newId: makeIdSequence(takenId),
         }),
       ).rejects.toMatchObject({ cause: { code: UNIQUE_VIOLATION } });
+    }));
+
+  it("un appel qui mêle plusieurs auteurs et plusieurs projets range chaque entrée chez son auteur et son projet", () =>
+    withIdentityApp(async (app, db) => {
+      const owner = await seedProject(app, db);
+      const editor = await seedProjectAsEditor(app, db, { user: GRACE });
+      const entries = [
+        makeEntryDraft({
+          spaceId: owner.spaceId,
+          projectId: owner.projectId,
+          userId: owner.userId,
+        }),
+        makeEntryDraft({
+          spaceId: owner.spaceId,
+          projectId: owner.projectId,
+          userId: editor.userId,
+        }),
+        makeEntryDraft({
+          spaceId: editor.spaceId,
+          projectId: editor.projectId,
+          userId: editor.userId,
+        }),
+        makeEntryDraft({
+          spaceId: editor.spaceId,
+          projectId: editor.projectId,
+          userId: owner.userId,
+        }),
+      ];
+
+      await db.orm.transaction((tx) =>
+        postgresHistoryWriter(tx, { newId: randomUUID, meter: storageMeterOn(tx) }).append(entries),
+      );
+
+      const authors = await authorsByCorrelation(db);
+      expect(entries.map(({ correlationId }) => authors.get(correlationId))).toEqual(
+        entries.map(({ spaceId, userId }) => ({ spaceId, userId })),
+      );
+      expect(await storedBytesOf(db, owner.projectId)).toBe(
+        await bytesOfProjectRows(db, owner.projectId),
+      );
+      expect(await storedBytesOf(db, editor.projectId)).toBe(
+        await bytesOfProjectRows(db, editor.projectId),
+      );
     }));
 });

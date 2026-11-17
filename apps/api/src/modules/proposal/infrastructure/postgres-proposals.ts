@@ -92,8 +92,7 @@ const resize = async (
   if (changed === undefined) {
     return;
   }
-  await meter.remove(changed.projectId, before);
-  await meter.add(changed.projectId, after);
+  await meter.resize(changed.projectId, { removed: before, added: after });
 };
 
 export const postgresProposalStore = (
@@ -359,13 +358,32 @@ export const postgresReviewUnitOfWork = ({
                 status: ProposalStatus.parse(status),
               }));
             },
-            settle: async (proposalId, status) => {
-              const before = await tx.select().from(proposal).where(eq(proposal.id, proposalId));
-              const after = await tx
-                .update(proposal)
-                .set({ status })
-                .where(eq(proposal.id, proposalId))
-                .returning();
+            settle: async (settlements) => {
+              const proposalIds = settlements.map(({ proposalId }) => proposalId);
+              const before = await tx
+                .select()
+                .from(proposal)
+                .where(inArray(proposal.id, proposalIds));
+              const after = await [...new Set(settlements.map(({ status }) => status))].reduce<
+                Promise<readonly (typeof before)[number][]>
+              >(
+                async (previous, status) => [
+                  ...(await previous),
+                  ...(await tx
+                    .update(proposal)
+                    .set({ status })
+                    .where(
+                      inArray(
+                        proposal.id,
+                        settlements
+                          .filter((settlement) => settlement.status === status)
+                          .map(({ proposalId }) => proposalId),
+                      ),
+                    )
+                    .returning()),
+                ],
+                Promise.resolve([]),
+              );
               await resize(storageMeterOn(tx), { before, after });
             },
           },

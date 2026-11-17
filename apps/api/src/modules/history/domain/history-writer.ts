@@ -11,5 +11,5 @@ export type HistoryEntryDraft = {
 };
 
 export interface HistoryWriter {
-  append(entry: HistoryEntryDraft): Promise<void>;
+  append(entries: readonly HistoryEntryDraft[]): Promise<void>;
 }

@@ -253,20 +253,22 @@ export const importTokens =
       }
       if (createdModes !== undefined) {
         await modesWriter.create(createdModes);
-        await history.append({
-          spaceId: project.spaceId,
-          projectId,
-          action: "modes.created",
-          userId,
-          clientId: null,
-          before: null,
-          after: {
-            modifier: createdModes.modifier,
-            modes: createdModes.modes.map(({ name }) => name),
+        await history.append([
+          {
+            spaceId: project.spaceId,
+            projectId,
+            action: "modes.created",
+            userId,
+            clientId: null,
+            before: null,
+            after: {
+              modifier: createdModes.modifier,
+              modes: createdModes.modes.map(({ name }) => name),
+            },
+            correlationId,
+            occurredAt: createdAt,
           },
-          correlationId,
-          occurredAt: createdAt,
-        });
+        ]);
       }
       const writable = checked.flatMap(({ token, id, values }) =>
         values.ok ? [{ token, id, values: values.value }] : [],
@@ -285,17 +287,19 @@ export const importTokens =
             return err({ names: [token.name] });
           }
           const replaced = await proposals.replace({ projectId, name: token.name });
-          await history.append({
-            spaceId: project.spaceId,
-            projectId,
-            action: "token.created",
-            userId,
-            clientId: null,
-            before: null,
-            after: { ...token, replaced },
-            correlationId,
-            occurredAt: createdAt,
-          });
+          await history.append([
+            {
+              spaceId: project.spaceId,
+              projectId,
+              action: "token.created",
+              userId,
+              clientId: null,
+              before: null,
+              after: { ...token, replaced },
+              correlationId,
+              occurredAt: createdAt,
+            },
+          ]);
           return ok(before.value + 1);
         },
         Promise.resolve(ok(0)),

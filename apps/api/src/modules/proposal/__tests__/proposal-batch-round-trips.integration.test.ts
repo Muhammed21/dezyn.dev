@@ -1,0 +1,73 @@
+import { describe, expect, it } from "vitest";
+
+import { type App, BASE_URL, callMcp, withIdentityApp } from "#testing/authorization-flow.ts";
+import { seedProject } from "#testing/project-fixtures.ts";
+import { countRoundTrips } from "#testing/round-trips.ts";
+import { makeColorToken } from "#testing/token-fixtures.ts";
+import { ProposalBatchOutput } from "@repo/contracts";
+
+const LARGE_BATCH = 67;
+
+const callTool = async (
+  app: App,
+  { token, name, args }: { token: string; name: string; args: object },
+) => {
+  const response = await callMcp(app, {
+    token,
+    method: "tools/call",
+    params: { name, arguments: args },
+  });
+  const { result } = await response.json();
+  return result.structuredContent;
+};
+
+const seedClosedBatch = async (
+  app: App,
+  { accessToken, projectId, size }: { accessToken: string; projectId: string; size: number },
+) => {
+  const tokens = Array.from({ length: size }, (_, index) =>
+    makeColorToken({ name: `couleur.lot.t${index}` }),
+  );
+  const { batch } = await callTool(app, {
+    token: accessToken,
+    name: "write_tokens",
+    args: { projectId, tokens },
+  });
+  await callTool(app, { token: accessToken, name: "close_proposal_batch", args: { projectId } });
+  const response = await app.request(`${BASE_URL}/v1/proposal-batches/${batch.id}`, {
+    headers: { authorization: `Bearer ${accessToken}` },
+  });
+  return ProposalBatchOutput.parse(await response.json());
+};
+
+const rejectAll = (
+  app: App,
+  {
+    accessToken,
+    batch,
+  }: { accessToken: string; batch: { id: string; proposals: readonly { id: string }[] } },
+) =>
+  countRoundTrips(async () =>
+    app.request(`${BASE_URL}/v1/proposal-batches/${batch.id}/validate`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json" },
+      body: JSON.stringify({ rejected: batch.proposals.map(({ id }) => id) }),
+    }),
+  );
+
+describe("valider un lot coûte un nombre de requêtes qui ne dépend pas de sa taille (#258)", () => {
+  it(`rejeter les ${LARGE_BATCH} propositions d'un lot coûte autant de requêtes qu'en rejeter une`, () =>
+    withIdentityApp(async (app, db) => {
+      const { accessToken, projectId } = await seedProject(app, db);
+      const single = await seedClosedBatch(app, { accessToken, projectId, size: 1 });
+      const singleRejection = await rejectAll(app, { accessToken, batch: single });
+      const large = await seedClosedBatch(app, { accessToken, projectId, size: LARGE_BATCH });
+
+      const largeRejection = await rejectAll(app, { accessToken, batch: large });
+
+      expect(singleRejection.result.status).toBe(200);
+      expect(largeRejection.result.status).toBe(200);
+      expect(singleRejection.roundTrips).toBeGreaterThan(0);
+      expect(largeRejection.roundTrips).toBe(singleRejection.roundTrips);
+    }));
+});

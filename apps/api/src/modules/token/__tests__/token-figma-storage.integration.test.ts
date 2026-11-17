@@ -185,10 +185,9 @@ describe("le compteur d'un projet suit les états Figma (ADR 0032 §1 à §3)", 
 
       await whileHolding(db, {
         hold: (tx) =>
-          postgresFigmaStateSynchronizer(tx, storageMeterOn(tx)).proposalRejected({
-            proposalId: declared.states[0].proposal.id,
-            token: { $value: NIGHT_BLUE },
-          }),
+          postgresFigmaStateSynchronizer(tx, storageMeterOn(tx)).proposalsRejected([
+            { proposalId: declared.states[0].proposal.id, token: { $value: NIGHT_BLUE } },
+          ]),
         meanwhile: () => declareFigmaStates(app, { ...seeded, states: [DUPLICATED] }),
       });
 

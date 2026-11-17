@@ -200,10 +200,10 @@ describe("write_tokens entre dans l'historique et refuse ce qui ne lui revient p
       },
       {
         wrapHistoryWriter: (writer) => ({
-          append: (entry) =>
-            entry.action.startsWith("mcp.")
+          append: (entries) =>
+            entries.some((entry) => entry.action.startsWith("mcp."))
               ? Promise.reject(new Error("historique indisponible"))
-              : writer.append(entry),
+              : writer.append(entries),
         }),
       },
     ));

@@ -393,59 +393,63 @@ export const postgresFigmaUnitOfWork = ({
     ),
 });
 
-const resizeFigmaStateOf = async (
+const resizeFigmaStatesOf = async (
   tx: Queryable,
   {
     meter,
-    proposalId,
+    proposalIds,
     change,
   }: {
     readonly meter: StorageMeter;
-    readonly proposalId: string;
+    readonly proposalIds: readonly string[];
     readonly change: Partial<typeof tokenFigmaState.$inferInsert>;
   },
 ) => {
+  if (proposalIds.length === 0) {
+    return;
+  }
   const before = await tx
     .select({ row: tokenFigmaState, projectId: token.projectId })
     .from(tokenFigmaState)
     .innerJoin(token, eq(token.id, tokenFigmaState.tokenId))
-    .where(eq(tokenFigmaState.proposalId, proposalId))
+    .where(inArray(tokenFigmaState.proposalId, [...proposalIds]))
     .for("update", { of: tokenFigmaState });
   const after = await tx
     .update(tokenFigmaState)
     .set(change)
-    .where(eq(tokenFigmaState.proposalId, proposalId))
+    .where(inArray(tokenFigmaState.proposalId, [...proposalIds]))
     .returning();
   const [changed] = before;
   if (changed === undefined) {
     return;
   }
-  await meter.remove(
-    changed.projectId,
-    before.map(({ row }) => row),
-  );
-  await meter.add(changed.projectId, after);
+  await meter.resize(changed.projectId, { removed: before.map(({ row }) => row), added: after });
 };
 
 export const postgresFigmaStateSynchronizer = (tx: Queryable, meter: StorageMeter) => ({
-  proposalValidated: async (proposalId: string) => {
-    await resizeFigmaStateOf(tx, {
+  proposalsValidated: async (proposalIds: readonly string[]) => {
+    await resizeFigmaStatesOf(tx, {
       meter,
-      proposalId,
+      proposalIds,
       change: { state: "synced", proposalId: null },
     });
   },
-  proposalRejected: async ({
-    proposalId,
-    token: { $value, modes },
-  }: {
-    readonly proposalId: string;
-    readonly token: ComparedDefinition;
-  }) => {
-    await resizeFigmaStateOf(tx, {
+  proposalsRejected: async (
+    rejected: readonly { readonly proposalId: string; readonly token: ComparedDefinition }[],
+  ) => {
+    await resizeFigmaStatesOf(tx, {
       meter,
-      proposalId,
-      change: { rejectedValue: { $value, modes }, proposalId: null },
+      proposalIds: rejected.map(({ proposalId }) => proposalId),
+      change: {
+        rejectedValue: sql`case ${tokenFigmaState.proposalId} ${sql.join(
+          rejected.map(
+            ({ proposalId, token: { $value, modes } }) =>
+              sql`when ${proposalId}::uuid then ${JSON.stringify({ $value, modes })}::jsonb`,
+          ),
+          sql` `,
+        )} end`,
+        proposalId: null,
+      },
     });
   },
 });

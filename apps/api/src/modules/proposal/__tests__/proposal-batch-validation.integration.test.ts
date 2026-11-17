@@ -568,11 +568,14 @@ describe("un lot se valide cibles d'abord, et tout ou rien", () => {
       },
       {
         wrapHistoryWriter: (writer) => ({
-          append: (entry) =>
-            entry.action === "proposal.validated" &&
-            JSON.stringify(entry.after).includes("couleur.fond.primaire")
+          append: (entries) =>
+            entries.some(
+              (entry) =>
+                entry.action === "proposal.validated" &&
+                JSON.stringify(entry.after).includes("couleur.fond.primaire"),
+            )
               ? Promise.reject(new Error("historique indisponible"))
-              : writer.append(entry),
+              : writer.append(entries),
         }),
       },
     ));

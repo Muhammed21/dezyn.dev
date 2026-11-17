@@ -64,17 +64,19 @@ export const createProject =
         return err(refusal);
       }
       await projects.create(project);
-      await history.append({
-        spaceId,
-        projectId: project.id,
-        action: "project.created",
-        userId,
-        clientId: null,
-        before: null,
-        after: { name },
-        correlationId,
-        occurredAt: project.createdAt,
-      });
+      await history.append([
+        {
+          spaceId,
+          projectId: project.id,
+          action: "project.created",
+          userId,
+          clientId: null,
+          before: null,
+          after: { name },
+          correlationId,
+          occurredAt: project.createdAt,
+        },
+      ]);
       return ok(project);
     });
   };
