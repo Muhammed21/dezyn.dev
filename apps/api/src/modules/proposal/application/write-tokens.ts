@@ -203,6 +203,9 @@ export const writeTokens =
     if (outcome.value.alert !== undefined) {
       await sendStorageAlert(outcome.value.alert);
     }
-    await signals.changed({ projectId: writer.projectId, topics: ["proposals"] });
+    const { proposals, replaced } = outcome.value.written;
+    if (proposals.length > 0 || replaced.length > 0) {
+      await signals.changed({ projectId: writer.projectId, topics: ["proposals"] });
+    }
     return ok(outcome.value.written);
   };

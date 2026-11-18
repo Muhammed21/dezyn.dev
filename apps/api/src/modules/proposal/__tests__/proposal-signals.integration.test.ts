@@ -5,7 +5,7 @@ import type { PostgresDatabase } from "#db";
 import type { LogRecord } from "#platform/logging.ts";
 import { type App, callMcp, withIdentityApp } from "#testing/authorization-flow.ts";
 import { seedProject } from "#testing/project-fixtures.ts";
-import { makeColorToken } from "#testing/token-fixtures.ts";
+import { addToken, makeColorToken } from "#testing/token-fixtures.ts";
 
 type Signal = { readonly projectId: string; readonly topics: readonly string[] };
 
@@ -90,6 +90,53 @@ describe("une écriture de l'IA signale les propositions de son projet (ADR 0046
 
         expect(result.isError).toBe(true);
         expect(state.received).toEqual([]);
+      },
+      { signals },
+    );
+  });
+
+  it("un write_tokens dont chaque token est déjà en attente à l'identique ne signale rien", () => {
+    const { state, signals } = recordSignals();
+    return withIdentityApp(
+      async (app, db) => {
+        const { accessToken, projectId } = await seedProject(app, db);
+        const tokens = [makeColorToken({ name: "couleur.fond" })];
+        await writeTokens(app, { accessToken, projectId, tokens });
+
+        const result = await writeTokens(app, { accessToken, projectId, tokens });
+
+        expect(result.structuredContent.unchanged).toEqual(["couleur.fond"]);
+        expect(state.received).toHaveLength(1);
+      },
+      { signals },
+    );
+  });
+
+  it("revenir à la valeur validée retire la proposition en attente, et le signale", () => {
+    const { state, signals } = recordSignals();
+    return withIdentityApp(
+      async (app, db) => {
+        const { accessToken, projectId } = await seedProject(app, db);
+        await addToken(app, { accessToken, projectId, token: makeColorToken() });
+        const nightBlue = { colorSpace: "srgb", components: [0.1, 0.2, 0.4] };
+        await writeTokens(app, {
+          accessToken,
+          projectId,
+          tokens: [makeColorToken({ $value: nightBlue })],
+        });
+
+        const result = await writeTokens(app, {
+          accessToken,
+          projectId,
+          tokens: [makeColorToken()],
+        });
+
+        expect(result.structuredContent).toMatchObject({
+          proposals: [],
+          unchanged: ["couleur.fond.primaire"],
+          replaced: [expect.objectContaining({ name: "couleur.fond.primaire" })],
+        });
+        expect(state.received).toHaveLength(2);
       },
       { signals },
     );
