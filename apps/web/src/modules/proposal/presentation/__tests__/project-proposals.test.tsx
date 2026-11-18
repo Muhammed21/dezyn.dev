@@ -11,6 +11,7 @@ import { render } from "vitest-browser-react";
 
 import { err, ok, type Result } from "@repo/result";
 
+import { makeProjectEvents } from "../../../../testing/project-events.ts";
 import type { BatchSummary, ProposalFailure } from "../../domain/proposal.ts";
 import { projectProposals } from "../project-proposals.tsx";
 
@@ -34,8 +35,12 @@ const listing =
   () =>
     Promise.resolve(ok(batches));
 
-const renderProposals = async (listBatches: ListBatches) => {
-  const ProjectProposals = projectProposals({ listBatches });
+const renderProposals = async (
+  listBatches: ListBatches,
+  events: ReturnType<typeof makeProjectEvents> = makeProjectEvents(),
+  queryClient: QueryClient = new QueryClient(),
+) => {
+  const ProjectProposals = projectProposals({ listBatches, subscribe: events.subscribe });
   const root = createRootRoute();
   const project = createRoute({
     getParentRoute: () => root,
@@ -55,12 +60,26 @@ const renderProposals = async (listBatches: ListBatches) => {
   return {
     history,
     screen: await render(
-      <QueryClientProvider client={new QueryClient()}>
+      <QueryClientProvider client={queryClient}>
         <RouterProvider router={router} />
       </QueryClientProvider>,
     ),
   };
 };
+
+const changingListing = (initial: readonly BatchSummary[]) => {
+  const state = { batches: initial, reads: 0 };
+  const listBatches: ListBatches = () => {
+    state.reads += 1;
+    return Promise.resolve(ok(state.batches));
+  };
+  return { state, listBatches };
+};
+
+const settle = () =>
+  new Promise((resolve) => {
+    setTimeout(resolve, 100);
+  });
 
 const batchItems = (screen: Awaited<ReturnType<typeof renderProposals>>["screen"]) =>
   screen.getByRole("list", { name: "Lots de propositions" }).getByRole("listitem");
@@ -163,4 +182,72 @@ describe("propositions d'un projet (ADR 0012 §1, ADR 0044 §6)", () => {
       expect(screen.getByRole("list").elements()).toHaveLength(0);
     },
   );
+
+  describe("en temps réel (ADR 0046)", () => {
+    const SPACING = makeBatch({
+      id: "1c8f3c1e-7b3d-4e8a-9f10-2c5d6e7f8a9b",
+      intent: "Espacements",
+    });
+
+    it("un signal proposals du projet affiché fait apparaître les nouveaux lots, sans action du membre", async () => {
+      const events = makeProjectEvents();
+      const { state, listBatches } = changingListing([makeBatch()]);
+      const { screen } = await renderProposals(listBatches, events);
+      await expect.element(batchItems(screen).nth(0)).toBeVisible();
+
+      state.batches = [makeBatch(), SPACING];
+      events.emit(PROJECT_ID, ["proposals"]);
+
+      await expect.element(batchItems(screen).nth(1)).toHaveTextContent("Espacements");
+    });
+
+    it("s'abonne au seul projet affiché, et suit le membre d'un projet à l'autre", async () => {
+      const events = makeProjectEvents();
+      const { history, screen } = await renderProposals(listing([makeBatch()]), events);
+      await expect.element(batchItems(screen).nth(0)).toBeVisible();
+      expect(events.subscribedProjects()).toEqual([PROJECT_ID]);
+
+      history.push(`/projets/${OTHER_PROJECT_ID}`);
+
+      await expect.poll(() => events.subscribedProjects()).toEqual([OTHER_PROJECT_ID]);
+    });
+
+    it("un signal proposals ne relit que les lots, pas les tokens du projet", async () => {
+      const events = makeProjectEvents();
+      const queryClient = new QueryClient();
+      const tokensKey = ["project-tokens", PROJECT_ID];
+      queryClient.setQueryData(tokensKey, ok({ modes: [], tokens: [] }));
+      const { state, listBatches } = changingListing([makeBatch()]);
+      const { screen } = await renderProposals(listBatches, events, queryClient);
+      await expect.element(batchItems(screen).nth(0)).toBeVisible();
+
+      events.emit(PROJECT_ID, ["proposals"]);
+
+      await expect.poll(() => state.reads).toBe(2);
+      expect(queryClient.getQueryState(tokensKey)?.isInvalidated).toBe(false);
+    });
+
+    it("un signal d'un autre sujet ne relit rien", async () => {
+      const events = makeProjectEvents();
+      const { state, listBatches } = changingListing([makeBatch()]);
+      const { screen } = await renderProposals(listBatches, events);
+      await expect.element(batchItems(screen).nth(0)).toBeVisible();
+
+      events.emit(PROJECT_ID, ["history"]);
+      await settle();
+
+      expect(state.reads).toBe(1);
+    });
+
+    it("quitter la page ferme l'abonnement", async () => {
+      const events = makeProjectEvents();
+      const { history, screen } = await renderProposals(listing([makeBatch()]), events);
+      await expect.element(batchItems(screen).nth(0)).toBeVisible();
+
+      history.push("/connexion");
+
+      await expect.element(screen.getByText("Page de connexion")).toBeVisible();
+      expect(events.subscribedProjects()).toEqual([]);
+    });
+  });
 });
