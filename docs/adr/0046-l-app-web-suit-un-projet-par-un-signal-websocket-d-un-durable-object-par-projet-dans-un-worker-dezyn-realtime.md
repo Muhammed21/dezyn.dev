@@ -121,7 +121,8 @@ Les cas d'usage appellent le port `ProjectSignals` (`changed({ projectId, topics
 
 ### 6. Les adapters de `ProjectSignals`
 
-- Production et preview : le Durable Object de `dezyn-realtime`.
+- Production : le Durable Object de `dezyn-realtime`, lié par le binding `PROJECT_ROOMS`.
+- Preview : celui de `dezyn-realtime-preview`, l'environnement `preview` du même `wrangler.jsonc`. Le code d'une PR ne touche jamais le Worker de production ; ce Worker est commun à toutes les PRs, et la dernière publiée l'emporte.
 - Tests d'intégration Node : un enregistreur en mémoire, qui affirme quel appel signale quel sujet pour quel projet.
 - API Node locale (`pnpm dev`) : aucun signal.
 
@@ -146,7 +147,7 @@ Elle se teste dans workerd avec `@cloudflare/vitest-plugin` (le nouveau nom de `
 
 - Un membre retiré garde sa connexion jusqu'à la prochaine coupure. Il ne reçoit que des sujets sans données, et chaque relecture lui répond 404.
 - Pas de temps réel avec `pnpm dev`.
-- Un nouveau Worker, `dezyn-realtime`, se déploie avant `dezyn-api` dans `deploy.yml` et `preview.yml`.
+- Un nouveau Worker, `dezyn-realtime`, se déploie avant `dezyn-api` dans `deploy.yml` ; `dezyn-realtime-preview` se déploie avant chaque version de preview dans `preview.yml`, depuis le bundle de la CI de la PR.
 - Une configuration de test workerd en plus.
 - Chaque signal coûte une relecture REST par client abonné.
 

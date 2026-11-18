@@ -11,6 +11,11 @@
     "WEB_URL": "https://app.dezyn.dev",
     "MAIL_FROM": "no-reply@dezyn.dev",
   },
+  "durable_objects": {
+    "bindings": [
+      { "name": "PROJECT_ROOMS", "class_name": "ProjectRoom", "script_name": "dezyn-realtime" },
+    ],
+  },
   "observability": { "enabled": true },
   "env": {
     "preview": {
@@ -19,6 +24,15 @@
       "workers_dev": true,
       "preview_urls": true,
       "vars": { "EMAIL_DELIVERY": "log" },
+      "durable_objects": {
+        "bindings": [
+          {
+            "name": "PROJECT_ROOMS",
+            "class_name": "ProjectRoom",
+            "script_name": "dezyn-realtime-preview",
+          },
+        ],
+      },
     },
   },
 }

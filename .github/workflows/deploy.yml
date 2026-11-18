@@ -1,6 +1,7 @@
 name: Deploy
 
-# Une CI verte sur main migre la base de production, déploie le Worker dezyn-api, puis vérifie /health ;
+# Une CI verte sur main migre la base de production, déploie le Worker dezyn-realtime, dont l'API lie le
+# Durable Object (ADR 0046), puis le Worker dezyn-api, et vérifie /health ;
 # un /health en échec remet la version précédente (ADR 0034). Le Worker dezyn-purge se déploie ensuite,
 # quand PURGE_DEPLOY_ENABLED vaut true (ADR 0042). L'app web est construite pour api.dezyn.dev et
 # déployée sur app.dezyn.dev ; une adresse profonde qui ne sert pas l'app remet la version précédente
@@ -59,6 +60,12 @@ jobs:
         run: pnpm migrate
         env:
           DATABASE_URL_MIGRATOR: ${{ secrets.DATABASE_URL_MIGRATOR }}
+      - name: Deploy realtime
+        if: steps.latest.outputs.head == 'true'
+        working-directory: apps/realtime
+        run: pnpm exec wrangler deploy --message "$HEAD_SHA"
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       - id: deploy
         name: Deploy
         if: steps.latest.outputs.head == 'true'

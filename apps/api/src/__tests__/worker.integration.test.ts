@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { WebSocket } from "undici";
+import { describe, expect, it, vi } from "vitest";
 import { createTestHarness } from "wrangler";
 
 import { REGISTRATION_RATE_LIMIT } from "#modules/identity/infrastructure/better-auth.ts";
@@ -7,10 +8,12 @@ import {
   type App,
   BASE_URL,
   callMcp,
+  makeClientIp,
   obtainAccessToken,
   WEB_URL,
 } from "#testing/authorization-flow.ts";
 import { httpApp } from "#testing/http-app.ts";
+import { makeColorToken } from "#testing/token-fixtures.ts";
 import { migrate } from "@repo/db";
 import { withThrowawayDatabase } from "@repo/db/testing";
 
@@ -38,7 +41,7 @@ const jsonLines = (messages: readonly string[]): readonly unknown[] =>
 
 const withWorker = async (
   databaseUrl: string,
-  run: (worker: App, logs: () => readonly string[]) => Promise<void>,
+  run: (worker: App, logs: () => readonly string[], url: URL) => Promise<void>,
 ) => {
   process.env[HYPERDRIVE_LOCAL] = databaseUrl;
   const worker = createTestHarness({
@@ -49,16 +52,57 @@ const withWorker = async (
         vars: { BETTER_AUTH_URL: BASE_URL, WEB_URL, TRUSTED_IP_HEADER: "x-forwarded-for" },
         secrets: { BETTER_AUTH_SECRET: "secret-de-test-de-32-caracteres-au-moins" },
       },
+      { configPath: "../realtime/wrangler.jsonc" },
     ],
   });
   try {
     const { url } = await worker.listen();
-    await run(httpApp(url), () => worker.getLogs().map(({ message }) => message));
+    await run(httpApp(url), () => worker.getLogs().map(({ message }) => message), url);
   } finally {
     await worker.close();
     delete process.env[HYPERDRIVE_LOCAL];
   }
 };
+
+const createProject = async (worker: App, accessToken: string) => {
+  const authorization = `Bearer ${accessToken}`;
+  const spaces = await worker.request(`${BASE_URL}/v1/spaces`, { headers: { authorization } });
+  const {
+    spaces: [space],
+  } = await spaces.json();
+  const created = await worker.request(`${BASE_URL}/v1/spaces/${space.id}/projects`, {
+    method: "POST",
+    headers: { authorization, "content-type": "application/json" },
+    body: JSON.stringify({ name: "Projet suivi en direct" }),
+  });
+  const { id } = await created.json();
+  return String(id);
+};
+
+const sessionCookieOf = async (worker: App) => {
+  const response = await worker.request(`${BASE_URL}/auth/sign-in/email`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      origin: BASE_URL,
+      "x-forwarded-for": makeClientIp(),
+    },
+    body: JSON.stringify({ email: ADA.email, password: ADA.password }),
+  });
+  const [pair = ""] = response.headers.getSetCookie().map((cookie) => cookie.split(";")[0]);
+  return pair;
+};
+
+const subscribe = ({ url, projectId, cookie }: { url: URL; projectId: string; cookie: string }) =>
+  new Promise<{ readonly received: unknown[] }>((resolve, reject) => {
+    const received: unknown[] = [];
+    const socket = new WebSocket(new URL(`/v1/projects/${projectId}/events`, url), {
+      headers: { cookie, origin: WEB_URL },
+    });
+    socket.addEventListener("message", ({ data }) => received.push(JSON.parse(String(data))));
+    socket.addEventListener("open", () => resolve({ received }));
+    socket.addEventListener("error", () => reject(new Error("poignée de main refusée")));
+  });
 
 describe("le Worker de production", () => {
   it(
@@ -161,6 +205,34 @@ describe("le Worker de production", () => {
             expect(otherIp.status).toBe(201);
           }),
         );
+      }),
+    90_000,
+  );
+  it(
+    "un membre abonné reçoit proposals après un write_tokens de l'IA sur son projet",
+    () =>
+      withThrowawayDatabase(async ({ migratorUrl, appUrl }) => {
+        await migrate({ connectionString: migratorUrl });
+
+        await withWorker(appUrl, async (worker, _logs, url) => {
+          const { accessToken } = await obtainAccessToken(worker);
+          const projectId = await createProject(worker, accessToken);
+          const cookie = await sessionCookieOf(worker);
+          const { received } = await subscribe({ url, projectId, cookie });
+
+          await callMcp(worker, {
+            token: accessToken,
+            method: "tools/call",
+            params: {
+              name: "write_tokens",
+              arguments: { projectId, tokens: [makeColorToken({ name: "couleur.fond" })] },
+            },
+          });
+
+          await vi.waitFor(() =>
+            expect(received).toEqual([{ type: "changed", topics: ["proposals"] }]),
+          );
+        });
       }),
     90_000,
   );

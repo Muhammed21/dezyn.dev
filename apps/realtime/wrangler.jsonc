@@ -9,4 +9,11 @@
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ProjectRoom"] }],
   "observability": { "enabled": true },
+  "env": {
+    "preview": {
+      "durable_objects": {
+        "bindings": [{ "name": "PROJECT_ROOMS", "class_name": "ProjectRoom" }],
+      },
+    },
+  },
 }
