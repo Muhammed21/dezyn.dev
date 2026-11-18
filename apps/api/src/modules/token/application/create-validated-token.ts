@@ -1,23 +1,58 @@
 import type { ProjectToken } from "../domain/reference.ts";
-import type { ValidatedToken, ValidatedTokenWriter } from "../domain/token-check.ts";
+import type {
+  FailedWrite,
+  ValidatedTokenFailure,
+  ValidatedTokenWriter,
+  ValidatedWrite,
+} from "../domain/token-check.ts";
 import { groupConflict } from "../domain/token-name.ts";
+import type { TokenDefinition } from "../domain/token.ts";
 import {
   checkedValues,
+  type CreatedToken,
   type ModeReader,
+  type ModeValue,
   modeValueOf,
+  type ProjectMode,
   type ProjectTokenReader,
   type TokenWriter,
 } from "./token-values.ts";
 
-const checkedFor = async (
-  { modes, tokens }: { readonly modes: ModeReader; readonly tokens: readonly ProjectToken[] },
-  { projectId, token, pending }: ValidatedToken,
-) =>
-  checkedValues(token, {
-    projectModes: await modes.modesOf(projectId),
-    tokens,
+type Planned<Write extends ValidatedWrite> = {
+  readonly known: readonly ProjectToken[];
+  readonly created: readonly (CreatedToken & { readonly write: Write })[];
+  readonly replaced: readonly {
+    readonly token: TokenDefinition;
+    readonly values: readonly ModeValue[];
+  }[];
+  readonly failed?: FailedWrite<Write>;
+};
+
+const checkedWrite = (
+  { kind, token }: ValidatedWrite,
+  {
+    known,
+    projectModes,
     pending,
-  });
+  }: {
+    readonly known: readonly ProjectToken[];
+    readonly projectModes: readonly ProjectMode[];
+    readonly pending: readonly { readonly name: string; readonly $type: string }[];
+  },
+): { readonly failure: ValidatedTokenFailure } | { readonly values: readonly ModeValue[] } => {
+  const other =
+    kind === "create"
+      ? groupConflict(
+          token.name,
+          known.map(({ name }) => name),
+        )
+      : undefined;
+  if (other !== undefined) {
+    return { failure: { code: "name_conflict", other } };
+  }
+  const checked = checkedValues(token, { projectModes, tokens: known, pending });
+  return checked.ok ? { values: checked.value.map(modeValueOf) } : { failure: checked.error };
+};
 
 export const validatedTokenWriter = ({
   modes,
@@ -30,38 +65,53 @@ export const validatedTokenWriter = ({
   readonly tokens: TokenWriter;
   readonly newId: () => string;
 }): ValidatedTokenWriter => ({
-  create: async (validated) => {
-    const { projectId, token, createdAt } = validated;
-    const existing = await projectTokens.tokensOf(projectId);
-    const other = groupConflict(
-      token.name,
-      existing.map(({ name }) => name),
+  write: async ({ projectId, writes, pending, createdAt }) => {
+    const [known, projectModes] = await Promise.all([
+      projectTokens.tokensOf(projectId),
+      modes.modesOf(projectId),
+    ]);
+    type Write = (typeof writes)[number];
+    const planned = writes.reduce<Planned<Write>>(
+      (plan, write) => {
+        if (plan.failed !== undefined) {
+          return plan;
+        }
+        const checked = checkedWrite(write, { known: plan.known, projectModes, pending });
+        if ("failure" in checked) {
+          return { ...plan, failed: { write, failure: checked.failure } };
+        }
+        if (write.kind === "update") {
+          return {
+            ...plan,
+            replaced: [...plan.replaced, { token: write.token, values: checked.values }],
+          };
+        }
+        const created = {
+          ...write.token,
+          id: newId(),
+          projectId,
+          status: "validated" as const,
+          createdAt,
+        };
+        return {
+          ...plan,
+          known: [...plan.known, created],
+          created: [...plan.created, { write, token: created, values: checked.values }],
+        };
+      },
+      { known, created: [], replaced: [] },
     );
-    if (other !== undefined) {
-      return { code: "name_conflict", other };
+    if (planned.failed !== undefined) {
+      return planned.failed;
     }
-    const checked = await checkedFor({ modes, tokens: existing }, validated);
-    if (!checked.ok) {
-      return checked.error;
+    const taken = await tokens.createAll(planned.created);
+    if (taken !== undefined) {
+      return { write: taken.write, failure: { code: "name_taken" } };
     }
-    const outcome = await tokens.create(
-      { ...token, id: newId(), projectId, status: "validated", createdAt },
-      checked.value.map(modeValueOf),
-    );
-    return outcome === "name_taken" ? { code: "name_taken" } : undefined;
-  },
-  replace: async (validated) => {
-    const checked = await checkedFor(
-      { modes, tokens: await projectTokens.tokensOf(validated.projectId) },
-      validated,
-    );
-    if (!checked.ok) {
-      return checked.error;
-    }
-    await tokens.replace(
-      { ...validated.token, projectId: validated.projectId },
-      checked.value.map(modeValueOf),
-    );
+    await planned.replaced.reduce<Promise<void>>(async (previous, { token, values }) => {
+      await previous;
+      await tokens.replace({ ...token, projectId }, values);
+    }, Promise.resolve());
     return undefined;
   },
 });

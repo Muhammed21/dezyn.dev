@@ -40,20 +40,34 @@ const seedClosedBatch = async (
   return ProposalBatchOutput.parse(await response.json());
 };
 
+const validate = (
+  app: App,
+  {
+    accessToken,
+    batch,
+    rejected,
+  }: { accessToken: string; batch: { id: string }; rejected: readonly string[] },
+) =>
+  countRoundTrips(async () =>
+    app.request(`${BASE_URL}/v1/proposal-batches/${batch.id}/validate`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json" },
+      body: JSON.stringify({ rejected }),
+    }),
+  );
+
 const rejectAll = (
   app: App,
   {
     accessToken,
     batch,
   }: { accessToken: string; batch: { id: string; proposals: readonly { id: string }[] } },
-) =>
-  countRoundTrips(async () =>
-    app.request(`${BASE_URL}/v1/proposal-batches/${batch.id}/validate`, {
-      method: "POST",
-      headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json" },
-      body: JSON.stringify({ rejected: batch.proposals.map(({ id }) => id) }),
-    }),
-  );
+) => validate(app, { accessToken, batch, rejected: batch.proposals.map(({ id }) => id) });
+
+const validateAll = (
+  app: App,
+  { accessToken, batch }: { accessToken: string; batch: { id: string } },
+) => validate(app, { accessToken, batch, rejected: [] });
 
 describe("valider un lot coûte un nombre de requêtes qui ne dépend pas de sa taille (#258)", () => {
   it(`rejeter les ${LARGE_BATCH} propositions d'un lot coûte autant de requêtes qu'en rejeter une`, () =>
@@ -69,5 +83,20 @@ describe("valider un lot coûte un nombre de requêtes qui ne dépend pas de sa 
       expect(largeRejection.result.status).toBe(200);
       expect(singleRejection.roundTrips).toBeGreaterThan(0);
       expect(largeRejection.roundTrips).toBe(singleRejection.roundTrips);
+    }));
+
+  it(`valider les ${LARGE_BATCH} créations d'un lot coûte autant de requêtes qu'en valider une`, () =>
+    withIdentityApp(async (app, db) => {
+      const { accessToken, projectId } = await seedProject(app, db);
+      const single = await seedClosedBatch(app, { accessToken, projectId, size: 1 });
+      const singleValidation = await validateAll(app, { accessToken, batch: single });
+      const large = await seedClosedBatch(app, { accessToken, projectId, size: LARGE_BATCH });
+
+      const largeValidation = await validateAll(app, { accessToken, batch: large });
+
+      expect(singleValidation.result.status).toBe(200);
+      expect(largeValidation.result.status).toBe(200);
+      expect(singleValidation.roundTrips).toBeGreaterThan(0);
+      expect(largeValidation.roundTrips).toBe(singleValidation.roundTrips);
     }));
 });
