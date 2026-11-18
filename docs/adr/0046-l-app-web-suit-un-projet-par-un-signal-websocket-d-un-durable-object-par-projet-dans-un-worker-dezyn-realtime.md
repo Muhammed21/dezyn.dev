@@ -103,7 +103,7 @@ Chaque projet a son Durable Object, obtenu par `getByName(projectId)`. Il tient 
 
 ### 3. Le Durable Object vit dans le Worker `dezyn-realtime`
 
-`dezyn-realtime` est configuré par `apps/api/wrangler.realtime.jsonc`, sur le modèle de `dezyn-purge` (ADR 0042, ADR 0043). `dezyn-api` se lie à sa classe par `script_name` et n'implémente aucun Durable Object.
+`dezyn-realtime` est un paquet à part, `apps/realtime`, avec son `wrangler.jsonc`, sur le modèle de `apps/preview-router` : le code du Durable Object a besoin des types workerd, incompatibles avec les types Node du tsconfig de l'API. `dezyn-api` se lie à sa classe par `script_name` et n'implémente aucun Durable Object.
 
 ### 4. `GET /v1/projects/:projectId/events` ouvre l'abonnement
 
@@ -131,7 +131,7 @@ Le port `ProjectEvents` abonne une page à un projet et lui remet les sujets re�
 
 ### 8. La classe du Durable Object se teste dans workerd
 
-Elle se teste avec `@cloudflare/vitest-pool-workers`, dans une configuration Vitest à part.
+Elle se teste dans workerd avec `@cloudflare/vitest-plugin` (le nouveau nom de `@cloudflare/vitest-pool-workers`), dans la configuration Vitest de `apps/realtime`.
 
 ## Conséquences
 

@@ -31,7 +31,7 @@ Chaque story reste livrable seule : sans les suivantes, l'app web garde son comp
 
 1. **Un signal, pas des données.** Le serveur pousse `{ "type": "changed", "topics": ["proposals"] }`. Le client invalide les requêtes React Query des sujets reçus et relit par les routes REST existantes : les autorisations et les contrats restent à un seul endroit, et un signal perdu ne corrompt rien.
 2. **Un Durable Object par projet** (`getByName(projectId)`), avec l'API WebSocket en hibernation : pas de facturation de durée au repos. Le plan Workers Free suffit (100 000 requêtes par jour, stockage SQLite non utilisé).
-3. **Le Durable Object vit dans un Worker séparé, `dezyn-realtime`**, configuré par `apps/api/wrangler.realtime.jsonc` comme `dezyn-purge`. Cloudflare ne génère pas de preview URL pour un Worker qui implémente un Durable Object ; `dezyn-api` ne fait que s'y lier (`script_name`) et garde ses previews (ADR 0045).
+3. **Le Durable Object vit dans un Worker séparé, `dezyn-realtime`**, dans son propre paquet `apps/realtime` (son `wrangler.jsonc`, ses types workerd), comme `apps/preview-router`. Cloudflare ne génère pas de preview URL pour un Worker qui implémente un Durable Object ; `dezyn-api` ne fait que s'y lier (`script_name`) et garde ses previews (ADR 0045).
 4. **`GET /v1/projects/:projectId/events`** accepte la mise à niveau WebSocket dans `dezyn-api` : cookie de session et contrôle de l'origine (ADR 0044), droit `space.read` sur le projet, puis transmission au Durable Object. Une requête sans `Upgrade: websocket` répond 426 sans toucher au Durable Object.
 5. **Le signal part après le commit, au mieux.** Un port `ProjectSignals` (`changed({ projectId, topics })`) est appelé par les cas d'usage après la transaction. Son échec est journalisé et ne fait pas échouer l'écriture ; le rechargement au focus reste le filet.
 6. **Adapters** : le Durable Object en production et en preview ; un enregistreur en mémoire pour les tests d'intégration Node, qui affirment « tel appel signale tel sujet pour tel projet » ; aucun signal pour l'API Node locale (`pnpm dev`).
@@ -39,7 +39,7 @@ Chaque story reste livrable seule : sans les suivantes, l'app web garde son comp
 
 ## Tests du Durable Object
 
-La classe du Durable Object se teste dans workerd avec `@cloudflare/vitest-pool-workers`, dans une configuration Vitest à part. Le temps réel en local (`pnpm dev`) n'est pas couvert par la story 1 ; un adapter `ws` pour l'API Node peut devenir une story si le manque gêne.
+La classe du Durable Object se teste dans workerd avec `@cloudflare/vitest-plugin` (nouveau nom de `@cloudflare/vitest-pool-workers`), dans la configuration Vitest de `apps/realtime`. Le temps réel en local (`pnpm dev`) n'est pas couvert par la story 1 ; un adapter `ws` pour l'API Node peut devenir une story si le manque gêne.
 
 ## Risques
 
@@ -64,7 +64,7 @@ Chaque tranche suit RED, GREEN, MUTATE, KILL MUTANTS, REFACTOR. Avant le code : 
 - `deploy.yml` et `preview.yml` déploient `dezyn-realtime` avant `dezyn-api`.
 - L'ADR du temps réel est accepté.
 
-**RED** : tests d'intégration de la route (codes de réponse) et de `write_tokens` avec l'enregistreur en mémoire ; tests de la classe du Durable Object dans workerd (`@cloudflare/vitest-pool-workers`).
+**RED** : tests d'intégration de la route (codes de réponse) et de `write_tokens` avec l'enregistreur en mémoire ; tests de la classe du Durable Object dans workerd (`@cloudflare/vitest-plugin`).
 
 ### Tranche 1.2 : l'app web rafraîchit les lots et la page d'un lot à la réception de `proposals`
 
