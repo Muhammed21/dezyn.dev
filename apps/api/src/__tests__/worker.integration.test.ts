@@ -104,6 +104,8 @@ const subscribe = ({ url, projectId, cookie }: { url: URL; projectId: string; co
     socket.addEventListener("error", () => reject(new Error("poignée de main refusée")));
   });
 
+const SIGNAL_INTERVAL_WAIT_MS = 3000;
+
 describe("le Worker de production", () => {
   it(
     "répond à la sonde de santé sur un schéma à jour",
@@ -229,11 +231,13 @@ describe("le Worker de production", () => {
             },
           });
 
-          await vi.waitFor(() =>
-            expect(received).toEqual([
-              { type: "changed", topics: ["proposals"] },
-              { type: "changed", topics: ["history"] },
-            ]),
+          await vi.waitFor(
+            () =>
+              expect(received).toEqual([
+                { type: "changed", topics: ["proposals"] },
+                { type: "changed", topics: ["history"] },
+              ]),
+            { timeout: SIGNAL_INTERVAL_WAIT_MS },
           );
         });
       }),

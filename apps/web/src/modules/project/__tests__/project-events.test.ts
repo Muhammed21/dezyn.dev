@@ -4,12 +4,15 @@ import { createProjectEvents } from "../project-module.ts";
 
 const PROJECT_ID = "4f2a9c1e-7b3d-4e8a-9f10-2c5d6e7f8a9b";
 
+const PING_INTERVAL_MS = 30_000;
+
 type Listener = (event: { readonly data: unknown }) => void;
 
 type FakeSocket = {
   readonly url: string;
   readonly listeners: { readonly type: string; readonly listener: Listener }[];
   readonly state: { closed: boolean };
+  readonly sent: string[];
 };
 
 const dispatch = (socket: FakeSocket | undefined, type: string, data?: unknown) =>
@@ -22,11 +25,14 @@ const makeSockets = () => {
   return {
     opened,
     openSocket: (url: string) => {
-      const socket: FakeSocket = { url, listeners: [], state: { closed: false } };
+      const socket: FakeSocket = { url, listeners: [], state: { closed: false }, sent: [] };
       opened.push(socket);
       return {
         addEventListener: (type: "message" | "open" | "close", listener: Listener) => {
           socket.listeners.push({ type, listener });
+        },
+        send: (data: string) => {
+          socket.sent.push(data);
         },
         close: () => {
           socket.state.closed = true;
@@ -118,6 +124,7 @@ describe("l'app web suit un projet par la WebSocket de l'API (ADR 0046)", () => 
 
   it.each([
     ["un message qui n'est pas du JSON", "proposals"],
+    ["la réponse à un ping", "pong"],
     ["un autre type de message", JSON.stringify({ type: "ping", topics: ["proposals"] })],
     [
       "des sujets qui ne sont pas une liste",
@@ -149,7 +156,7 @@ describe("la WebSocket d'un projet se rétablit après une coupure (plan temps r
 
     subscription.sockets.drop(0);
 
-    expect(subscription.scheduler.delays()).toEqual([1000]);
+    expect(subscription.scheduler.delays()).toEqual([PING_INTERVAL_MS, 1000]);
     subscription.scheduler.runLast();
     expect(subscription.sockets.opened.map(({ url }) => url)).toEqual([
       `wss://api.dezyn.dev/v1/projects/${PROJECT_ID}/events`,
@@ -175,7 +182,7 @@ describe("la WebSocket d'un projet se rétablit après une coupure (plan temps r
 
     subscription.sockets.drop(2);
 
-    expect(subscription.scheduler.delays()).toEqual([1000, 2000, 1000]);
+    expect(subscription.scheduler.delays()).toEqual([1000, 2000, PING_INTERVAL_MS, 1000]);
   });
 
   it("chaque réouverture après une coupure demande un rattrapage, pas la première ouverture", () => {
@@ -210,5 +217,54 @@ describe("la WebSocket d'un projet se rétablit après une coupure (plan temps r
 
     expect(subscription.scheduler.pending()).toEqual([]);
     expect(subscription.sockets.opened).toHaveLength(1);
+  });
+});
+
+describe("l'app web garde la WebSocket d'un projet vivante par un ping", () => {
+  it("rien n'est envoyé avant l'ouverture de la WebSocket", () => {
+    const { sockets, scheduler } = subscribed();
+
+    expect(scheduler.pending()).toEqual([]);
+    expect(sockets.opened[0]?.sent).toEqual([]);
+  });
+
+  it("envoie ping 30 s après l'ouverture, puis toutes les 30 s", () => {
+    const { sockets, scheduler } = subscribed();
+    sockets.open(0);
+    expect(scheduler.delays()).toEqual([PING_INTERVAL_MS]);
+
+    scheduler.runLast();
+    scheduler.runLast();
+
+    expect(sockets.opened[0]?.sent).toEqual(["ping", "ping"]);
+    expect(scheduler.delays()).toEqual([PING_INTERVAL_MS, PING_INTERVAL_MS, PING_INTERVAL_MS]);
+  });
+
+  it("une coupure arrête le ping", () => {
+    const { sockets, scheduler } = subscribed();
+    sockets.open(0);
+
+    sockets.drop(0);
+
+    expect(scheduler.pending().map(({ delayMs }) => delayMs)).toEqual([1000]);
+  });
+
+  it("se désabonner arrête le ping", () => {
+    const { sockets, scheduler, unsubscribe } = subscribed();
+    sockets.open(0);
+
+    unsubscribe();
+
+    expect(scheduler.pending()).toEqual([]);
+  });
+
+  it("la WebSocket rouverte reprend le ping", () => {
+    const subscription = subscribed();
+    dropAndRetry(subscription, 0);
+    subscription.sockets.open(1);
+
+    subscription.scheduler.runLast();
+
+    expect(subscription.sockets.opened[1]?.sent).toEqual(["ping"]);
   });
 });
