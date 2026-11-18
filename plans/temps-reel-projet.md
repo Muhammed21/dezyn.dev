@@ -46,22 +46,23 @@ La classe du Durable Object se teste dans workerd avec `@cloudflare/vitest-plugi
 - **Cookie sur la poignée de main WebSocket** : `app.dezyn.dev` et `api.dezyn.dev` sont le même site, le cookie `SameSite=Lax` part. Le contrôle de l'origine reste obligatoire contre le détournement de WebSocket entre sites.
 - **Un membre retiré** garde sa connexion jusqu'à la prochaine coupure. Il ne reçoit que des sujets sans données, et chaque relecture lui répond 404. Accepté pour la story 1.
 
-## Story 2 : la connexion perdue se rétablit et rattrape l'écart
+## Story 3 : les décisions d'un autre membre apparaissent
 
-Avant le code : `tdd`, `testing`, `mutation-testing`, `refactoring`, `react-testing`.
+Avant le code : `tdd`, `testing`, `mutation-testing`, `refactoring`.
 
-**Valeur** : un déploiement de `dezyn-realtime` ou de l'API, ou une coupure réseau, ne fige plus l'écran des propositions.
-**Chemin** : l'adapter `ProjectEvents` rouvre la WebSocket après une fermeture non voulue → à la réouverture, il appelle `onResync` → le hook des pages relit `proposal-batches` ou `proposal-batch`.
+**Valeur** : un membre voit les validations, les rejets et les lots ouverts ou fermés par les autres, et évite les `409 already_reviewed`.
+**Chemin** : `reviewProposal`, `validateBatch`, `openBatch` et `closeBatch` appellent `ProjectSignals.changed` avec `proposals` après leur commit → le Durable Object diffuse → les pages relisent, comme pour `write_tokens`.
 **Critères** :
 
-- Une coupure non voulue rouvre la WebSocket après 1 s, puis 2, 4, 8 et 16 s, plafonnées à 30 s.
-- Après une ouverture réussie, le délai revient à 1 s.
-- À chaque réouverture après une coupure, la liste des lots et la page d'un lot relisent leurs données, sans signal. La première ouverture ne relit rien.
-- Se désabonner ferme la WebSocket et annule une reconnexion en attente ; aucune WebSocket ne se rouvre.
+- Valider ou rejeter une proposition signale `proposals` pour son projet, une fois, après le commit. `already_reviewed`, une proposition invalide ou introuvable, et l'absence de droit ne signalent rien.
+- Valider un lot signale `proposals` après le commit. `batch_open`, un lot invalide ou introuvable ne signalent rien.
+- `open_proposal_batch` signale `proposals`.
+- `close_proposal_batch` signale `proposals` quand il ferme un lot, rien quand aucun lot n'est ouvert.
+- Un signal qui échoue est journalisé, et la réponse reste la même.
 
-**Reporte** : le cas d'une session expirée, que le navigateur ne distingue pas d'une coupure (la relecture REST renvoie déjà vers la connexion), et la suspension en arrière-plan.
+**Reporte** : la fermeture d'un lot par inactivité, calculée à la lecture, qu'une alarme du Durable Object pourrait signaler ; le sujet `tokens` après une validation (story 6).
 
-**RED** : tests de l'adapter avec de faux sockets et un ordonnanceur injecté ; tests Vitest Browser Mode des deux pages avec le faux `ProjectEvents`, qui simule une réouverture.
+**RED** : tests d'intégration avec l'enregistreur de signaux en mémoire, par REST pour les décisions et par MCP pour les lots.
 
 ---
 
