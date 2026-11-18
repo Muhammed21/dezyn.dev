@@ -10,6 +10,7 @@ export const WrittenTokensOutput = z.looseObject({
       name: z.string(),
       kind: openEnum(["create", "update"]),
       status: openEnum(["proposed"]),
+      duplicates: z.array(z.string()).optional(),
     }),
   ),
   unchanged: z.array(z.string()),

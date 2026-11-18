@@ -67,6 +67,7 @@ describe("une nouvelle écriture remplace la proposition en attente sur le même
             name: "couleur.fond.primaire",
             kind: "create",
             status: "proposed",
+            duplicates: [],
           },
         ],
         unchanged: [],

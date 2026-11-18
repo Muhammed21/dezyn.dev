@@ -62,6 +62,7 @@ describe("l'IA propose la modification d'un token validé (ADR 0012 §3)", () =>
             name: "couleur.fond.primaire",
             kind: "update",
             status: "proposed",
+            duplicates: [],
           },
         ],
         unchanged: [],
