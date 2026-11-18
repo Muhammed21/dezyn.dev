@@ -1,0 +1,19 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/packages/claude-hooks/scripts/path-reminders.ts",
+              "${CLAUDE_PROJECT_DIR}"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
