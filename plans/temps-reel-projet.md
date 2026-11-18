@@ -52,20 +52,15 @@ Avant le code : `tdd`, `testing`, `mutation-testing`, `refactoring`, `react-test
 
 **Valeur** : « je vois l'IA travailler » (synthèse, L15) : la page d'historique montre chaque appel de l'IA et chaque action d'un membre sans recharger.
 
-### Tranche 5.1 : les appels de l'IA apparaissent dans l'historique
-
-**Chemin** : `recordProjectCall` écrit l'entrée `mcp.<outil>`, puis appelle `ProjectSignals.changed` avec `history` → le Durable Object diffuse → la page d'historique relit `["history", projectId]`.
-**Critères** :
-
-- Après chaque appel MCP sur un projet, une fois l'entrée écrite, `history` est signalé pour ce projet, que l'outil réussisse ou échoue. Si l'historique ne s'écrit pas (`history_unavailable`), aucun signal ne part.
-- La page d'historique s'abonne au projet de l'adresse. Un signal `history` la relit ; un signal d'un autre sujet ne relit rien.
-- Après une coupure, la réouverture de la WebSocket relit l'historique, sans signal.
-- Quitter la page ferme l'abonnement.
-- Un signal qui échoue est journalisé, et la réponse de l'outil reste la même.
-
 ### Tranche 5.2 : les actions des membres apparaissent dans l'historique
 
-**Critères** : l'ajout, l'import, la validation et le rejet signalent `history` après le commit, avec `proposals` quand ils le signalent déjà.
+**Chemin** : `addToken`, `importTokens`, `reviewProposal` et `validateBatch` ajoutent `history` aux sujets du signal qu'ils envoient après le commit → la page d'historique, abonnée depuis la tranche 5.1, relit.
+**Critères** :
+
+- Ajouter un token signale `history`. S'il remplace une proposition, un seul signal porte `proposals` et `history`.
+- Un import qui écrit dans l'historique signale `history` une fois ; s'il remplace des propositions, le même signal porte aussi `proposals`. Un import vide ne signale rien.
+- Valider ou rejeter une proposition, et valider un lot, envoient un seul signal, `proposals` et `history`.
+- Une requête refusée ne signale rien.
 
 **Reporte** : la création d'un projet, dont personne ne regarde encore l'historique ; la pagination en direct.
 

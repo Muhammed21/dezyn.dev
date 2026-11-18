@@ -61,6 +61,8 @@ const validateBatch = (
 
 const PROPOSALS = ["proposals"];
 
+const PROPOSALS_AND_HISTORY = ["proposals", "history"];
+
 describe("les décisions d'un membre signalent les propositions de leur projet (ADR 0046)", () => {
   it.each([
     ["valider", "validate"],
@@ -87,7 +89,9 @@ describe("les décisions d'un membre signalent les propositions de leur projet (
           });
 
           expect(response.status).toBe(200);
-          expect(recorder.since(mark)).toEqual([{ projectId, topics: PROPOSALS, pending: 1 }]);
+          expect(recorder.since(mark)).toEqual([
+            { projectId, topics: PROPOSALS_AND_HISTORY, pending: 1 },
+          ]);
         },
         { signals: recorder.signals },
       );
@@ -160,7 +164,9 @@ describe("les décisions d'un membre signalent les propositions de leur projet (
         const response = await validateBatch(app, { accessToken, batchId: batch.id });
 
         expect(response.status).toBe(200);
-        expect(recorder.since(mark)).toEqual([{ projectId, topics: PROPOSALS, pending: 0 }]);
+        expect(recorder.since(mark)).toEqual([
+          { projectId, topics: PROPOSALS_AND_HISTORY, pending: 0 },
+        ]);
       },
       { signals: recorder.signals },
     );

@@ -174,7 +174,7 @@ const signallingProposals =
   ({ signals, projectId }: { readonly signals: ProjectSignals; readonly projectId: string }) =>
   async <T, E>(outcome: Result<T, E>): Promise<Result<T, E>> => {
     if (outcome.ok) {
-      await signals.changed({ projectId, topics: ["proposals"] });
+      await signals.changed({ projectId, topics: ["proposals", "history"] });
     }
     return outcome;
   };

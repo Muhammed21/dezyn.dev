@@ -158,7 +158,12 @@ export const importTokens =
         tokens,
         history,
         proposals,
-      }): Promise<Result<Imported & { readonly replacedAny: boolean }, ImportFailure>> => {
+      }): Promise<
+        Result<
+          Imported & { readonly replacedAny: boolean; readonly recorded: boolean },
+          ImportFailure
+        >
+      > => {
         const {
           modifier: projectModifier,
           modes: projectModes,
@@ -325,6 +330,7 @@ export const importTokens =
               imported: written.value.count,
               modes: targetModes.map(({ name }) => name),
               replacedAny: written.value.replacedAny,
+              recorded: createdModes !== undefined || written.value.count > 0,
             })
           : written;
       },
@@ -332,9 +338,12 @@ export const importTokens =
     if (!outcome.ok) {
       return outcome;
     }
-    const { replacedAny, ...imported } = outcome.value;
-    if (replacedAny) {
-      await signals.changed({ projectId, topics: ["proposals"] });
+    const { replacedAny, recorded, ...imported } = outcome.value;
+    if (recorded) {
+      await signals.changed({
+        projectId,
+        topics: replacedAny ? ["proposals", "history"] : ["history"],
+      });
     }
     return ok(imported);
   };
