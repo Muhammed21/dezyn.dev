@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Membership } from "../../domain/can.ts";
 import { listMembers, type SpaceMember } from "../list-members.ts";
-import { inMemoryMembershipReader } from "../membership-reader.ts";
+import { inMemoryMembershipReader } from "../membership-reader.fake.ts";
 
 const SPACE_ID = "6d1f0c2e-3a4b-4c5d-8e6f-7a8b9c0d1e2f";
 const ADA = "4f2a9c1e-7b3d-4e8a-9f10-2c5d6e7f8a9b";

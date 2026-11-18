@@ -15,7 +15,7 @@ Chaque page de `docs/`, une ligne chacune : titre, [mode](README.md#carte), stat
 - [Fiabilité](RELIABILITY.md) — _reference_ — En production, l'API tourne dans le Worker Cloudflare `dezyn-api`, sur `api.dezyn.dev` (ADR 0034).
 - [Muhammed : synthèse du projet](synthese.md) — _reference_ — Muhammed construit un outil qui récupère fidèlement un design Figma pour le passer en code.
 - [Dette technique](TECH-DEBT.md) — _reference_
-- [Tests](TESTING.md) — _reference_
+- [Tests](TESTING.md) — _reference_ — Un port de `application` qui a un faux a une suite de contrat, lancée contre le faux et contre son adaptateur PostgreSQL avec les mêmes cas.
 
 ## ADR — décisions durables
 

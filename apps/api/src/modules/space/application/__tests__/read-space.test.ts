@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { allowedActionsOf, type Membership } from "../../domain/can.ts";
-import { inMemoryMembershipReader } from "../membership-reader.ts";
+import { inMemoryMembershipReader } from "../membership-reader.fake.ts";
 import { readSpace } from "../read-space.ts";
 
 const SPACE = {
