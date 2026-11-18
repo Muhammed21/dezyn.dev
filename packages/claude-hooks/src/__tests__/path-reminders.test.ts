@@ -89,6 +89,9 @@ describe("rappel selon le chemin du fichier écrit", () => {
     ["un ADR", "docs/adr/0020-modules-et-couches.md"],
     ["une consigne sous .claude/", ".claude/rules/documentation.md"],
     ["un fichier hors du projet", "../ailleurs/apps/api/src/modules/token/contracts/index.ts"],
+    ["un Markdown hors du projet", "../ailleurs/README.md"],
+    ["une consigne .claude/ hors du projet", "../../.claude/plans/x.md"],
+    ["un test hors du projet", "../x/__tests__/a.test.ts"],
   ])("ne sort rien pour %s", (_cas, relativePath) => {
     expect(reminderAfterWriting(relativePath)).toBe("");
   });
@@ -124,6 +127,7 @@ describe("rappel selon le chemin du fichier écrit", () => {
   });
 
   it.each([
+    "vendor/apps/api/src/modules/token/contracts/index.ts",
     "vendor/apps/web/src/platform/http-client.ts",
     "vendor/apps/web/src/modules/token/application/read-tokens.ts",
     "vendor/packages/db/src/schema/token.ts",

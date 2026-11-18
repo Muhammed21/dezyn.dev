@@ -1,4 +1,4 @@
-import { relative, resolve } from "node:path";
+import { isAbsolute, relative, resolve } from "node:path";
 
 import { z } from "zod";
 
@@ -54,6 +54,9 @@ export const pathReminders = ({
     WORKTREE_PREFIX,
     "",
   );
+  if (path.startsWith("../") || isAbsolute(path)) {
+    return "";
+  }
   const reminders = RULES.filter(({ pattern }) => pattern.test(path)).map(
     ({ reminder }) => reminder,
   );
