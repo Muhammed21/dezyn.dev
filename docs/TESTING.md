@@ -8,6 +8,18 @@
 - Bench (`pnpm bench`) : `apps/api/bench/*.bench.ts`, sur une vraie PostgreSQL ; voir [PERFORMANCE.md](PERFORMANCE.md).
 - Vert = les deux suites en CI (`ci.yml`).
 
+## Tests de contrat des ports
+
+Un port de `application` qui a un faux a une suite de contrat, lancée contre le faux et contre son adaptateur PostgreSQL avec les mêmes cas. Un test unitaire qui passe avec le faux passe donc pour une raison qui existe en production.
+
+- Le faux vit à côté du port, dans `application/<port>.fake.ts`, et s'appelle `inMemory<Port>`. Les tests unitaires l'importent au lieu d'écrire le leur.
+- La suite vit dans `application/__tests__/<port>.contract.ts` et exporte `describe<Port>Contract(make)`. `make` reçoit les lignes à placer et rend une promesse du port ; chaque cas construit lui-même ses lignes (`make<Chose>`).
+- `application/__tests__/<port>.fake.test.ts` lance la suite contre le faux, en unitaire.
+- `infrastructure/__tests__/postgres-<port>.integration.test.ts` la lance contre l'adaptateur : son `make` ouvre une base jetable migrée, la ferme par `onTestFinished`, écrit les lignes (`seed<Chose>`) et rend l'adaptateur.
+- Un cas qui ne passe que contre l'un des deux est un écart du faux : on corrige le faux, jamais le cas. `stryker run --mutate src/modules/<module>/application/<port>.fake.ts` vérifie que la suite tue les mutants du faux.
+
+Exemple : `MembershipReader` (`apps/api/src/modules/space/application/membership-reader.fake.ts`).
+
 ## Safety Net Map
 
 | Flux                       | Comportements fixés                                                                                                                                                                                                                                                                                                        | Fichiers de test                                                                                                                                                   | Trous                                                                                                                                                                                                                                       |
