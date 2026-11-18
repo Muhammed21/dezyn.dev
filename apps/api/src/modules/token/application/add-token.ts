@@ -155,8 +155,9 @@ export const addToken =
     if (result.value.alert !== undefined) {
       await sendStorageAlert(result.value.alert);
     }
-    if (result.value.token.replaced !== null) {
-      await signals.changed({ projectId, topics: ["proposals"] });
-    }
+    await signals.changed({
+      projectId,
+      topics: result.value.token.replaced === null ? ["history"] : ["proposals", "history"],
+    });
     return ok(result.value.token);
   };
