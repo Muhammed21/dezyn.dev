@@ -11,6 +11,10 @@ import { err, ok } from "@repo/result";
 
 export const makeDatabase = (overrides: Partial<Database> = {}): Database => ({
   ping: () => Promise.resolve(),
+  timeQueries: async (run) => {
+    await run();
+    return { queries: 0, durationMs: 0 };
+  },
   ...overrides,
 });
 
