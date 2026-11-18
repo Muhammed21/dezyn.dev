@@ -9,7 +9,7 @@ import { createIdentity } from "./modules/identity/identity-module.ts";
 import { signInRoute } from "./modules/identity/presentation/sign-in-route.tsx";
 import { signUpRoute } from "./modules/identity/presentation/sign-up-route.tsx";
 import { spaceProjectsRoute } from "./modules/project/presentation/space-projects-route.tsx";
-import { createProjects } from "./modules/project/project-module.ts";
+import { createProjectEvents, createProjects } from "./modules/project/project-module.ts";
 import { projectProposals } from "./modules/proposal/presentation/project-proposals.tsx";
 import { proposalBatchRoute } from "./modules/proposal/presentation/proposal-batch-route.tsx";
 import { createProposals } from "./modules/proposal/proposal-module.ts";
@@ -27,6 +27,8 @@ import { configOf } from "./platform/config.ts";
 
 const fetchFromBrowser = (url: string, init: RequestInit) => window.fetch(url, init);
 
+const openBrowserSocket = (url: string) => new WebSocket(url);
+
 const appRouter = ({
   apiUrl,
   queryClient,
@@ -40,6 +42,7 @@ const appRouter = ({
   const tokens = createTokens({ apiUrl, fetch: fetchFromBrowser });
   const projectHistory = createHistory({ apiUrl, fetch: fetchFromBrowser });
   const proposals = createProposals({ apiUrl, fetch: fetchFromBrowser });
+  const projectEvents = createProjectEvents({ apiUrl, openSocket: openBrowserSocket });
 
   const root = createRootRoute();
   return createRouter({
@@ -68,7 +71,10 @@ const appRouter = ({
       projectTokensRoute({
         parent: root,
         readTokens: tokens.readTokens,
-        ProjectProposals: projectProposals({ listBatches: proposals.listBatches }),
+        ProjectProposals: projectProposals({
+          listBatches: proposals.listBatches,
+          subscribe: projectEvents.subscribe,
+        }),
       }),
       projectHistoryRoute({ parent: root, readHistory: projectHistory.readHistory }),
       proposalBatchRoute({
@@ -77,6 +83,7 @@ const appRouter = ({
         reviewProposal: proposals.reviewProposal,
         validateBatch: proposals.validateBatch,
         onReviewed: refreshProjectTokens(queryClient),
+        subscribe: projectEvents.subscribe,
       }),
     ]),
   });

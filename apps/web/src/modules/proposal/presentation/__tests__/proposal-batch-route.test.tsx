@@ -12,6 +12,7 @@ import { render } from "vitest-browser-react";
 
 import { err, ok, type Result } from "@repo/result";
 
+import { makeProjectEvents } from "../../../../testing/project-events.ts";
 import type {
   Batch,
   BatchSummary,
@@ -53,6 +54,7 @@ type Review = {
   readonly validateBatch?: ValidateBatch;
   readonly onReviewed?: (project: { readonly projectId: string }) => Promise<unknown>;
   readonly listBatches?: ListBatches;
+  readonly events?: ReturnType<typeof makeProjectEvents>;
 };
 
 const makeProposal = (overrides: Partial<Proposal> = {}): Proposal => ({
@@ -86,10 +88,13 @@ const renderBatch = async (
     validateBatch = () => new Promise(() => {}),
     onReviewed = () => Promise.resolve(),
     listBatches,
+    events = makeProjectEvents(),
   }: Review = {},
 ) => {
   const ProjectProposals =
-    listBatches === undefined ? undefined : projectProposals({ listBatches });
+    listBatches === undefined
+      ? undefined
+      : projectProposals({ listBatches, subscribe: events.subscribe });
   const root = createRootRoute({
     component: () => (
       <>
@@ -106,7 +111,14 @@ const renderBatch = async (
   const history = createMemoryHistory({ initialEntries: [`/lots/${BATCH_ID}`] });
   const router = createRouter({
     routeTree: root.addChildren([
-      proposalBatchRoute({ parent: root, readBatch, reviewProposal, validateBatch, onReviewed }),
+      proposalBatchRoute({
+        parent: root,
+        readBatch,
+        reviewProposal,
+        validateBatch,
+        onReviewed,
+        subscribe: events.subscribe,
+      }),
       signIn,
     ]),
     history,
@@ -731,5 +743,67 @@ describe("validation d'un lot fermé depuis sa page (ADR 0013 §4, ADR 0044 §6)
     await validateBatchButton(screen).click();
 
     await expect.element(screen.getByText("Page de connexion")).toBeVisible();
+  });
+});
+
+describe("page d'un lot en temps réel (ADR 0046)", () => {
+  it("un signal proposals de son projet fait apparaître les nouvelles propositions du lot, sans action du membre", async () => {
+    const events = makeProjectEvents();
+    const state = { batch: makeBatch() };
+    const { screen } = await renderBatch(() => Promise.resolve(ok(state.batch)), { events });
+    await expect.element(proposalItems(screen).nth(0)).toBeVisible();
+
+    state.batch = makeBatch({
+      proposals: [
+        makeProposal(),
+        makeProposal({ id: "3e8f3c1e-7b3d-4e8a-9f10-2c5d6e7f8a9b", name: "couleur.bleu.500" }),
+      ],
+    });
+    events.emit(PROJECT_ID, ["proposals"]);
+
+    await expect.element(proposalItems(screen).nth(1)).toHaveTextContent("couleur.bleu.500");
+  });
+
+  it("s'abonne au projet du lot, et quitter la page ferme l'abonnement", async () => {
+    const events = makeProjectEvents();
+    const { history, screen } = await renderBatch(reading(makeBatch()), { events });
+    await expect.element(proposalItems(screen).nth(0)).toBeVisible();
+    expect(events.subscribedProjects()).toEqual([PROJECT_ID]);
+
+    history.push("/connexion");
+
+    await expect.element(screen.getByText("Page de connexion")).toBeVisible();
+    expect(events.subscribedProjects()).toEqual([]);
+  });
+
+  it("ne s'abonne à rien tant que le lot n'est pas lu, ni quand sa lecture échoue", async () => {
+    const loading = makeProjectEvents();
+    const failed = makeProjectEvents();
+    const { screen } = await renderBatch(() => new Promise(() => {}), { events: loading });
+    await expect.element(screen.getByText("Chargement du lot…")).toBeVisible();
+    const refused = await renderBatch(() => Promise.resolve(err("not_found")), { events: failed });
+    await expect.element(refused.screen.getByRole("alert")).toBeVisible();
+
+    expect([loading.subscribedProjects(), failed.subscribedProjects()]).toEqual([[], []]);
+  });
+
+  it("un signal d'un autre sujet ne relit pas le lot", async () => {
+    const events = makeProjectEvents();
+    const reads: string[] = [];
+    const { screen } = await renderBatch(
+      ({ batchId }) => {
+        reads.push(batchId);
+        return reading(makeBatch())({ batchId });
+      },
+      { events },
+    );
+    await expect.element(proposalItems(screen).nth(0)).toBeVisible();
+
+    events.emit(PROJECT_ID, ["history"]);
+    await new Promise((resolve) => {
+      setTimeout(resolve, 100);
+    });
+
+    expect(reads).toEqual([BATCH_ID]);
   });
 });

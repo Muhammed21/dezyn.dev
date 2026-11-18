@@ -4,6 +4,7 @@ import { Link, Navigate } from "@tanstack/react-router";
 import type { Result } from "@repo/result";
 
 import type { BatchState, BatchSummary, ProposalFailure } from "../domain/proposal.ts";
+import { type SubscribeToProject, useProposalSignals } from "./proposal-signals.ts";
 
 type ListBatches = (project: {
   readonly projectId: string;
@@ -34,8 +35,19 @@ const BatchList = ({ batches }: { readonly batches: readonly BatchSummary[] }) =
     </ul>
   );
 
-export const projectProposals = ({ listBatches }: { readonly listBatches: ListBatches }) =>
+export const projectProposals = ({
+  listBatches,
+  subscribe,
+}: {
+  readonly listBatches: ListBatches;
+  readonly subscribe: SubscribeToProject;
+}) =>
   function ProjectProposals({ projectId }: { readonly projectId: string }) {
+    useProposalSignals({
+      subscribe,
+      projectId,
+      refresh: { scope: "proposal-batches", id: projectId },
+    });
     const { data } = useQuery({
       queryKey: ["proposal-batches", projectId],
       queryFn: () => listBatches({ projectId }),

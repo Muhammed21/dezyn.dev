@@ -17,6 +17,7 @@ import type {
   ReviewFailure,
   ValidatedBatch,
 } from "../domain/proposal.ts";
+import { type SubscribeToProject, useProposalSignals } from "./proposal-signals.ts";
 
 type ReadBatch = (batch: { readonly batchId: string }) => Promise<Result<Batch, ProposalFailure>>;
 
@@ -253,15 +254,22 @@ const ProposalBatch = ({
   batchId,
   readBatch,
   review,
+  subscribe,
 }: {
   readonly batchId: string;
   readonly readBatch: ReadBatch;
   readonly review: Review;
+  readonly subscribe: SubscribeToProject;
 }) => {
   const [rejected, setRejected] = useState<readonly string[]>([]);
   const { data } = useQuery({
     queryKey: ["proposal-batch", batchId],
     queryFn: () => readBatch({ batchId }),
+  });
+  useProposalSignals({
+    subscribe,
+    projectId: data?.ok === true ? data.value.projectId : undefined,
+    refresh: { scope: "proposal-batch", id: batchId },
   });
   if (data === undefined) {
     return <p>Chargement du lot…</p>;
@@ -314,12 +322,14 @@ export const proposalBatchRoute = ({
   reviewProposal,
   validateBatch,
   onReviewed,
+  subscribe,
 }: {
   readonly parent: AnyRootRoute;
   readonly readBatch: ReadBatch;
   readonly reviewProposal: ReviewProposal;
   readonly validateBatch: ValidateBatch;
   readonly onReviewed: OnReviewed;
+  readonly subscribe: SubscribeToProject;
 }) => {
   const route = createRoute({
     getParentRoute: () => parent,
@@ -331,6 +341,7 @@ export const proposalBatchRoute = ({
           batchId={batchId}
           readBatch={readBatch}
           review={{ reviewProposal, validateBatch, onReviewed }}
+          subscribe={subscribe}
         />
       );
     },
