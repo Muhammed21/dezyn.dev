@@ -20,7 +20,6 @@ permissions:
 jobs:
   gate:
     name: Migration gate
-    if: github.event.action != 'unlabeled' || github.event.label.name == 'review:needs-approval'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

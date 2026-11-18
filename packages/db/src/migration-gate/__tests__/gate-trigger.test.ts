@@ -7,19 +7,16 @@ const MIGRATIONS_CHANGED = () => true;
 const MIGRATIONS_KEPT = () => false;
 
 describe("gateTrigger", () => {
-  it.each(["opened", "reopened", "ready_for_review"])(
-    "traite « %s » comme une ouverture",
-    (action) => {
-      expect(
-        gateTrigger({
-          ...FIRST_ATTEMPT,
-          action,
-          label: undefined,
-          migrationsChanged: MIGRATIONS_CHANGED,
-        }),
-      ).toEqual({ kind: "opened" });
-    },
-  );
+  it("traite l'ouverture de la PR comme une première analyse", () => {
+    expect(
+      gateTrigger({
+        ...FIRST_ATTEMPT,
+        action: "opened",
+        label: undefined,
+        migrationsChanged: MIGRATIONS_CHANGED,
+      }),
+    ).toEqual({ kind: "opened" });
+  });
 
   it("reconnaît le retrait du label d'approbation", () => {
     expect(
@@ -43,7 +40,7 @@ describe("gateTrigger", () => {
     ).toEqual({ kind: "opened" });
   });
 
-  it("ne prend pas le retrait d'un autre label pour une approbation", () => {
+  it("recalcule l'état depuis le label quand un autre label est retiré", () => {
     expect(
       gateTrigger({
         ...FIRST_ATTEMPT,
@@ -51,8 +48,22 @@ describe("gateTrigger", () => {
         label: "review:stale",
         migrationsChanged: MIGRATIONS_CHANGED,
       }),
-    ).toEqual({ kind: "opened" });
+    ).toEqual({ kind: "rerun" });
   });
+
+  it.each(["reopened", "ready_for_review"])(
+    "recalcule l'état depuis le label sur « %s », sans perdre une approbation",
+    (action) => {
+      expect(
+        gateTrigger({
+          ...FIRST_ATTEMPT,
+          action,
+          label: undefined,
+          migrationsChanged: MIGRATIONS_CHANGED,
+        }),
+      ).toEqual({ kind: "rerun" });
+    },
+  );
 
   it.each([
     { migrationsChanged: MIGRATIONS_CHANGED, expected: true },

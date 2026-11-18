@@ -66,9 +66,13 @@ const hasTopLevelComma = (text: string): boolean =>
     { depth: 0, found: false },
   ).found;
 
+const withoutQuotedText = (text: string): string => text.replaceAll(/'[^']*'|"[^"]*"/g, "''");
+
 const isSafeColumnAddition = (statement: string): boolean => {
-  const definition = ADD_COLUMN.exec(statement)?.groups?.definition;
-  if (definition === undefined || hasTopLevelComma(definition)) return false;
+  const quoted = ADD_COLUMN.exec(statement)?.groups?.definition;
+  if (quoted === undefined) return false;
+  const definition = withoutQuotedText(quoted);
+  if (hasTopLevelComma(definition)) return false;
   return !/\bNOT NULL\b/i.test(definition) || /\bDEFAULT\b/i.test(definition);
 };
 

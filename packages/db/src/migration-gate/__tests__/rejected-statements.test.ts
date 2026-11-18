@@ -85,6 +85,21 @@ describe("rejectedStatements", () => {
     expect(rejectedStatements(`${statement};`)).toEqual([statement]);
   });
 
+  it.each([`'('`, `'(à compléter'`])(
+    "ne laisse pas une parenthèse dans la chaîne %s masquer une seconde action",
+    (text) => {
+      const statement = `ALTER TABLE "users" ADD COLUMN "note" text DEFAULT ${text}, DROP COLUMN "email"`;
+
+      expect(rejectedStatements(`${statement};`)).toEqual([statement]);
+    },
+  );
+
+  it("ne prend pas une colonne nommée « default » pour une valeur par défaut", () => {
+    const statement = `ALTER TABLE "users" ADD COLUMN "default" text NOT NULL`;
+
+    expect(rejectedStatements(`${statement};`)).toEqual([statement]);
+  });
+
   it("ne coupe pas une instruction sur un point-virgule dans un identifiant entre guillemets", () => {
     expect(rejectedStatements(`ALTER TABLE "token" ADD COLUMN "odd;name" text;`)).toEqual([]);
   });
