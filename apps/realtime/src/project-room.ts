@@ -2,6 +2,10 @@ import { DurableObject } from "cloudflare:workers";
 
 const SIGNAL_INTERVAL_MS = 1000;
 
+type Deadline = { readonly at: number; readonly topics: readonly string[] };
+
+type Deadlines = Readonly<Record<string, Deadline>>;
+
 const merged = (pending: readonly string[], topics: readonly string[]): readonly string[] => [
   ...new Set([...pending, ...topics]),
 ];
@@ -22,23 +26,68 @@ export class ProjectRoom extends DurableObject {
   }
 
   async changed(topics: readonly string[]): Promise<void> {
-    const now = Date.now();
-    const lastSentAt = (await this.ctx.storage.get<number>("lastSentAt")) ?? 0;
-    const pending = (await this.ctx.storage.get<readonly string[]>("pending")) ?? [];
-    if (now - lastSentAt >= SIGNAL_INTERVAL_MS) {
-      await this.ctx.storage.delete("pending");
-      await this.ctx.storage.deleteAlarm();
-      await this.send(merged(pending, topics), now);
-      return;
-    }
-    await this.ctx.storage.put("pending", merged(pending, topics));
-    await this.ctx.storage.setAlarm(lastSentAt + SIGNAL_INTERVAL_MS);
+    await this.accept(topics, Date.now());
+  }
+
+  async signalAt({
+    key,
+    topics,
+    at,
+  }: {
+    readonly key: string;
+    readonly topics: readonly string[];
+    readonly at: number;
+  }): Promise<void> {
+    const deadlines = await this.deadlines();
+    await this.ctx.storage.put("deadlines", { ...deadlines, [key]: { at, topics } });
+    await this.reschedule();
   }
 
   async alarm(): Promise<void> {
+    const now = Date.now();
+    const entries = Object.entries(await this.deadlines());
+    const due = entries.filter(([, { at }]) => at <= now);
+    await this.ctx.storage.put(
+      "deadlines",
+      Object.fromEntries(entries.filter(([, { at }]) => at > now)),
+    );
+    await this.accept(
+      due.reduce<readonly string[]>((topics, [, deadline]) => merged(topics, deadline.topics), []),
+      now,
+    );
+  }
+
+  private async accept(topics: readonly string[], now: number): Promise<void> {
+    const lastSentAt = (await this.ctx.storage.get<number>("lastSentAt")) ?? 0;
+    const pending = merged(
+      (await this.ctx.storage.get<readonly string[]>("pending")) ?? [],
+      topics,
+    );
+    if (pending.length > 0 && now - lastSentAt >= SIGNAL_INTERVAL_MS) {
+      await this.ctx.storage.delete("pending");
+      await this.send(pending, now);
+    } else if (pending.length > 0) {
+      await this.ctx.storage.put("pending", pending);
+    }
+    await this.reschedule();
+  }
+
+  private async reschedule(): Promise<void> {
     const pending = (await this.ctx.storage.get<readonly string[]>("pending")) ?? [];
-    await this.ctx.storage.delete("pending");
-    await this.send(pending, Date.now());
+    const lastSentAt = (await this.ctx.storage.get<number>("lastSentAt")) ?? 0;
+    const moments = [
+      ...(pending.length > 0 ? [lastSentAt + SIGNAL_INTERVAL_MS] : []),
+      ...Object.values(await this.deadlines()).map(({ at }) => at),
+    ];
+    if (moments.length === 0) {
+      await this.ctx.storage.deleteAlarm();
+      return;
+    }
+    await this.ctx.storage.setAlarm(Math.min(...moments));
+  }
+
+  private async deadlines(): Promise<Deadlines> {
+    return (await this.ctx.storage.get<Deadlines>("deadlines")) ?? {};
   }
 
   private async send(topics: readonly string[], at: number): Promise<void> {

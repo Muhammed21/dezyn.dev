@@ -85,6 +85,8 @@ const pause = (ms: number) =>
     setTimeout(resolve, ms);
   });
 
+const ALARM_WAIT_MS = 2000;
+
 describe("le Durable Object d'un projet envoie au plus un signal par seconde", () => {
   it("un second signal dans la même seconde attend l'alarme, avec les sujets fusionnés", async () => {
     const projectId = crypto.randomUUID();
@@ -98,11 +100,13 @@ describe("le Durable Object d'un projet envoie au plus un signal par seconde", (
 
     expect(await runDurableObjectAlarm(room)).toBe(true);
 
-    await vi.waitFor(() =>
-      expect(connection.received).toEqual([
-        PROPOSALS_CHANGED,
-        changedSignal(["history", "tokens", "proposals"]),
-      ]),
+    await vi.waitFor(
+      () =>
+        expect(connection.received).toEqual([
+          PROPOSALS_CHANGED,
+          changedSignal(["history", "tokens", "proposals"]),
+        ]),
+      { timeout: ALARM_WAIT_MS },
     );
   });
 
@@ -117,8 +121,9 @@ describe("le Durable Object d'un projet envoie au plus un signal par seconde", (
     );
     await runDurableObjectAlarm(room);
 
-    await vi.waitFor(() =>
-      expect(connection.received).toEqual([PROPOSALS_CHANGED, PROPOSALS_CHANGED]),
+    await vi.waitFor(
+      () => expect(connection.received).toEqual([PROPOSALS_CHANGED, PROPOSALS_CHANGED]),
+      { timeout: ALARM_WAIT_MS },
     );
     expect(await runDurableObjectAlarm(room)).toBe(false);
   });
@@ -175,21 +180,25 @@ describe("le Durable Object d'un projet envoie au plus un signal par seconde", (
 
     await room.changed(["tokens"]);
 
-    await vi.waitFor(() =>
-      expect(connection.received).toEqual([
-        PROPOSALS_CHANGED,
-        changedSignal(["history", "tokens"]),
-      ]),
+    await vi.waitFor(
+      () =>
+        expect(connection.received).toEqual([
+          PROPOSALS_CHANGED,
+          changedSignal(["history", "tokens"]),
+        ]),
+      { timeout: ALARM_WAIT_MS },
     );
     expect(await runDurableObjectAlarm(room)).toBe(false);
     await room.changed(["proposals"]);
     await runDurableObjectAlarm(room);
-    await vi.waitFor(() =>
-      expect(connection.received).toEqual([
-        PROPOSALS_CHANGED,
-        changedSignal(["history", "tokens"]),
-        PROPOSALS_CHANGED,
-      ]),
+    await vi.waitFor(
+      () =>
+        expect(connection.received).toEqual([
+          PROPOSALS_CHANGED,
+          changedSignal(["history", "tokens"]),
+          PROPOSALS_CHANGED,
+        ]),
+      { timeout: ALARM_WAIT_MS },
     );
   });
 
@@ -212,8 +221,9 @@ describe("le Durable Object d'un projet envoie au plus un signal par seconde", (
     await evictDurableObject(room);
     await runDurableObjectAlarm(room);
 
-    await vi.waitFor(() =>
-      expect(connection.received).toEqual([PROPOSALS_CHANGED, changedSignal(["history"])]),
+    await vi.waitFor(
+      () => expect(connection.received).toEqual([PROPOSALS_CHANGED, changedSignal(["history"])]),
+      { timeout: ALARM_WAIT_MS },
     );
   });
 });
@@ -235,5 +245,137 @@ describe("le Durable Object d'un projet garde ses connexions vivantes", () => {
     connection.send("ping");
 
     await vi.waitFor(() => expect(connection.texts).toEqual(["pong"]));
+  });
+});
+
+const inMs = (ms: number) => Date.now() + ms;
+
+describe("le Durable Object d'un projet diffuse ses signaux programmés à leur échéance", () => {
+  it("à l'échéance d'une clé, ses sujets sont diffusés, pas avant", async () => {
+    const projectId = crypto.randomUUID();
+    const room = env.PROJECT_ROOMS.getByName(projectId);
+    const connection = await connect(projectId);
+
+    await room.signalAt({ key: "batch:a", topics: ["proposals"], at: inMs(300) });
+
+    expect(connection.received).toEqual([]);
+    await vi.waitFor(() => expect(connection.received).toEqual([PROPOSALS_CHANGED]), {
+      timeout: ALARM_WAIT_MS,
+    });
+  });
+
+  it("programmer la même clé remplace son échéance", async () => {
+    const projectId = crypto.randomUUID();
+    const room = env.PROJECT_ROOMS.getByName(projectId);
+    const connection = await connect(projectId);
+
+    await room.signalAt({ key: "batch:a", topics: ["proposals"], at: inMs(300) });
+    await room.signalAt({ key: "batch:a", topics: ["proposals"], at: inMs(60_000) });
+    await pause(800);
+
+    expect(connection.received).toEqual([]);
+  });
+
+  it("deux clés gardent chacune leur échéance", async () => {
+    const projectId = crypto.randomUUID();
+    const room = env.PROJECT_ROOMS.getByName(projectId);
+    const connection = await connect(projectId);
+
+    await room.signalAt({ key: "batch:a", topics: ["proposals"], at: inMs(200) });
+    await room.signalAt({ key: "batch:b", topics: ["history"], at: inMs(1500) });
+
+    await vi.waitFor(() => expect(connection.received).toEqual([PROPOSALS_CHANGED]), {
+      timeout: 1000,
+    });
+    await vi.waitFor(
+      () => expect(connection.received).toEqual([PROPOSALS_CHANGED, changedSignal(["history"])]),
+      { timeout: 3000 },
+    );
+  });
+
+  it("des échéances simultanées donnent un seul message, sujets fusionnés", async () => {
+    const projectId = crypto.randomUUID();
+    const room = env.PROJECT_ROOMS.getByName(projectId);
+    const connection = await connect(projectId);
+    const at = inMs(300);
+
+    await room.signalAt({ key: "batch:a", topics: ["proposals"], at });
+    await room.signalAt({ key: "batch:b", topics: ["history"], at });
+
+    await vi.waitFor(
+      () => expect(connection.received).toEqual([changedSignal(["proposals", "history"])]),
+      { timeout: ALARM_WAIT_MS },
+    );
+    await pause(300);
+    expect(connection.received).toHaveLength(1);
+  });
+
+  it("une échéance moins d'une seconde après un envoi attend la fin de la seconde", async () => {
+    const projectId = crypto.randomUUID();
+    const room = env.PROJECT_ROOMS.getByName(projectId);
+    const connection = await connect(projectId);
+
+    await room.changed(["tokens"]);
+    await room.signalAt({ key: "batch:a", topics: ["proposals"], at: inMs(200) });
+    await pause(600);
+
+    expect(connection.received).toEqual([changedSignal(["tokens"])]);
+    await vi.waitFor(
+      () => expect(connection.received).toEqual([changedSignal(["tokens"]), PROPOSALS_CHANGED]),
+      { timeout: ALARM_WAIT_MS },
+    );
+  });
+
+  it("un envoi immédiat garde les échéances à venir", async () => {
+    const projectId = crypto.randomUUID();
+    const room = env.PROJECT_ROOMS.getByName(projectId);
+    const connection = await connect(projectId);
+
+    await room.signalAt({ key: "batch:a", topics: ["proposals"], at: inMs(1500) });
+    await room.changed(["tokens"]);
+
+    await vi.waitFor(
+      () => expect(connection.received).toEqual([changedSignal(["tokens"]), PROPOSALS_CHANGED]),
+      { timeout: 3000 },
+    );
+  });
+
+  it("une échéance survit à la mise en veille du Durable Object", async () => {
+    const projectId = crypto.randomUUID();
+    const room = env.PROJECT_ROOMS.getByName(projectId);
+    const connection = await connect(projectId);
+
+    await room.signalAt({ key: "batch:a", topics: ["proposals"], at: inMs(500) });
+    await evictDurableObject(room);
+
+    await vi.waitFor(() => expect(connection.received).toEqual([PROPOSALS_CHANGED]), {
+      timeout: ALARM_WAIT_MS,
+    });
+  });
+
+  it("une alarme partie avant toute échéance n'envoie rien et reste programmée", async () => {
+    const projectId = crypto.randomUUID();
+    const room = env.PROJECT_ROOMS.getByName(projectId);
+    const connection = await connect(projectId);
+    await room.signalAt({ key: "batch:a", topics: ["proposals"], at: inMs(60_000) });
+
+    await runDurableObjectAlarm(room);
+    await pause(200);
+
+    expect(connection.received).toEqual([]);
+    expect(await runDurableObjectAlarm(room)).toBe(true);
+  });
+
+  it("sans échéance ni attente, plus aucune alarme n'est programmée", async () => {
+    const projectId = crypto.randomUUID();
+    const room = env.PROJECT_ROOMS.getByName(projectId);
+    const connection = await connect(projectId);
+
+    await room.signalAt({ key: "batch:a", topics: ["proposals"], at: inMs(200) });
+    await vi.waitFor(() => expect(connection.received).toEqual([PROPOSALS_CHANGED]), {
+      timeout: ALARM_WAIT_MS,
+    });
+
+    expect(await runDurableObjectAlarm(room)).toBe(false);
   });
 });
