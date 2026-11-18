@@ -8,16 +8,24 @@ Décisions, spikes et où écrire : [`docs/README.md`](docs/README.md). Chaque p
 
 ## Dépôt
 
-Monorepo pnpm et Turborepo, en TypeScript 7.
+Monorepo pnpm et Turborepo, en TypeScript 7. `apps/` contient ce qui se déploie, `packages/` ce qui s'importe.
 
-| Chemin                       | Contenu                                                        |
-| ---------------------------- | -------------------------------------------------------------- |
-| `apps/`                      | Les applications, qui arrivent avec leur premier use-case      |
-| `packages/docs-catalog`      | Générateur de `docs/CATALOG.md`                                |
-| `packages/typescript-config` | Configuration TypeScript partagée                              |
-| `packages/ui`                | Composants React partagés                                      |
-| `docker/`, `compose.yaml`    | Environnement local : PostgreSQL, stockage S3, Mailpit         |
-| `.github/`                   | CI, revue Claude par palier (`REVIEW.md`), release, benchmarks |
+| Chemin                       | Contenu                                                                                            |
+| ---------------------------- | -------------------------------------------------------------------------------------------------- |
+| `apps/api`                   | API REST et serveur MCP, Worker `dezyn-api` (ADR 0007, ADR 0034)                                   |
+| `apps/web`                   | App web React                                                                                      |
+| `apps/realtime`              | Durable Object `ProjectRoom` des WebSockets d'un projet, Worker `dezyn-realtime` (ADR 0046)        |
+| `apps/preview-router`        | Worker qui route `pr-N-preview.dezyn.dev` et `pr-N-api-preview.dezyn.dev` vers la preview d'une PR |
+| `packages/contracts`         | Contrats de l'API, partagés avec l'app web                                                         |
+| `packages/db`                | Schéma Drizzle, migrations et rôles PostgreSQL                                                     |
+| `packages/auth-verifier`     | Vérification des jetons d'accès OAuth                                                              |
+| `packages/result`            | Type `Result`                                                                                      |
+| `packages/ui`                | Composants React partagés                                                                          |
+| `packages/lint`              | Règles oxlint du dépôt                                                                             |
+| `packages/typescript-config` | Configuration TypeScript partagée                                                                  |
+| `packages/docs-catalog`      | Générateur de `docs/CATALOG.md`                                                                    |
+| `docker/`, `compose.yaml`    | Environnement local : PostgreSQL, stockage S3, Mailpit                                             |
+| `.github/`                   | CI, revue Claude par palier (`REVIEW.md`), release, benchmarks                                     |
 
 ## Commandes
 
