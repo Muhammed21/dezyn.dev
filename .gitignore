@@ -44,3 +44,6 @@ bench-results.json
 # Wrangler
 .wrangler
 .dev.vars
+
+# Worktrees des agents Claude Code
+.claude/worktrees/
