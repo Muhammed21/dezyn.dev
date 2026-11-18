@@ -2,13 +2,14 @@
 
 ## Baselines & Budgets
 
-| Mesure                                      | Départ (local, 2026-10-20 sauf mention)                    | Budget            | Gate                       |
-| ------------------------------------------- | ---------------------------------------------------------- | ----------------- | -------------------------- |
-| Import Figma de bout en bout, 130 tokens    | ≈ 275 s (≈ 2,1 s par token)                                | — (hors de dezyn) | aucune                     |
-| Temps de dezyn dans cet import              | ≈ 0,5 s, 11 appels `/v1/mcp`                               | —                 | aucune                     |
-| Appel `/v1/mcp` le plus lent                | 100 ms                                                     | < 200 ms en local | les deux benchs ci-dessous |
-| `read_tokens`, projet de 130 tokens (bench) | médiane 5 ms, p99 7 ms (2026-10-21) ; CI : 17 ms, 24 ms    | < 200 ms en local | `perf-pr.yml`, informative |
-| `write_tokens`, 130 propositions (bench)    | médiane 39 ms, p99 45 ms (2026-10-21) ; CI : 99 ms, 145 ms | < 200 ms en local | `perf-pr.yml`, informative |
+| Mesure                                                    | Départ (local, 2026-10-20 sauf mention)                    | Budget            | Gate                       |
+| --------------------------------------------------------- | ---------------------------------------------------------- | ----------------- | -------------------------- |
+| Import Figma de bout en bout, 130 tokens                  | ≈ 275 s (≈ 2,1 s par token)                                | — (hors de dezyn) | aucune                     |
+| Temps de dezyn dans cet import                            | ≈ 0,5 s, 11 appels `/v1/mcp`                               | —                 | aucune                     |
+| Appel `/v1/mcp` le plus lent                              | 100 ms                                                     | < 200 ms en local | les deux benchs ci-dessous |
+| `read_tokens`, projet de 130 tokens (bench)               | médiane 5 ms, p99 7 ms (2026-10-21) ; CI : 17 ms, 24 ms    | < 200 ms en local | `perf-pr.yml`, informative |
+| `write_tokens`, 130 propositions (bench)                  | médiane 39 ms, p99 45 ms (2026-10-21) ; CI : 99 ms, 145 ms | < 200 ms en local | `perf-pr.yml`, informative |
+| Écrire, fermer et valider un lot de 130 créations (bench) | moyenne 257 ms, p99 377 ms (2026-11-18)                    | —                 | `perf-pr.yml`, informative |
 
 Outil de mesure : les logs `request` de l'API (`durationMs`, `src/platform/request-context.ts`), capturés pendant un import réel. Les durées sont celles du serveur ; les attentes entre deux appels viennent de l'horodatage des lignes.
 
@@ -26,5 +27,6 @@ La charge réelle se mesure à la mise en production.
 
 ## Optimization Ledger
 
-| Changement | Avant | Après | Verdict (garder/annuler) | Date |
-| ---------- | ----- | ----- | ------------------------ | ---- |
+| Changement                                                                    | Avant                                                                 | Après                                                                  | Verdict (garder/annuler) | Date       |
+| ----------------------------------------------------------------------------- | --------------------------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------ | ---------- |
+| Les créations d'un lot validé s'écrivent en un nombre fixe de requêtes (#258) | 354 requêtes pour 67 créations ; bench du lot de 130 : moyenne 606 ms | 29 requêtes, quelle que soit la taille du lot ; bench : moyenne 257 ms | garder                   | 2026-11-18 |
