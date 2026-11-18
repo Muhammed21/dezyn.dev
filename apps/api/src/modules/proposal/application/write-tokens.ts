@@ -4,7 +4,7 @@ import type {
   StorageAlertDecision,
   StorageAlertSender,
 } from "#modules/space/contracts/storage-alert.ts";
-import { duplicatesOf } from "#modules/token/contracts/duplicates.ts";
+import { type ComparedToken, duplicatesOf } from "#modules/token/contracts/duplicates.ts";
 import {
   type ComparedDefinition,
   sameDefinition,
@@ -18,7 +18,7 @@ import {
 import { err, ok, type Result } from "@repo/result";
 
 import { batchExpirySignal } from "../domain/proposal-batch.ts";
-import type { Proposal, ProposalBatch } from "../domain/proposal.ts";
+import { comparedTokens, type Proposal, type ProposalBatch } from "../domain/proposal.ts";
 import { liveBatchOf } from "./proposal-batches.ts";
 
 export type Writer = {
@@ -200,7 +200,10 @@ export const writeTokens =
           createdAt,
           newId,
         });
-        const among = [...validated, ...(await store.pendingTokensOf(writer.projectId))];
+        const among = comparedTokens<ComparedToken>({
+          validated,
+          pending: await store.pendingTokensOf(writer.projectId),
+        });
         return ok({
           written: {
             ...written,

@@ -48,3 +48,14 @@ export const review = ({
   readonly decision: Decision;
 }): { readonly status: "validated" | "rejected" } | { readonly refusal: "already_reviewed" } =>
   status === "proposed" ? { status: REVIEWED[decision] } : { refusal: "already_reviewed" };
+
+export const comparedTokens = <T extends { readonly name: string }>({
+  validated,
+  pending,
+}: {
+  readonly validated: readonly T[];
+  readonly pending: readonly T[];
+}): readonly T[] => [
+  ...validated.filter(({ name }) => !pending.some((token) => token.name === name)),
+  ...pending,
+];

@@ -1,1 +1,1 @@
-export { duplicatesOf } from "../domain/duplicates.ts";
+export { type ComparedToken, duplicatesOf } from "../domain/duplicates.ts";

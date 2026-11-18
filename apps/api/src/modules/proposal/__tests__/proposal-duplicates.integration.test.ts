@@ -97,6 +97,22 @@ describe("write_tokens signale à l'IA les tokens qui portent déjà la valeur p
       expect(duplicatesOf(written, "espace.petit")).toEqual([]);
     }));
 
+  it("un token validé dont une proposition change la valeur n'est plus un doublon de l'ancienne", () =>
+    withIdentityApp(async (app, db) => {
+      const seeded = await seedProject(app, db);
+      await addToken(app, { ...seeded, token: makeColorToken({ name: "couleur.bleu" }) });
+
+      const written = await writeTokens(app, {
+        ...seeded,
+        tokens: [
+          makeColorToken({ name: "couleur.bleu", $value: NIGHT_BLUE }),
+          makeColorToken({ name: "couleur.fond" }),
+        ],
+      });
+
+      expect(duplicatesOf(written, "couleur.fond")).toEqual([]);
+    }));
+
   it("une proposition remplacée n'est plus un doublon", () =>
     withIdentityApp(async (app, db) => {
       const seeded = await seedProject(app, db);
@@ -215,6 +231,31 @@ describe("la relecture d'un lot montre à l'éditeur les doublons de chaque prop
       ).toEqual([
         { name: "couleur.bord", duplicates: ["couleur.bleu.nuit", "couleur.fond"] },
         { name: "couleur.fond", duplicates: ["couleur.bleu.nuit", "couleur.bord"] },
+      ]);
+    }));
+
+  it("un token validé dont une proposition change la valeur n'y est plus un doublon de l'ancienne", () =>
+    withIdentityApp(async (app, db) => {
+      const seeded = await seedProject(app, db);
+      await addToken(app, { ...seeded, token: makeColorToken({ name: "couleur.bleu" }) });
+      const written = await writeTokens(app, {
+        ...seeded,
+        tokens: [
+          makeColorToken({ name: "couleur.bleu", $value: NIGHT_BLUE }),
+          makeColorToken({ name: "couleur.fond" }),
+        ],
+      });
+
+      const batch = await readBatch(app, { ...seeded, batchId: written.batch.id });
+
+      expect(
+        batch.proposals.map(({ name, duplicates }: { name: string; duplicates: string[] }) => ({
+          name,
+          duplicates,
+        })),
+      ).toEqual([
+        { name: "couleur.bleu", duplicates: [] },
+        { name: "couleur.fond", duplicates: [] },
       ]);
     }));
 

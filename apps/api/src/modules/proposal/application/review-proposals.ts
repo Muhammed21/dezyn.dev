@@ -6,7 +6,7 @@ import type {
   StorageAlertSender,
   WithStorageAlert,
 } from "#modules/space/contracts/storage-alert.ts";
-import { duplicatesOf } from "#modules/token/contracts/duplicates.ts";
+import { type ComparedToken, duplicatesOf } from "#modules/token/contracts/duplicates.ts";
 import type { TokenDefinition } from "#modules/token/contracts/token-definition.ts";
 import type {
   ValidatedTokenFailure,
@@ -17,6 +17,7 @@ import { err, ok, type Result } from "@repo/result";
 import { planBatchValidation } from "../domain/batch-validation.ts";
 import { batchStateAt } from "../domain/proposal-batch.ts";
 import {
+  comparedTokens,
   type Decision,
   type Proposal,
   type ProposalBatch,
@@ -162,10 +163,10 @@ export const batchOf =
       return err("not_found");
     }
     const validated = await validatedTokensOf(batch.projectId);
-    const among = [
-      ...validated,
-      ...(await proposals.pendingProposalsOf(batch.projectId)).map(({ token }) => token),
-    ];
+    const among = comparedTokens<ComparedToken>({
+      validated,
+      pending: (await proposals.pendingProposalsOf(batch.projectId)).map(({ token }) => token),
+    });
     return ok({
       ...batch,
       state: batchStateAt({ batch: batch, now: now() }),
