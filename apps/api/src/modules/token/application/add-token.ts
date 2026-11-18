@@ -157,7 +157,10 @@ export const addToken =
     }
     await signals.changed({
       projectId,
-      topics: result.value.token.replaced === null ? ["history"] : ["proposals", "history"],
+      topics:
+        result.value.token.replaced === null
+          ? ["history", "tokens"]
+          : ["proposals", "history", "tokens"],
     });
     return ok(result.value.token);
   };

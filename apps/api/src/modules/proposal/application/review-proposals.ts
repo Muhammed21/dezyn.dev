@@ -170,11 +170,24 @@ export const batchOf =
     });
   };
 
-const signallingProposals =
-  ({ signals, projectId }: { readonly signals: ProjectSignals; readonly projectId: string }) =>
-  async <T, E>(outcome: Result<T, E>): Promise<Result<T, E>> => {
+const signallingReview =
+  <T>({
+    signals,
+    projectId,
+    validatedAny,
+  }: {
+    readonly signals: ProjectSignals;
+    readonly projectId: string;
+    readonly validatedAny: (reviewed: T) => boolean;
+  }) =>
+  async <E>(outcome: Result<T, E>): Promise<Result<T, E>> => {
     if (outcome.ok) {
-      await signals.changed({ projectId, topics: ["proposals", "history"] });
+      await signals.changed({
+        projectId,
+        topics: validatedAny(outcome.value)
+          ? ["proposals", "history", "tokens"]
+          : ["proposals", "history"],
+      });
     }
     return outcome;
   };
@@ -271,9 +284,11 @@ export const reviewProposal =
         });
       },
     );
-    return signallingProposals({ signals, projectId })(
-      await sendingStorageAlert(sendStorageAlert)(outcome),
-    );
+    return signallingReview<Proposal>({
+      signals,
+      projectId,
+      validatedAny: (reviewed) => reviewed.status === "validated",
+    })(await sendingStorageAlert(sendStorageAlert)(outcome));
   };
 
 export type InvalidProposal = {
@@ -410,9 +425,11 @@ export const validateBatch =
         });
       },
     );
-    return signallingProposals({ signals, projectId })(
-      await sendingStorageAlert(sendStorageAlert)(validatedBatch),
-    );
+    return signallingReview<ValidatedBatch>({
+      signals,
+      projectId,
+      validatedAny: (closed) => closed.validated.length > 0,
+    })(await sendingStorageAlert(sendStorageAlert)(validatedBatch));
   };
 
 export const pendingProposalsOf =

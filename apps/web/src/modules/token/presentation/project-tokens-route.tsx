@@ -1,9 +1,10 @@
-import { type QueryClient, useQuery } from "@tanstack/react-query";
+import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type AnyRootRoute, createRoute, Link, Navigate } from "@tanstack/react-router";
-import type { ComponentType } from "react";
+import { type ComponentType, useEffect } from "react";
 
 import type { Result } from "@repo/result";
 
+import { followTopic, type SubscribeToProject } from "../../../platform/project-signals.ts";
 import type { ProjectTokens, Token, TokensFailure } from "../domain/token.ts";
 
 type ReadTokens = (project: {
@@ -51,11 +52,26 @@ const ProjectTokensList = ({
   projectId,
   readTokens,
   ProjectProposals,
+  subscribe,
 }: {
   readonly projectId: string;
   readonly readTokens: ReadTokens;
   readonly ProjectProposals: ProjectProposals;
+  readonly subscribe: SubscribeToProject;
 }) => {
+  const queryClient = useQueryClient();
+  useEffect(
+    () =>
+      followTopic({
+        subscribe,
+        projectId,
+        topic: "tokens",
+        refetch: () => {
+          void refreshProjectTokens(queryClient)({ projectId });
+        },
+      }),
+    [subscribe, projectId, queryClient],
+  );
   const { data } = useQuery({
     queryKey: tokensKeyOf(projectId),
     queryFn: () => readTokens({ projectId }),
@@ -100,10 +116,12 @@ export const projectTokensRoute = ({
   parent,
   readTokens,
   ProjectProposals,
+  subscribe,
 }: {
   readonly parent: AnyRootRoute;
   readonly readTokens: ReadTokens;
   readonly ProjectProposals: ProjectProposals;
+  readonly subscribe: SubscribeToProject;
 }) => {
   const route = createRoute({
     getParentRoute: () => parent,
@@ -115,6 +133,7 @@ export const projectTokensRoute = ({
           projectId={projectId}
           readTokens={readTokens}
           ProjectProposals={ProjectProposals}
+          subscribe={subscribe}
         />
       );
     },

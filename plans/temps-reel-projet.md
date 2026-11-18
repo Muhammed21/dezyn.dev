@@ -46,23 +46,21 @@ La classe du Durable Object se teste dans workerd avec `@cloudflare/vitest-plugi
 - **Cookie sur la poignée de main WebSocket** : `app.dezyn.dev` et `api.dezyn.dev` sont le même site, le cookie `SameSite=Lax` part. Le contrôle de l'origine reste obligatoire contre le détournement de WebSocket entre sites.
 - **Un membre retiré** garde sa connexion jusqu'à la prochaine coupure. Il ne reçoit que des sujets sans données, et chaque relecture lui répond 404. Accepté pour la story 1.
 
-## Story 5 : l'historique avance en direct
+## Story 6 : les tokens validés apparaissent
 
 Avant le code : `tdd`, `testing`, `mutation-testing`, `refactoring`, `react-testing`.
 
-**Valeur** : « je vois l'IA travailler » (synthèse, L15) : la page d'historique montre chaque appel de l'IA et chaque action d'un membre sans recharger.
-
-### Tranche 5.2 : les actions des membres apparaissent dans l'historique
-
-**Chemin** : `addToken`, `importTokens`, `reviewProposal` et `validateBatch` ajoutent `history` aux sujets du signal qu'ils envoient après le commit → la page d'historique, abonnée depuis la tranche 5.1, relit.
+**Valeur** : la page des tokens montre sans recharger les tokens ajoutés, importés ou validés par un autre membre ou dans un autre onglet.
+**Chemin** : `addToken`, `importTokens`, `reviewProposal` (validation) et `validateBatch` ajoutent `tokens` aux sujets de leur signal → la page des tokens relit `["tokens", projectId]`.
 **Critères** :
 
-- Ajouter un token signale `history`. S'il remplace une proposition, un seul signal porte `proposals` et `history`.
-- Un import qui écrit dans l'historique signale `history` une fois ; s'il remplace des propositions, le même signal porte aussi `proposals`. Un import vide ne signale rien.
-- Valider ou rejeter une proposition, et valider un lot, envoient un seul signal, `proposals` et `history`.
-- Une requête refusée ne signale rien.
+- L'ajout d'un token signale `["history", "tokens"]`, ou `["proposals", "history", "tokens"]` s'il remplace une proposition.
+- Un import qui écrit dans l'historique ajoute `tokens` à son signal, modes seuls compris. Un import vide ne signale rien.
+- Valider une proposition signale `["proposals", "history", "tokens"]` ; la rejeter reste à `["proposals", "history"]`.
+- Valider un lot ajoute `tokens` quand au moins une proposition est validée ; un lot entièrement rejeté reste à `["proposals", "history"]`.
+- La page des tokens s'abonne au projet de l'adresse : un signal `tokens` la relit, un autre sujet ne relit pas les tokens, la réouverture après une coupure les relit, quitter la page désabonne.
 
-**Reporte** : la création d'un projet, dont personne ne regarde encore l'historique ; la pagination en direct.
+**Reporte** : une seule WebSocket par projet. La page des tokens en ouvre deux, la sienne et celle du bloc des propositions ; l'adapter pourrait partager la connexion entre les abonnements d'un même projet.
 
 ---
 

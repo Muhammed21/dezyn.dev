@@ -2,24 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import { type App, BASE_URL, callMcp, withIdentityApp } from "#testing/authorization-flow.ts";
 import { seedProject } from "#testing/project-fixtures.ts";
+import { makeAllSignalsRecorder } from "#testing/project-signals.ts";
 import { addToken, makeColorToken } from "#testing/token-fixtures.ts";
 
-type Signal = { readonly projectId: string; readonly topics: readonly string[] };
-
 const NIGHT_BLUE = { colorSpace: "srgb", components: [0.1, 0.2, 0.4] };
-
-const makeAllSignalsRecorder = () => {
-  const received: Signal[] = [];
-  return {
-    received,
-    signals: {
-      changed: async (signal: Signal) => {
-        received.push(signal);
-      },
-    },
-    since: (mark: number) => received.slice(mark),
-  };
-};
 
 const proposeTokens = async (
   app: App,
@@ -50,7 +36,7 @@ const post = (
 const color = (value: unknown) => ({ $type: "color", $value: value });
 
 describe("les actions d'un membre signalent l'historique de leur projet (ADR 0046)", () => {
-  it("ajouter un token signale history une fois", () => {
+  it("ajouter un token signale history et tokens une fois", () => {
     const recorder = makeAllSignalsRecorder();
     return withIdentityApp(
       async (app, db) => {
@@ -59,13 +45,15 @@ describe("les actions d'un membre signalent l'historique de leur projet (ADR 004
         const response = await addToken(app, seeded);
 
         expect(response.status).toBe(201);
-        expect(recorder.received).toEqual([{ projectId: seeded.projectId, topics: ["history"] }]);
+        expect(recorder.received).toEqual([
+          { projectId: seeded.projectId, topics: ["history", "tokens"] },
+        ]);
       },
       { signals: recorder.signals },
     );
   });
 
-  it("ajouter un token qui remplace une proposition envoie un seul signal, proposals et history", () => {
+  it("ajouter un token qui remplace une proposition envoie un seul signal, proposals, history et tokens", () => {
     const recorder = makeAllSignalsRecorder();
     return withIdentityApp(
       async (app, db) => {
@@ -76,7 +64,7 @@ describe("les actions d'un membre signalent l'historique de leur projet (ADR 004
         await addToken(app, seeded);
 
         expect(recorder.since(mark)).toEqual([
-          { projectId: seeded.projectId, topics: ["proposals", "history"] },
+          { projectId: seeded.projectId, topics: ["proposals", "history", "tokens"] },
         ]);
       },
       { signals: recorder.signals },
@@ -100,7 +88,7 @@ describe("les actions d'un membre signalent l'historique de leur projet (ADR 004
     );
   });
 
-  it("un import signale history une fois, quel que soit le nombre de tokens", () => {
+  it("un import signale history et tokens une fois, quel que soit le nombre de tokens", () => {
     const recorder = makeAllSignalsRecorder();
     return withIdentityApp(
       async (app, db) => {
@@ -113,13 +101,15 @@ describe("les actions d'un membre signalent l'historique de leur projet (ADR 004
         });
 
         expect(response.status).toBe(201);
-        expect(recorder.received).toEqual([{ projectId: seeded.projectId, topics: ["history"] }]);
+        expect(recorder.received).toEqual([
+          { projectId: seeded.projectId, topics: ["history", "tokens"] },
+        ]);
       },
       { signals: recorder.signals },
     );
   });
 
-  it("un import qui remplace une proposition envoie un seul signal, proposals et history", () => {
+  it("un import qui remplace une proposition envoie un seul signal, proposals, history et tokens", () => {
     const recorder = makeAllSignalsRecorder();
     return withIdentityApp(
       async (app, db) => {
@@ -134,14 +124,14 @@ describe("les actions d'un membre signalent l'historique de leur projet (ADR 004
         });
 
         expect(recorder.since(mark)).toEqual([
-          { projectId: seeded.projectId, topics: ["proposals", "history"] },
+          { projectId: seeded.projectId, topics: ["proposals", "history", "tokens"] },
         ]);
       },
       { signals: recorder.signals },
     );
   });
 
-  it("un import qui ne crée que des modes l'écrit dans l'historique, et signale history", () => {
+  it("un import qui ne crée que des modes l'écrit dans l'historique, et signale history et tokens", () => {
     const recorder = makeAllSignalsRecorder();
     return withIdentityApp(
       async (app, db) => {
@@ -160,7 +150,9 @@ describe("les actions d'un membre signalent l'historique de leur projet (ADR 004
         });
 
         expect(response.status).toBe(201);
-        expect(recorder.received).toEqual([{ projectId: seeded.projectId, topics: ["history"] }]);
+        expect(recorder.received).toEqual([
+          { projectId: seeded.projectId, topics: ["history", "tokens"] },
+        ]);
       },
       { signals: recorder.signals },
     );
@@ -204,32 +196,61 @@ describe("les actions d'un membre signalent l'historique de leur projet (ADR 004
     );
   });
 
-  it.each(["validate", "reject"])(
-    "%s une proposition envoie un seul signal, proposals et history",
-    (decision) => {
-      const recorder = makeAllSignalsRecorder();
-      return withIdentityApp(
-        async (app, db) => {
-          const seeded = await seedProject(app, db);
-          const { proposals } = await proposeTokens(app, { ...seeded, names: ["couleur.fond"] });
-          const mark = recorder.received.length;
+  it.each([
+    ["valider", "validate", ["proposals", "history", "tokens"]],
+    ["rejeter", "reject", ["proposals", "history"]],
+  ])("%s une proposition envoie un seul signal, %s → %j", (_case, decision, topics) => {
+    const recorder = makeAllSignalsRecorder();
+    return withIdentityApp(
+      async (app, db) => {
+        const seeded = await seedProject(app, db);
+        const { proposals } = await proposeTokens(app, { ...seeded, names: ["couleur.fond"] });
+        const mark = recorder.received.length;
 
-          const response = await post(app, {
-            accessToken: seeded.accessToken,
-            path: `/proposals/${proposals[0].id}/${decision}`,
-          });
+        const response = await post(app, {
+          accessToken: seeded.accessToken,
+          path: `/proposals/${proposals[0].id}/${decision}`,
+        });
 
-          expect(response.status).toBe(200);
-          expect(recorder.since(mark)).toEqual([
-            { projectId: seeded.projectId, topics: ["proposals", "history"] },
-          ]);
-        },
-        { signals: recorder.signals },
-      );
-    },
-  );
+        expect(response.status).toBe(200);
+        expect(recorder.since(mark)).toEqual([{ projectId: seeded.projectId, topics }]);
+      },
+      { signals: recorder.signals },
+    );
+  });
 
-  it("valider un lot envoie un seul signal, proposals et history", () => {
+  it("valider un lot entièrement rejeté ne signale pas tokens", () => {
+    const recorder = makeAllSignalsRecorder();
+    return withIdentityApp(
+      async (app, db) => {
+        const seeded = await seedProject(app, db);
+        const { batch, proposals } = await proposeTokens(app, {
+          ...seeded,
+          names: ["couleur.fond"],
+        });
+        await callMcp(app, {
+          token: seeded.accessToken,
+          method: "tools/call",
+          params: { name: "close_proposal_batch", arguments: { projectId: seeded.projectId } },
+        });
+        const mark = recorder.received.length;
+
+        const response = await post(app, {
+          accessToken: seeded.accessToken,
+          path: `/proposal-batches/${batch.id}/validate`,
+          body: { rejected: [proposals[0].id] },
+        });
+
+        expect(response.status).toBe(200);
+        expect(recorder.since(mark)).toEqual([
+          { projectId: seeded.projectId, topics: ["proposals", "history"] },
+        ]);
+      },
+      { signals: recorder.signals },
+    );
+  });
+
+  it("valider un lot envoie un seul signal, proposals, history et tokens", () => {
     const recorder = makeAllSignalsRecorder();
     return withIdentityApp(
       async (app, db) => {
@@ -250,7 +271,7 @@ describe("les actions d'un membre signalent l'historique de leur projet (ADR 004
 
         expect(response.status).toBe(200);
         expect(recorder.since(mark)).toEqual([
-          { projectId: seeded.projectId, topics: ["proposals", "history"] },
+          { projectId: seeded.projectId, topics: ["proposals", "history", "tokens"] },
         ]);
       },
       { signals: recorder.signals },

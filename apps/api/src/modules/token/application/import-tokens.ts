@@ -342,7 +342,7 @@ export const importTokens =
     if (recorded) {
       await signals.changed({
         projectId,
-        topics: replacedAny ? ["proposals", "history"] : ["history"],
+        topics: replacedAny ? ["proposals", "history", "tokens"] : ["history", "tokens"],
       });
     }
     return ok(imported);

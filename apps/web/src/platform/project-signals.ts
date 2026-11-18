@@ -12,7 +12,7 @@ export const followTopic = ({
 }: {
   readonly subscribe: SubscribeToProject;
   readonly projectId: string;
-  readonly topic: "proposals" | "history";
+  readonly topic: "proposals" | "history" | "tokens";
   readonly refetch: () => void;
 }) =>
   subscribe({
