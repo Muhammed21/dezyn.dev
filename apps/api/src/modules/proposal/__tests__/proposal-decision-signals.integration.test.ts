@@ -219,6 +219,7 @@ describe("les décisions d'un membre signalent les propositions de leur projet (
       {
         log: (record) => logged.push(record),
         signals: {
+          signalAt: async () => undefined,
           changed: async () => {
             if (state.failing) {
               throw new Error("Durable Object injoignable");

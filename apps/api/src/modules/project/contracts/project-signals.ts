@@ -1,1 +1,6 @@
-export type { ProjectSignal, ProjectSignals, ProjectTopic } from "../domain/project-signals.ts";
+export type {
+  ProjectSignal,
+  ProjectSignals,
+  ProjectTopic,
+  ScheduledProjectSignal,
+} from "../domain/project-signals.ts";

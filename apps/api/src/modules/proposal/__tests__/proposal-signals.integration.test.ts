@@ -40,6 +40,7 @@ const recordSignals = () => {
   return {
     state,
     signals: {
+      signalAt: async () => undefined,
       changed: async (signal: Signal) => {
         if (!signal.topics.includes("proposals")) {
           return;
@@ -188,6 +189,7 @@ describe("une écriture de l'IA signale les propositions de son projet (ADR 0046
       {
         log: (record) => logged.push(record),
         signals: {
+          signalAt: async () => undefined,
           changed: async () => {
             throw new Error("Durable Object injoignable");
           },

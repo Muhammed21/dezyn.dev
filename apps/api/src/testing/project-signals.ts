@@ -18,6 +18,7 @@ export const makeProposalSignalRecorder = () => {
   return {
     state,
     signals: {
+      signalAt: async () => undefined,
       changed: async (signal: Signal) => {
         if (!signal.topics.includes("proposals")) {
           return;
@@ -33,13 +34,20 @@ export const makeProposalSignalRecorder = () => {
   };
 };
 
+type ScheduledSignal = Signal & { readonly key: string; readonly at: Date };
+
 export const makeAllSignalsRecorder = () => {
   const received: Signal[] = [];
+  const scheduled: ScheduledSignal[] = [];
   return {
     received,
+    scheduled,
     signals: {
       changed: async (signal: Signal) => {
         received.push(signal);
+      },
+      signalAt: async (signal: ScheduledSignal) => {
+        scheduled.push(signal);
       },
     },
     since: (mark: number) => received.slice(mark),

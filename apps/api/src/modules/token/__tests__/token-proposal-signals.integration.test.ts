@@ -212,6 +212,7 @@ describe("ajouter un token qui remplace une proposition la signale (ADR 0046)", 
       {
         log: (record) => logged.push(record),
         signals: {
+          signalAt: async () => undefined,
           changed: async () => {
             if (state.failing) {
               throw new Error("Durable Object injoignable");
