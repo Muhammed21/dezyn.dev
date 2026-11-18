@@ -764,6 +764,23 @@ describe("page d'un lot en temps réel (ADR 0046)", () => {
     await expect.element(proposalItems(screen).nth(1)).toHaveTextContent("couleur.bleu.500");
   });
 
+  it("après une coupure, la réouverture relit le lot, sans signal", async () => {
+    const events = makeProjectEvents();
+    const state = { batch: makeBatch() };
+    const { screen } = await renderBatch(() => Promise.resolve(ok(state.batch)), { events });
+    await expect.element(proposalItems(screen).nth(0)).toBeVisible();
+
+    state.batch = makeBatch({
+      proposals: [
+        makeProposal(),
+        makeProposal({ id: "3e8f3c1e-7b3d-4e8a-9f10-2c5d6e7f8a9b", name: "couleur.bleu.500" }),
+      ],
+    });
+    events.resync(PROJECT_ID);
+
+    await expect.element(proposalItems(screen).nth(1)).toHaveTextContent("couleur.bleu.500");
+  });
+
   it("s'abonne au projet du lot, et quitter la page ferme l'abonnement", async () => {
     const events = makeProjectEvents();
     const { history, screen } = await renderBatch(reading(makeBatch()), { events });

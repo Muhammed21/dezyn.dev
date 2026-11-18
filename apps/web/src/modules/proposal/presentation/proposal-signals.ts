@@ -4,6 +4,7 @@ import { useEffect } from "react";
 export type SubscribeToProject = (subscription: {
   readonly projectId: string;
   readonly onTopics: (topics: readonly string[]) => void;
+  readonly onResync: () => void;
 }) => () => void;
 
 export const useProposalSignals = ({
@@ -21,13 +22,17 @@ export const useProposalSignals = ({
     if (projectId === undefined) {
       return undefined;
     }
+    const refetch = () => {
+      void queryClient.invalidateQueries({ queryKey: [scope, id] });
+    };
     return subscribe({
       projectId,
       onTopics: (topics) => {
         if (topics.includes("proposals")) {
-          void queryClient.invalidateQueries({ queryKey: [scope, id] });
+          refetch();
         }
       },
+      onResync: refetch,
     });
   }, [subscribe, projectId, queryClient, scope, id]);
 };

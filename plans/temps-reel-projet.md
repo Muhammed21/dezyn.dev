@@ -43,40 +43,25 @@ La classe du Durable Object se teste dans workerd avec `@cloudflare/vitest-plugi
 
 ## Risques
 
-- **Une preview URL de `dezyn-api` liée à un Durable Object d'un autre Worker** : la documentation ne le dit pas. La story 1 le vérifie sur `pr-N-preview.dezyn.dev` avant tout le reste. Si ça échoue, le repli est de passer par le routeur de previews (ADR 0045) ou de servir les WebSockets par `dezyn-realtime` directement.
 - **Cookie sur la poignée de main WebSocket** : `app.dezyn.dev` et `api.dezyn.dev` sont le même site, le cookie `SameSite=Lax` part. Le contrôle de l'origine reste obligatoire contre le détournement de WebSocket entre sites.
 - **Un membre retiré** garde sa connexion jusqu'à la prochaine coupure. Il ne reçoit que des sujets sans données, et chaque relecture lui répond 404. Accepté pour la story 1.
 
-## Story 1 en tranches
+## Story 2 : la connexion perdue se rétablit et rattrape l'écart
 
-Chaque tranche suit RED, GREEN, MUTATE, KILL MUTANTS, REFACTOR. Avant le code : `tdd`, `testing`, `mutation-testing`, `refactoring`, plus `durable-objects` et `react-testing` selon la tranche.
+Avant le code : `tdd`, `testing`, `mutation-testing`, `refactoring`, `react-testing`.
 
-### Tranche 1.1 : un membre s'abonne aux signaux d'un projet, et `write_tokens` y publie `proposals`
-
-**Valeur** : prouve le chemin complet sur une preview, sans encore toucher à l'écran.
-**Chemin** : `GET /v1/projects/:id/events` (authentification, origine, droit, 426) → Durable Object `dezyn-realtime` → `write_tokens` appelle `ProjectSignals.changed` après sa transaction → le Durable Object diffuse aux connexions du projet.
+**Valeur** : un déploiement de `dezyn-realtime` ou de l'API, ou une coupure réseau, ne fige plus l'écran des propositions.
+**Chemin** : l'adapter `ProjectEvents` rouvre la WebSocket après une fermeture non voulue → à la réouverture, il appelle `onResync` → le hook des pages relit `proposal-batches` ou `proposal-batch`.
 **Critères** :
 
-- Un membre connecté du projet obtient 101 ; un non-membre 404 ; une origine étrangère 403 ; sans cookie 401 ; sans `Upgrade: websocket` 426.
-- Un `write_tokens` réussi signale `proposals` pour son projet, une fois, après le commit ; un `write_tokens` refusé ne signale rien.
-- Un signal qui échoue est journalisé et la réponse de `write_tokens` reste la même.
-- Sur `pr-N-preview.dezyn.dev`, un client WebSocket connecté reçoit `{"type":"changed","topics":["proposals"]}` après un `write_tokens`.
-- `deploy.yml` et `preview.yml` déploient `dezyn-realtime` avant `dezyn-api`.
-- L'ADR du temps réel est accepté.
+- Une coupure non voulue rouvre la WebSocket après 1 s, puis 2, 4, 8 et 16 s, plafonnées à 30 s.
+- Après une ouverture réussie, le délai revient à 1 s.
+- À chaque réouverture après une coupure, la liste des lots et la page d'un lot relisent leurs données, sans signal. La première ouverture ne relit rien.
+- Se désabonner ferme la WebSocket et annule une reconnexion en attente ; aucune WebSocket ne se rouvre.
 
-**RED** : tests d'intégration de la route (codes de réponse) et de `write_tokens` avec l'enregistreur en mémoire ; tests de la classe du Durable Object dans workerd (`@cloudflare/vitest-plugin`).
+**Reporte** : le cas d'une session expirée, que le navigateur ne distingue pas d'une coupure (la relecture REST renvoie déjà vers la connexion), et la suspension en arrière-plan.
 
-### Tranche 1.2 : l'app web rafraîchit les lots et la page d'un lot à la réception de `proposals`
-
-**Valeur** : le membre voit les propositions de l'IA apparaître.
-**Chemin** : les pages des propositions s'abonnent au projet par `ProjectEvents` → à la réception de `proposals`, invalidation des clés `proposal-batches` et `proposal-batch` → relecture REST.
-**Critères** :
-
-- Sur la page des lots ou d'un lot, un signal `proposals` du projet affiché fait apparaître les nouvelles propositions sans action du membre.
-- Un signal d'un autre projet ne relit rien.
-- Quitter la page ferme l'abonnement.
-
-**RED** : tests Vitest Browser Mode des deux pages avec le faux `ProjectEvents`.
+**RED** : tests de l'adapter avec de faux sockets et un ordonnanceur injecté ; tests Vitest Browser Mode des deux pages avec le faux `ProjectEvents`, qui simule une réouverture.
 
 ---
 
