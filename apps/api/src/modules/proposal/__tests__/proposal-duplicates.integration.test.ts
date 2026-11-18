@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { type App, callMcp, GRACE, withIdentityApp } from "#testing/authorization-flow.ts";
+import {
+  type App,
+  BASE_URL,
+  callMcp,
+  GRACE,
+  withIdentityApp,
+} from "#testing/authorization-flow.ts";
 import { seedProject, seedProjectAsEditor } from "#testing/project-fixtures.ts";
 import { addToken, makeColorToken } from "#testing/token-fixtures.ts";
 
@@ -167,4 +173,73 @@ describe("write_tokens signale à l'IA les tokens qui portent déjà la valeur p
         ).toContain(BINDING_RULE);
       }),
   );
+});
+
+const readBatch = async (
+  app: App,
+  { accessToken, batchId }: { accessToken: string; batchId: string },
+) => {
+  const response = await app.request(`${BASE_URL}/v1/proposal-batches/${batchId}`, {
+    headers: { authorization: `Bearer ${accessToken}` },
+  });
+  return response.json();
+};
+
+const reject = (
+  app: App,
+  { accessToken, proposalId }: { accessToken: string; proposalId: string },
+) =>
+  app.request(`${BASE_URL}/v1/proposals/${proposalId}/reject`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${accessToken}` },
+  });
+
+describe("la relecture d'un lot montre à l'éditeur les doublons de chaque proposition", () => {
+  it("une proposition en attente nomme les tokens validés et en attente de même valeur", () =>
+    withIdentityApp(async (app, db) => {
+      const seeded = await seedProject(app, db);
+      await addToken(app, { ...seeded, token: makeColorToken({ name: "couleur.bleu.nuit" }) });
+      await writeTokens(app, { ...seeded, tokens: [makeColorToken({ name: "couleur.bord" })] });
+      const written = await writeTokens(app, {
+        ...seeded,
+        tokens: [makeColorToken({ name: "couleur.fond" })],
+      });
+
+      const batch = await readBatch(app, { ...seeded, batchId: written.batch.id });
+
+      expect(
+        batch.proposals.map(({ name, duplicates }: { name: string; duplicates: string[] }) => ({
+          name,
+          duplicates,
+        })),
+      ).toEqual([
+        { name: "couleur.bord", duplicates: ["couleur.bleu.nuit", "couleur.fond"] },
+        { name: "couleur.fond", duplicates: ["couleur.bleu.nuit", "couleur.bord"] },
+      ]);
+    }));
+
+  it("une proposition déjà relue n'a plus de doublons, et n'en est plus un", () =>
+    withIdentityApp(async (app, db) => {
+      const seeded = await seedProject(app, db);
+      const written = await writeTokens(app, {
+        ...seeded,
+        tokens: [
+          makeColorToken({ name: "couleur.bord" }),
+          makeColorToken({ name: "couleur.fond" }),
+        ],
+      });
+      await reject(app, { ...seeded, proposalId: written.proposals[0].id });
+
+      const batch = await readBatch(app, { ...seeded, batchId: written.batch.id });
+
+      expect(
+        batch.proposals.map(({ name, duplicates }: { name: string; duplicates: string[] }) => ({
+          name,
+          duplicates,
+        })),
+      ).toEqual([
+        { name: "couleur.bord", duplicates: [] },
+        { name: "couleur.fond", duplicates: [] },
+      ]);
+    }));
 });

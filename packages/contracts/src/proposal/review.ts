@@ -39,6 +39,7 @@ export const ProposalBatchOutput = z.looseObject({
       ...ReviewedProposal,
       validated: TokenValueOutput.nullable(),
       proposed: TokenValueOutput,
+      duplicates: z.array(z.string()).optional(),
     }),
   ),
 });

@@ -225,6 +225,9 @@ const ProposalItem = ({
       <p>{KIND_LABELS[proposal.kind]}</p>
       <p>{STATUS_LABELS[proposal.status]}</p>
       <p>Proposée : {JSON.stringify(proposal.proposed)}</p>
+      {proposal.duplicates.length === 0 ? null : (
+        <p>Même valeur que {proposal.duplicates.join(", ")}</p>
+      )}
       {proposal.validated === undefined ? (
         <p>Aucune valeur validée</p>
       ) : (

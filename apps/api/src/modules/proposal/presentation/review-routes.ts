@@ -35,7 +35,10 @@ const validatedOutputOf = ({
 });
 
 const proposalOutputOf = (
-  proposal: Proposal & { readonly validated: ValidatedDefinition | null },
+  proposal: Proposal & {
+    readonly validated: ValidatedDefinition | null;
+    readonly duplicates: readonly string[];
+  },
 ) => ({
   id: proposal.id,
   name: proposal.name,
@@ -43,6 +46,7 @@ const proposalOutputOf = (
   status: proposal.status,
   validated: proposal.validated === null ? null : validatedOutputOf(proposal.validated),
   proposed: proposedOf(proposal),
+  duplicates: proposal.duplicates,
 });
 
 const conflictOf = (failure: Exclude<ReviewFailure, "not_found">): Problem =>
