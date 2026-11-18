@@ -209,6 +209,9 @@ export const postgresTokenWriter = (
         return row === undefined ? [] : [{ id: row.id, definition, values }];
       });
       const ids = found.map(({ id }) => id);
+      if (ids.length === 0) {
+        return;
+      }
       const updated = await tx
         .update(token)
         .set({
