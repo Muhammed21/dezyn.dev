@@ -1,4 +1,4 @@
-import { evictDurableObject } from "cloudflare:test";
+import { evictDurableObject, runDurableObjectAlarm } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { describe, expect, it, vi } from "vitest";
 
@@ -64,5 +64,114 @@ describe("le Durable Object d'un projet diffuse ses signaux à ses connexions (A
     );
 
     expect(response.status).toBe(426);
+  });
+});
+
+const changedSignal = (topics: readonly string[]) => ({ type: "changed", topics });
+
+const pause = (ms: number) =>
+  new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+
+describe("le Durable Object d'un projet envoie au plus un signal par seconde", () => {
+  it("un second signal dans la même seconde attend l'alarme, avec les sujets fusionnés", async () => {
+    const projectId = crypto.randomUUID();
+    const room = env.PROJECT_ROOMS.getByName(projectId);
+    const connection = await connect(projectId);
+
+    await room.changed(["proposals"]);
+    await room.changed(["history", "tokens"]);
+    await room.changed(["proposals"]);
+    await vi.waitFor(() => expect(connection.received).toEqual([PROPOSALS_CHANGED]));
+
+    expect(await runDurableObjectAlarm(room)).toBe(true);
+
+    await vi.waitFor(() =>
+      expect(connection.received).toEqual([
+        PROPOSALS_CHANGED,
+        changedSignal(["history", "tokens", "proposals"]),
+      ]),
+    );
+  });
+
+  it("dix signaux en rafale donnent exactement deux messages", async () => {
+    const projectId = crypto.randomUUID();
+    const room = env.PROJECT_ROOMS.getByName(projectId);
+    const connection = await connect(projectId);
+
+    await Array.from({ length: 10 }).reduce<Promise<void>>(
+      (previous) => previous.then(() => room.changed(["proposals"])),
+      Promise.resolve(),
+    );
+    await runDurableObjectAlarm(room);
+
+    await vi.waitFor(() =>
+      expect(connection.received).toEqual([PROPOSALS_CHANGED, PROPOSALS_CHANGED]),
+    );
+    expect(await runDurableObjectAlarm(room)).toBe(false);
+  });
+
+  it("un signal une seconde après le dernier envoi part tout de suite, sans alarme", async () => {
+    const projectId = crypto.randomUUID();
+    const room = env.PROJECT_ROOMS.getByName(projectId);
+    const connection = await connect(projectId);
+
+    await room.changed(["proposals"]);
+    await pause(1100);
+    await room.changed(["tokens"]);
+
+    await vi.waitFor(() =>
+      expect(connection.received).toEqual([PROPOSALS_CHANGED, changedSignal(["tokens"])]),
+    );
+    expect(await runDurableObjectAlarm(room)).toBe(false);
+  });
+
+  it("après l'envoi de l'alarme, un nouveau signal attend la seconde suivante, avec ses seuls sujets", async () => {
+    const projectId = crypto.randomUUID();
+    const room = env.PROJECT_ROOMS.getByName(projectId);
+    const connection = await connect(projectId);
+    await room.changed(["proposals"]);
+    await room.changed(["history"]);
+    await pause(1100);
+    await runDurableObjectAlarm(room);
+
+    await room.changed(["tokens"]);
+    await vi.waitFor(() =>
+      expect(connection.received).toEqual([PROPOSALS_CHANGED, changedSignal(["history"])]),
+    );
+    expect(await runDurableObjectAlarm(room)).toBe(true);
+
+    await vi.waitFor(() =>
+      expect(connection.received).toEqual([
+        PROPOSALS_CHANGED,
+        changedSignal(["history"]),
+        changedSignal(["tokens"]),
+      ]),
+    );
+  });
+
+  it("un signal seul ne programme pas d'alarme", async () => {
+    const projectId = crypto.randomUUID();
+    const room = env.PROJECT_ROOMS.getByName(projectId);
+
+    await room.changed(["proposals"]);
+
+    expect(await runDurableObjectAlarm(room)).toBe(false);
+  });
+
+  it("les sujets en attente survivent à la mise en veille du Durable Object", async () => {
+    const projectId = crypto.randomUUID();
+    const room = env.PROJECT_ROOMS.getByName(projectId);
+    const connection = await connect(projectId);
+
+    await room.changed(["proposals"]);
+    await room.changed(["history"]);
+    await evictDurableObject(room);
+    await runDurableObjectAlarm(room);
+
+    await vi.waitFor(() =>
+      expect(connection.received).toEqual([PROPOSALS_CHANGED, changedSignal(["history"])]),
+    );
   });
 });
