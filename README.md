@@ -24,6 +24,7 @@ Monorepo pnpm et Turborepo, en TypeScript 7. `apps/` contient ce qui se déploie
 | `packages/lint`              | Règles oxlint du dépôt                                                                             |
 | `packages/typescript-config` | Configuration TypeScript partagée                                                                  |
 | `packages/docs-catalog`      | Générateur de `docs/CATALOG.md`                                                                    |
+| `packages/claude-hooks`      | Hooks Claude Code du projet (`.claude/settings.json`) : rappel de la règle selon le fichier écrit  |
 | `docker/`, `compose.yaml`    | Environnement local : PostgreSQL, stockage S3, Mailpit                                             |
 | `.github/`                   | CI, revue Claude par palier (`REVIEW.md`), release, benchmarks                                     |
 
