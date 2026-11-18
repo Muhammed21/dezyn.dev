@@ -3,6 +3,7 @@ import { z } from "zod";
 export interface ProjectSocket {
   addEventListener(type: "message", listener: (message: { readonly data: unknown }) => void): void;
   addEventListener(type: "open" | "close", listener: () => void): void;
+  send(data: string): void;
   close(): void;
 }
 
@@ -12,11 +13,13 @@ export type Schedule = (delayMs: number, run: () => void) => () => void;
 
 const FIRST_RETRY_MS = 1000;
 const LONGEST_RETRY_MS = 30_000;
+const PING_INTERVAL_MS = 30_000;
 
 type Connection = {
   stopped: boolean;
   failures: number;
   cancelRetry: () => void;
+  cancelPing: () => void;
   socket: ProjectSocket | undefined;
 };
 
@@ -68,6 +71,7 @@ export const createWebSocketProjectEvents = ({
       stopped: false,
       failures: 0,
       cancelRetry: () => {},
+      cancelPing: () => {},
       socket: undefined,
     };
     const connect = ({ retry }: { readonly retry: boolean }) => {
@@ -79,13 +83,21 @@ export const createWebSocketProjectEvents = ({
           onTopics(signal.data.topics);
         }
       });
+      const ping = () => {
+        connection.cancelPing = schedule(PING_INTERVAL_MS, () => {
+          socket.send("ping");
+          ping();
+        });
+      };
       socket.addEventListener("open", () => {
         connection.failures = 0;
+        ping();
         if (retry) {
           onResync();
         }
       });
       socket.addEventListener("close", () => {
+        connection.cancelPing();
         if (connection.stopped) {
           return;
         }

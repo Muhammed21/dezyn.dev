@@ -7,11 +7,22 @@ const connect = async (projectId: string) => {
     headers: { upgrade: "websocket" },
   });
   const received: unknown[] = [];
+  const texts: string[] = [];
   response.webSocket?.accept();
   response.webSocket?.addEventListener("message", ({ data }) => {
-    received.push(JSON.parse(String(data)));
+    const text = String(data);
+    if (text.startsWith("{")) {
+      received.push(JSON.parse(text));
+    } else {
+      texts.push(text);
+    }
   });
-  return { status: response.status, received };
+  return {
+    status: response.status,
+    received,
+    texts,
+    send: (text: string) => response.webSocket?.send(text),
+  };
 };
 
 const PROPOSALS_CHANGED = { type: "changed", topics: ["proposals"] };
@@ -173,5 +184,25 @@ describe("le Durable Object d'un projet envoie au plus un signal par seconde", (
     await vi.waitFor(() =>
       expect(connection.received).toEqual([PROPOSALS_CHANGED, changedSignal(["history"])]),
     );
+  });
+});
+
+describe("le Durable Object d'un projet garde ses connexions vivantes", () => {
+  it("un ping reçoit pong", async () => {
+    const connection = await connect(crypto.randomUUID());
+
+    connection.send("ping");
+
+    await vi.waitFor(() => expect(connection.texts).toEqual(["pong"]));
+  });
+
+  it("un ping reçoit pong après la mise en veille du Durable Object", async () => {
+    const projectId = crypto.randomUUID();
+    const connection = await connect(projectId);
+
+    await evictDurableObject(env.PROJECT_ROOMS.getByName(projectId));
+    connection.send("ping");
+
+    await vi.waitFor(() => expect(connection.texts).toEqual(["pong"]));
   });
 });

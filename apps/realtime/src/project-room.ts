@@ -7,6 +7,11 @@ const merged = (pending: readonly string[], topics: readonly string[]): readonly
 ];
 
 export class ProjectRoom extends DurableObject {
+  constructor(ctx: DurableObjectState, env: Cloudflare.Env) {
+    super(ctx, env);
+    ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair("ping", "pong"));
+  }
+
   async fetch(request: Request): Promise<Response> {
     if (request.headers.get("upgrade") !== "websocket") {
       return new Response(null, { status: 426 });
