@@ -18,6 +18,7 @@ import type {
   ReviewFailure,
   ValidatedBatch,
 } from "../domain/proposal.ts";
+import { BeforeAfter } from "./before-after.tsx";
 import { useProposalSignals } from "./proposal-signals.ts";
 
 type ReadBatch = (batch: { readonly batchId: string }) => Promise<Result<Batch, ProposalFailure>>;
@@ -224,14 +225,9 @@ const ProposalItem = ({
       <p>{proposal.name}</p>
       <p>{KIND_LABELS[proposal.kind]}</p>
       <p>{STATUS_LABELS[proposal.status]}</p>
-      <p>Proposée : {JSON.stringify(proposal.proposed)}</p>
+      <BeforeAfter validated={proposal.validated} proposed={proposal.proposed} />
       {proposal.duplicates.length === 0 ? null : (
         <p>Même valeur que {proposal.duplicates.join(", ")}</p>
-      )}
-      {proposal.validated === undefined ? (
-        <p>Aucune valeur validée</p>
-      ) : (
-        <p>Validée : {JSON.stringify(proposal.validated)}</p>
       )}
       {proposal.status === "proposed" ? (
         <>

@@ -193,7 +193,7 @@ describe("page d'un lot de propositions (ADR 0012 §1, ADR 0044 §6)", () => {
     ).toHaveLength(0);
   });
 
-  it("liste les propositions dans l'ordre de l'API, avec leur nom, leur nature, leur statut et leurs valeurs", async () => {
+  it("liste les propositions dans l'ordre de l'API, avec leur nom, leur nature et leur statut", async () => {
     const update = makeProposal({
       id: "3e8f3c1e-7b3d-4e8a-9f10-2c5d6e7f8a9b",
       name: "couleur.bleu.500",
@@ -210,20 +210,10 @@ describe("page d'un lot de propositions (ADR 0012 §1, ADR 0044 §6)", () => {
     await expect.element(creation).toHaveTextContent("couleur.fond.primaire");
     await expect.element(creation.getByText("Création", { exact: true })).toBeVisible();
     await expect.element(creation.getByText("Proposée", { exact: true })).toBeVisible();
-    await expect
-      .element(creation)
-      .toHaveTextContent(`Proposée : ${JSON.stringify({ $type: "color", $value: PRIMARY_BLUE })}`);
-    await expect.element(creation.getByText("Aucune valeur validée")).toBeVisible();
     const modification = proposalItems(screen).nth(1);
     await expect.element(modification).toHaveTextContent("couleur.bleu.500");
     await expect.element(modification.getByText("Modification", { exact: true })).toBeVisible();
     await expect.element(modification.getByText("Validée", { exact: true })).toBeVisible();
-    await expect
-      .element(modification)
-      .toHaveTextContent(`Proposée : ${JSON.stringify({ $type: "color", $value: NIGHT_BLUE })}`);
-    await expect
-      .element(modification)
-      .toHaveTextContent(`Validée : ${JSON.stringify({ $type: "color", $value: PRIMARY_BLUE })}`);
     expect(proposalItems(screen).elements()).toHaveLength(2);
   });
 
@@ -297,6 +287,115 @@ const readingInTurn = (...batches: readonly Batch[]) => {
   };
   return { readBatch, reads };
 };
+
+const preview = (screen: Screen, name: string) =>
+  proposalItems(screen).nth(0).getByRole("figure", { name });
+
+const makeUpdate = (overrides: Partial<Proposal> = {}) =>
+  makeProposal({
+    kind: "update",
+    validated: { $type: "color", $value: PRIMARY_BLUE },
+    proposed: { $type: "color", $value: NIGHT_BLUE },
+    ...overrides,
+  });
+
+describe("aperçu avant/après d'une proposition", () => {
+  it("montre la couleur validée avant et la couleur proposée après, annoncées par leur seul hex", async () => {
+    const { screen } = await renderBatch(reading(makeBatch({ proposals: [makeUpdate()] })));
+
+    const before = preview(screen, "Avant : #1a66e6");
+    await expect.element(before).toBeVisible();
+    await expect.element(before.getByText("Avant", { exact: true })).toBeVisible();
+    await expect.element(before.getByText("#1a66e6", { exact: true })).toBeVisible();
+    const after = preview(screen, "Après : #1a3366");
+    await expect.element(after).toBeVisible();
+    await expect.element(after.getByText("Après", { exact: true })).toBeVisible();
+    await expect.element(after.getByText("#1a3366", { exact: true })).toBeVisible();
+    expect(proposalItems(screen).getByText("Nouveau token").elements()).toHaveLength(0);
+    expect(proposalItems(screen).getByRole("img").elements()).toHaveLength(0);
+  });
+
+  it("donne le hex avec son alpha d'une couleur transparente", async () => {
+    const { screen } = await renderBatch(
+      reading(
+        makeBatch({
+          proposals: [
+            makeUpdate({ proposed: { $type: "color", $value: { ...NIGHT_BLUE, alpha: 0 } } }),
+          ],
+        }),
+      ),
+    );
+
+    await expect.element(preview(screen, "Après : #1a336600")).toBeVisible();
+  });
+
+  it("ne montre que l'aperçu Après d'une création, marqué Nouveau token", async () => {
+    const { screen } = await renderBatch(
+      reading(
+        makeBatch({
+          proposals: [
+            makeProposal({
+              kind: "create",
+              validated: undefined,
+              proposed: { $type: "color", $value: PRIMARY_BLUE },
+            }),
+          ],
+        }),
+      ),
+    );
+
+    await expect.element(preview(screen, "Après : #1a66e6")).toBeVisible();
+    await expect.element(proposalItems(screen).getByText("Nouveau token")).toBeVisible();
+    expect(
+      proposalItems(screen)
+        .getByRole("figure", { name: /^Avant/ })
+        .elements(),
+    ).toHaveLength(0);
+  });
+
+  it.each([
+    ["un type sans aperçu", { $type: "number", $value: 1.5 }, "1.5"],
+    [
+      "une couleur mal formée",
+      { $type: "color", $value: { colorSpace: "srgb", components: [2, 0, 0] } },
+      JSON.stringify({ colorSpace: "srgb", components: [2, 0, 0] }),
+    ],
+  ])("montre %s en texte brut, et la proposition reste rejetable", async (_case, token, text) => {
+    const sent: Decision[] = [];
+    const { screen } = await renderBatch(
+      reading(makeBatch({ proposals: [makeUpdate({ proposed: token })] })),
+      {
+        reviewProposal: (review) => {
+          sent.push(review.decision);
+          return reviewedAs("rejected")(review);
+        },
+      },
+    );
+
+    await expect.element(preview(screen, `Après : ${text}`)).toBeVisible();
+    await expect.element(preview(screen, `Après : ${text}`).getByText(text)).toBeVisible();
+    expect(
+      preview(screen, `Après : ${text}`)
+        .getByText(/#[0-9a-f]{6}/)
+        .elements(),
+    ).toHaveLength(0);
+    await expect.element(preview(screen, "Avant : #1a66e6")).toBeVisible();
+    await proposalItems(screen).nth(0).getByRole("button", { name: "Rejeter" }).click();
+    await expect.poll(() => sent).toEqual(["reject"]);
+  });
+
+  it.each(["validated", "rejected", "replaced"] as const)(
+    "garde les aperçus d'une proposition au statut %s",
+    async (status) => {
+      const { screen } = await renderBatch(
+        reading(makeBatch({ proposals: [makeUpdate({ status })] })),
+      );
+
+      await expect.element(preview(screen, "Avant : #1a66e6")).toBeVisible();
+      await expect.element(preview(screen, "Après : #1a3366")).toBeVisible();
+    },
+  );
+});
 
 describe("relecture d'une proposition depuis la page du lot (ADR 0012 §1, ADR 0044 §6)", () => {
   it("ne propose Valider et Rejeter que pour les propositions Proposées", async () => {
