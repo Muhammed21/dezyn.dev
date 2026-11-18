@@ -25,6 +25,8 @@ import { postgresProposalStore } from "../infrastructure/postgres-proposals.ts";
 
 const NIGHT_BLUE = { colorSpace: "srgb", components: [0.1, 0.2, 0.4] };
 
+const SKY_BLUE = { colorSpace: "srgb", components: [0.4, 0.7, 0.9] };
+
 const callTool = async (
   app: App,
   { token, name, args }: { token: string; name: string; args: object },
@@ -351,6 +353,61 @@ describe("valider un lot valide aussi les modifications proposées (ADR 0013 §8
         before: { name: "couleur.fond.primaire", $value: PRIMARY_BLUE },
         after: { token: { $value: NIGHT_BLUE } },
       });
+    }));
+
+  it("chaque modification d'un lot donne à son token sa propre valeur, description et extensions", () =>
+    withIdentityApp(async (app, db) => {
+      const { accessToken, projectId } = await seedProject(app, db);
+      await addToken(app, {
+        accessToken,
+        projectId,
+        token: makeColorToken({ name: "couleur.fond" }),
+      });
+      await addToken(app, {
+        accessToken,
+        projectId,
+        token: makeColorToken({ name: "couleur.bord" }),
+      });
+      const { batch } = await seedClosedBatch(app, {
+        accessToken,
+        projectId,
+        tokens: [
+          makeColorToken({
+            name: "couleur.fond",
+            $value: NIGHT_BLUE,
+            $description: "Fond des pages",
+            $extensions: { "com.a": 1 },
+          }),
+          makeColorToken({
+            name: "couleur.bord",
+            $value: SKY_BLUE,
+            $description: "Bord des cartes",
+            $extensions: { "com.b": 2 },
+          }),
+        ],
+      });
+
+      await validateBatch(app, { accessToken, batchId: batch.id });
+      const { tokens } = await callTool(app, {
+        token: accessToken,
+        name: "read_tokens",
+        args: { projectId },
+      });
+
+      expect(tokens).toMatchObject([
+        {
+          name: "couleur.bord",
+          $value: SKY_BLUE,
+          $description: "Bord des cartes",
+          $extensions: { "com.b": 2 },
+        },
+        {
+          name: "couleur.fond",
+          $value: NIGHT_BLUE,
+          $description: "Fond des pages",
+          $extensions: { "com.a": 1 },
+        },
+      ]);
     }));
 });
 

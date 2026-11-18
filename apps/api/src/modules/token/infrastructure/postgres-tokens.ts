@@ -186,41 +186,73 @@ export const postgresTokenWriter = (
     createAll,
     create: async (added, values) =>
       (await createAll([{ token: added, values }])) === undefined ? "created" : "name_taken",
-    replace: async (replaced, values) => {
-      const [before] = await tx
+    replaceAll: async (replaced) => {
+      const [first] = replaced;
+      if (first === undefined) {
+        return;
+      }
+      const { projectId } = first.token;
+      const before = await tx
         .select()
         .from(token)
-        .where(and(eq(token.projectId, replaced.projectId), eq(token.name, replaced.name)));
-      if (before === undefined) {
+        .where(
+          and(
+            eq(token.projectId, projectId),
+            inArray(
+              token.name,
+              replaced.map(({ token: { name } }) => name),
+            ),
+          ),
+        );
+      const found = replaced.flatMap(({ token: definition, values }) => {
+        const row = before.find(({ name }) => name === definition.name);
+        return row === undefined ? [] : [{ id: row.id, definition, values }];
+      });
+      const ids = found.map(({ id }) => id);
+      if (ids.length === 0) {
         return;
       }
       const updated = await tx
         .update(token)
         .set({
-          description: replaced.$description ?? null,
-          extensions: replaced.$extensions ?? null,
+          description: sql`case ${token.id} ${sql.join(
+            found.map(
+              ({ id, definition }) =>
+                sql`when ${id}::uuid then ${definition.$description ?? null}::text`,
+            ),
+            sql` `,
+          )} end`,
+          extensions: sql`case ${token.id} ${sql.join(
+            found.map(
+              ({ id, definition }) =>
+                sql`when ${id}::uuid then ${
+                  definition.$extensions === undefined
+                    ? null
+                    : JSON.stringify(definition.$extensions)
+                }::jsonb`,
+            ),
+            sql` `,
+          )} end`,
         })
-        .where(eq(token.id, before.id))
+        .where(inArray(token.id, ids))
         .returning();
       const removedReferences = await tx
         .select({ row: tokenValueReference })
         .from(tokenValueReference)
         .innerJoin(tokenValue, eq(tokenValue.id, tokenValueReference.tokenValueId))
-        .where(eq(tokenValue.tokenId, before.id));
+        .where(inArray(tokenValue.tokenId, ids));
       const removedValues = await tx
         .delete(tokenValue)
-        .where(eq(tokenValue.tokenId, before.id))
+        .where(inArray(tokenValue.tokenId, ids))
         .returning();
       const written = await insertValues(tx, {
         newId,
-        valuesOf: [{ tokenId: before.id, values }],
+        valuesOf: found.map(({ id, values }) => ({ tokenId: id, values })),
       });
-      await meter.remove(replaced.projectId, [
-        before,
-        ...removedValues,
-        ...removedReferences.map(({ row }) => row),
-      ]);
-      await meter.add(replaced.projectId, [...updated, ...written]);
+      await meter.resize(projectId, {
+        removed: [...before, ...removedValues, ...removedReferences.map(({ row }) => row)],
+        added: [...updated, ...written],
+      });
     },
   };
 };

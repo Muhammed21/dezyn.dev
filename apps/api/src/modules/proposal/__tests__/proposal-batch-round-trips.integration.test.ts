@@ -21,12 +21,23 @@ const callTool = async (
   return result.structuredContent;
 };
 
+const SKY_BLUE = { colorSpace: "srgb", components: [0.4, 0.7, 0.9] };
+
 const seedClosedBatch = async (
   app: App,
-  { accessToken, projectId, size }: { accessToken: string; projectId: string; size: number },
+  {
+    accessToken,
+    projectId,
+    size,
+    group,
+    $value,
+  }: { accessToken: string; projectId: string; size: number; group: string; $value?: object },
 ) => {
   const tokens = Array.from({ length: size }, (_, index) =>
-    makeColorToken({ name: `couleur.lot.t${index}` }),
+    makeColorToken({
+      name: `couleur.${group}.t${index}`,
+      ...($value === undefined ? {} : { $value }),
+    }),
   );
   const { batch } = await callTool(app, {
     token: accessToken,
@@ -73,9 +84,14 @@ describe("valider un lot coûte un nombre de requêtes qui ne dépend pas de sa 
   it(`rejeter les ${LARGE_BATCH} propositions d'un lot coûte autant de requêtes qu'en rejeter une`, () =>
     withIdentityApp(async (app, db) => {
       const { accessToken, projectId } = await seedProject(app, db);
-      const single = await seedClosedBatch(app, { accessToken, projectId, size: 1 });
+      const single = await seedClosedBatch(app, { accessToken, projectId, size: 1, group: "seul" });
       const singleRejection = await rejectAll(app, { accessToken, batch: single });
-      const large = await seedClosedBatch(app, { accessToken, projectId, size: LARGE_BATCH });
+      const large = await seedClosedBatch(app, {
+        accessToken,
+        projectId,
+        size: LARGE_BATCH,
+        group: "grand",
+      });
 
       const largeRejection = await rejectAll(app, { accessToken, batch: large });
 
@@ -88,12 +104,38 @@ describe("valider un lot coûte un nombre de requêtes qui ne dépend pas de sa 
   it(`valider les ${LARGE_BATCH} créations d'un lot coûte autant de requêtes qu'en valider une`, () =>
     withIdentityApp(async (app, db) => {
       const { accessToken, projectId } = await seedProject(app, db);
-      const single = await seedClosedBatch(app, { accessToken, projectId, size: 1 });
+      const single = await seedClosedBatch(app, { accessToken, projectId, size: 1, group: "seul" });
       const singleValidation = await validateAll(app, { accessToken, batch: single });
-      const large = await seedClosedBatch(app, { accessToken, projectId, size: LARGE_BATCH });
+      const large = await seedClosedBatch(app, {
+        accessToken,
+        projectId,
+        size: LARGE_BATCH,
+        group: "grand",
+      });
 
       const largeValidation = await validateAll(app, { accessToken, batch: large });
 
+      expect(singleValidation.result.status).toBe(200);
+      expect(largeValidation.result.status).toBe(200);
+      expect(singleValidation.roundTrips).toBeGreaterThan(0);
+      expect(largeValidation.roundTrips).toBe(singleValidation.roundTrips);
+    }));
+
+  it(`valider les ${LARGE_BATCH} modifications d'un lot coûte autant de requêtes qu'en valider une`, () =>
+    withIdentityApp(async (app, db) => {
+      const { accessToken, projectId } = await seedProject(app, db);
+      const seedModifiedBatch = async ({ size, group }: { size: number; group: string }) => {
+        const created = await seedClosedBatch(app, { accessToken, projectId, size, group });
+        await validateAll(app, { accessToken, batch: created });
+        return seedClosedBatch(app, { accessToken, projectId, size, group, $value: SKY_BLUE });
+      };
+      const single = await seedModifiedBatch({ size: 1, group: "seul" });
+      const singleValidation = await validateAll(app, { accessToken, batch: single });
+      const large = await seedModifiedBatch({ size: LARGE_BATCH, group: "grand" });
+
+      const largeValidation = await validateAll(app, { accessToken, batch: large });
+
+      expect(large.proposals.map(({ kind }) => kind)).toEqual(Array(LARGE_BATCH).fill("update"));
       expect(singleValidation.result.status).toBe(200);
       expect(largeValidation.result.status).toBe(200);
       expect(singleValidation.roundTrips).toBeGreaterThan(0);

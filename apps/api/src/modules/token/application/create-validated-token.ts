@@ -6,7 +6,6 @@ import type {
   ValidatedWrite,
 } from "../domain/token-check.ts";
 import { groupConflict } from "../domain/token-name.ts";
-import type { TokenDefinition } from "../domain/token.ts";
 import {
   checkedValues,
   type CreatedToken,
@@ -15,16 +14,14 @@ import {
   modeValueOf,
   type ProjectMode,
   type ProjectTokenReader,
+  type ReplacedToken,
   type TokenWriter,
 } from "./token-values.ts";
 
 type Planned<Write extends ValidatedWrite> = {
   readonly known: readonly ProjectToken[];
   readonly created: readonly (CreatedToken & { readonly write: Write })[];
-  readonly replaced: readonly {
-    readonly token: TokenDefinition;
-    readonly values: readonly ModeValue[];
-  }[];
+  readonly replaced: readonly ReplacedToken[];
   readonly failed?: FailedWrite<Write>;
 };
 
@@ -89,7 +86,10 @@ export const validatedTokenWriter = ({
         if (write.kind === "update") {
           return {
             ...plan,
-            replaced: [...plan.replaced, { token: write.token, values: checked.values }],
+            replaced: [
+              ...plan.replaced,
+              { token: { ...write.token, projectId }, values: checked.values },
+            ],
           };
         }
         const created = {
@@ -114,10 +114,7 @@ export const validatedTokenWriter = ({
     if (taken !== undefined) {
       return { write: taken.write, failure: { code: "name_taken" } };
     }
-    await planned.replaced.reduce<Promise<void>>(async (previous, { token, values }) => {
-      await previous;
-      await tokens.replace({ ...token, projectId }, values);
-    }, Promise.resolve());
+    await tokens.replaceAll(planned.replaced);
     return undefined;
   },
 });
