@@ -29,6 +29,11 @@ const fetchFromBrowser = (url: string, init: RequestInit) => window.fetch(url, i
 
 const openBrowserSocket = (url: string) => new WebSocket(url);
 
+const scheduleInBrowser = (delayMs: number, run: () => void) => {
+  const timer = window.setTimeout(run, delayMs);
+  return () => window.clearTimeout(timer);
+};
+
 const appRouter = ({
   apiUrl,
   queryClient,
@@ -42,7 +47,11 @@ const appRouter = ({
   const tokens = createTokens({ apiUrl, fetch: fetchFromBrowser });
   const projectHistory = createHistory({ apiUrl, fetch: fetchFromBrowser });
   const proposals = createProposals({ apiUrl, fetch: fetchFromBrowser });
-  const projectEvents = createProjectEvents({ apiUrl, openSocket: openBrowserSocket });
+  const projectEvents = createProjectEvents({
+    apiUrl,
+    openSocket: openBrowserSocket,
+    schedule: scheduleInBrowser,
+  });
 
   const root = createRootRoute();
   return createRouter({

@@ -227,6 +227,18 @@ describe("propositions d'un projet (ADR 0012 §1, ADR 0044 §6)", () => {
       expect(queryClient.getQueryState(tokensKey)?.isInvalidated).toBe(false);
     });
 
+    it("après une coupure, la réouverture relit les lots, sans signal", async () => {
+      const events = makeProjectEvents();
+      const { state, listBatches } = changingListing([makeBatch()]);
+      const { screen } = await renderProposals(listBatches, events);
+      await expect.element(batchItems(screen).nth(0)).toBeVisible();
+
+      state.batches = [makeBatch(), SPACING];
+      events.resync(PROJECT_ID);
+
+      await expect.element(batchItems(screen).nth(1)).toHaveTextContent("Espacements");
+    });
+
     it("un signal d'un autre sujet ne relit rien", async () => {
       const events = makeProjectEvents();
       const { state, listBatches } = changingListing([makeBatch()]);
