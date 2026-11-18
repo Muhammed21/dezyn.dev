@@ -4,3 +4,8 @@ packages:
 allowBuilds:
   esbuild: false
   workerd: false
+auditConfig:
+  ignoreGhsas:
+    # picomatch (ReDoS, aucun correctif publié) n'arrive en prod que par better-auth -> vitest -> vite,
+    # du code de test jamais exécuté par les Workers. À retirer dès qu'une version corrigée existe.
+    - GHSA-fc5q-39xc-vjpf
