@@ -104,16 +104,22 @@ export const proposalModule = ({
       newId: randomUUID,
       now,
     }),
-    openBatch: openBatch({ unitOfWork, newId: randomUUID, now }),
-    closeBatch: closeBatch({ unitOfWork, now }),
+    openBatch: openBatch({ unitOfWork, signals, newId: randomUUID, now }),
+    closeBatch: closeBatch({ unitOfWork, signals, now }),
     listBatches: listBatches(reading),
     batchOf: batchOf(reading),
     reviewProposal: reviewProposal({
       ...reading,
       unitOfWork: reviewUnitOfWork,
       sendStorageAlert,
+      signals,
     }),
-    validateBatch: validateBatch({ ...reading, unitOfWork: reviewUnitOfWork, sendStorageAlert }),
+    validateBatch: validateBatch({
+      ...reading,
+      unitOfWork: reviewUnitOfWork,
+      sendStorageAlert,
+      signals,
+    }),
     pendingProposalsOf: pendingProposalsOf(reading),
   };
 };

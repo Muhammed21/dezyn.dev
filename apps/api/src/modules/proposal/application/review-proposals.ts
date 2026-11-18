@@ -1,4 +1,5 @@
 import type { HistoryWriter } from "#modules/history/contracts/history-writer.ts";
+import type { ProjectSignals } from "#modules/project/contracts/project-signals.ts";
 import type { ProjectAccess } from "#modules/space/contracts/membership.ts";
 import type {
   StorageAlertDecision,
@@ -169,6 +170,15 @@ export const batchOf =
     });
   };
 
+const signallingProposals =
+  ({ signals, projectId }: { readonly signals: ProjectSignals; readonly projectId: string }) =>
+  async <T, E>(outcome: Result<T, E>): Promise<Result<T, E>> => {
+    if (outcome.ok) {
+      await signals.changed({ projectId, topics: ["proposals"] });
+    }
+    return outcome;
+  };
+
 const sendingStorageAlert =
   (send: StorageAlertSender) =>
   async <T, E>(outcome: Result<WithStorageAlert<T>, E>): Promise<Result<T, E>> => {
@@ -187,6 +197,7 @@ export const reviewProposal =
     validatedTokensOf,
     unitOfWork,
     sendStorageAlert,
+    signals,
     now,
     access,
   }: Access & {
@@ -194,6 +205,7 @@ export const reviewProposal =
     readonly validatedTokensOf: ValidatedTokensOf;
     readonly unitOfWork: ReviewUnitOfWork;
     readonly sendStorageAlert: StorageAlertSender;
+    readonly signals: ProjectSignals;
     readonly now: () => Date;
   }) =>
   async ({
@@ -259,7 +271,9 @@ export const reviewProposal =
         });
       },
     );
-    return sendingStorageAlert(sendStorageAlert)(outcome);
+    return signallingProposals({ signals, projectId })(
+      await sendingStorageAlert(sendStorageAlert)(outcome),
+    );
   };
 
 export type InvalidProposal = {
@@ -292,6 +306,7 @@ export const validateBatch =
     validatedTokensOf,
     unitOfWork,
     sendStorageAlert,
+    signals,
     now,
     access,
   }: Access & {
@@ -299,6 +314,7 @@ export const validateBatch =
     readonly validatedTokensOf: ValidatedTokensOf;
     readonly unitOfWork: ReviewUnitOfWork;
     readonly sendStorageAlert: StorageAlertSender;
+    readonly signals: ProjectSignals;
     readonly now: () => Date;
   }) =>
   async ({
@@ -394,7 +410,9 @@ export const validateBatch =
         });
       },
     );
-    return sendingStorageAlert(sendStorageAlert)(validatedBatch);
+    return signallingProposals({ signals, projectId })(
+      await sendingStorageAlert(sendStorageAlert)(validatedBatch),
+    );
   };
 
 export const pendingProposalsOf =
