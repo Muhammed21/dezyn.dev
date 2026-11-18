@@ -39,6 +39,7 @@ export const makeSpaces = (): SpaceUseCases => ({
 export const makeProjects = (): ProjectUseCases => ({
   createProject: () => Promise.resolve(err("not_found")),
   listProjects: () => Promise.resolve(err("not_found")),
+  subscribeToProject: () => Promise.resolve(err("not_found")),
 });
 
 export const makeHistory = (): HistoryUseCases => ({

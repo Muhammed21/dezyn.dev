@@ -5,6 +5,7 @@ import type { HistoryWriter } from "#modules/history/contracts/history-writer.ts
 import type { MembershipReader } from "#modules/space/contracts/membership.ts";
 
 export { bestEffortSignals } from "./application/best-effort-signals.ts";
+export { subscribeToProject } from "./application/subscribe-to-project.ts";
 
 import { createProject } from "./application/create-project.ts";
 import { listProjects } from "./application/list-projects.ts";

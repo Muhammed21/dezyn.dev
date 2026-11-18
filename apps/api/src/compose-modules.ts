@@ -1,12 +1,14 @@
 import type { PostgresDatabase, PostgresTransaction } from "#db";
 import type { HistoryWriter } from "#modules/history/contracts/history-writer.ts";
 import { historyModule, historyWriterOn } from "#modules/history/history-module.ts";
+import type { ProjectChannel } from "#modules/project/contracts/project-channel.ts";
 import type { ProjectSignals } from "#modules/project/contracts/project-signals.ts";
 import {
   bestEffortSignals,
   projectLockOn,
   projectModule,
   storageMeterOn,
+  subscribeToProject,
 } from "#modules/project/project-module.ts";
 import {
   proposalModule,
@@ -33,6 +35,16 @@ export const composeModules = ({
   wrapHistoryWriter = (writer) => writer,
   clock = () => new Date(),
   signals = { changed: async () => undefined },
+  channel = {
+    connect: async () =>
+      new Response(
+        JSON.stringify({ type: "about:blank", title: "Temps réel indisponible", status: 503 }),
+        {
+          status: 503,
+          headers: { "content-type": "application/problem+json" },
+        },
+      ),
+  },
 }: {
   readonly db: PostgresDatabase;
   readonly mailer: Mailer;
@@ -41,16 +53,18 @@ export const composeModules = ({
   readonly wrapHistoryWriter?: (writer: HistoryWriter) => HistoryWriter;
   readonly clock?: Clock;
   readonly signals?: ProjectSignals;
+  readonly channel?: ProjectChannel;
 }) => {
   const spaces = spaceModule({ db, mailer, webUrl, log });
   const writerOn = (tx: PostgresTransaction) =>
     wrapHistoryWriter(historyWriterOn(tx, storageMeterOn(tx)));
-  const projects = projectModule({
+  const projectsOnly = projectModule({
     db,
     memberships: spaces.memberships,
     historyWriterOn: writerOn,
   });
-  const access = spaces.projectAccess(projects.finder);
+  const access = spaces.projectAccess(projectsOnly.finder);
+  const projects = { ...projectsOnly, subscribeToProject: subscribeToProject({ access, channel }) };
   const history = historyModule({
     db,
     access,

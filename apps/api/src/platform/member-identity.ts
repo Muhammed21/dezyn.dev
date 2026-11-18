@@ -23,6 +23,17 @@ export type MemberEnv = {
 
 const READ_METHODS: ReadonlySet<string> = new Set(["GET", "HEAD", "OPTIONS"]);
 
+export const requireWebOrigin = (webUrl: string) => {
+  const webOrigin = new URL(webUrl).origin;
+  return createMiddleware<MemberEnv>(async (c, next) => {
+    if (c.req.header("origin") !== webOrigin) {
+      return problemResponse(c, FORBIDDEN);
+    }
+    await next();
+    return undefined;
+  });
+};
+
 export const requireMember = ({
   sessionOf,
   verifyAccessToken,
