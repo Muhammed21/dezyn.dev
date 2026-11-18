@@ -163,11 +163,24 @@ jobs:
       - name: Preview router bundle
         working-directory: apps/preview-router
         run: pnpm exec wrangler deploy --dry-run --outdir "$RUNNER_TEMP/preview-router-bundle"
+      - name: Realtime bundle
+        working-directory: apps/realtime
+        run: pnpm exec wrangler deploy --dry-run --outdir "$RUNNER_TEMP/realtime-bundle"
+      - name: Realtime preview bundle
+        if: github.event_name == 'pull_request'
+        working-directory: apps/realtime
+        run: pnpm exec wrangler deploy --env preview --dry-run --outdir "$RUNNER_TEMP/realtime-preview-bundle"
       - if: github.event_name == 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           name: preview-bundle
           path: ${{ runner.temp }}/preview-bundle/worker.js
+          retention-days: 3
+      - if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: realtime-preview-bundle
+          path: ${{ runner.temp }}/realtime-preview-bundle/worker.js
           retention-days: 3
       - name: Web preview build
         if: github.event_name == 'pull_request'

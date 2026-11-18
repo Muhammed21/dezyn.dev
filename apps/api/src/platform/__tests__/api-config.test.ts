@@ -167,6 +167,16 @@ describe("le Worker lit sa configuration dans ses bindings", () => {
     expect(readWorkerConfig(makeBindings(bindings))).toEqual(err([message]));
   });
 
+  it("le binding PROJECT_ROOMS donne les salles des projets au Worker", () => {
+    const projectRooms = {
+      getByName: () => ({ fetch: async () => new Response(), changed: async () => undefined }),
+    };
+
+    expect(readWorkerConfig(makeBindings({ PROJECT_ROOMS: projectRooms }))).toMatchObject(
+      ok({ projectRooms }),
+    );
+  });
+
   it("TRUSTED_IP_HEADER remplace l'en-tête par défaut", () => {
     expect(readWorkerConfig(makeBindings({ TRUSTED_IP_HEADER: "x-forwarded-for" }))).toMatchObject(
       ok({ trustedIpHeader: "x-forwarded-for" }),
@@ -192,6 +202,10 @@ describe("le Worker lit sa configuration dans ses bindings", () => {
     ["WEB_URL", "ftp://dezyn.dev", "URL http(s) attendue"],
     ["TRUSTED_IP_HEADER", "", "vide"],
     ["EMAIL_DELIVERY", "smtp", "seule la valeur log est admise"],
+    ["PROJECT_ROOMS", "dezyn-realtime", "binding Durable Object attendu"],
+    ["PROJECT_ROOMS", null, "binding Durable Object attendu"],
+    ["PROJECT_ROOMS", {}, "binding Durable Object attendu"],
+    ["PROJECT_ROOMS", { getByName: "dezyn-realtime" }, "binding Durable Object attendu"],
   ])("%s=%j est refusé : %s", (binding, value, message) => {
     expect(readWorkerConfig(makeBindings({ [binding]: value }))).toEqual(
       err([`${binding} : ${message}`]),

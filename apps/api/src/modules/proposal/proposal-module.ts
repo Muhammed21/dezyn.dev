@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { PostgresDatabase, PostgresTransaction } from "#db";
 import type { HistoryWriter } from "#modules/history/contracts/history-writer.ts";
 import type { ProjectLock } from "#modules/project/contracts/project-lock.ts";
+import type { ProjectSignals } from "#modules/project/contracts/project-signals.ts";
 import type { StorageMeter } from "#modules/project/contracts/storage-meter.ts";
 import type { ProjectAccess } from "#modules/space/contracts/membership.ts";
 import type {
@@ -55,6 +56,7 @@ export const proposalModule = ({
   storageMeterOn,
   storageAlertOn,
   sendStorageAlert,
+  signals,
   clock: now,
 }: {
   readonly db: PostgresDatabase;
@@ -69,6 +71,7 @@ export const proposalModule = ({
   readonly storageMeterOn: (tx: PostgresTransaction) => StorageMeter;
   readonly storageAlertOn: (tx: PostgresTransaction) => StorageAlertDecision;
   readonly sendStorageAlert: StorageAlertSender;
+  readonly signals: ProjectSignals;
   readonly clock: Clock;
 }) => {
   const reading = {
@@ -97,6 +100,7 @@ export const proposalModule = ({
     writeTokens: writeTokens({
       unitOfWork,
       sendStorageAlert,
+      signals,
       newId: randomUUID,
       now,
     }),

@@ -5,6 +5,8 @@ import { createApp } from "#create-app";
 import { createPostgresDatabase, type PostgresDatabase } from "#db";
 import type { HistoryWriter } from "#modules/history/contracts/history-writer.ts";
 import { createIdentityAuth } from "#modules/identity/infrastructure/better-auth.ts";
+import type { ProjectChannel } from "#modules/project/contracts/project-channel.ts";
+import type { ProjectSignals } from "#modules/project/contracts/project-signals.ts";
 import type { AuthSecret } from "#platform/api-config.ts";
 import type { Clock } from "#platform/clock.ts";
 import type { LogSink } from "#platform/logging.ts";
@@ -47,6 +49,8 @@ type IdentityAppOptions = {
   readonly secret?: string;
   readonly secrets?: readonly AuthSecret[];
   readonly authLog?: LogSink;
+  readonly signals?: ProjectSignals;
+  readonly channel?: ProjectChannel;
 };
 
 export type IdentityApp = {
@@ -67,6 +71,8 @@ export const startIdentityApp = async ({
   secret = "secret-de-test-de-32-caracteres-au-moins",
   secrets = [],
   authLog = () => undefined,
+  signals,
+  channel,
 }: IdentityAppOptions = {}): Promise<IdentityApp> => {
   const database = await createDatabase();
   try {
@@ -91,6 +97,8 @@ export const startIdentityApp = async ({
       log,
       wrapHistoryWriter,
       clock,
+      signals,
+      channel,
     });
     const auth = await createIdentityAuth({
       webUrl: WEB_URL,

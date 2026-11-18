@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import type { ProjectRooms } from "#modules/project/project-module.ts";
 import { err, ok, type Result } from "@repo/result";
 
 const MISSING = "manquante";
@@ -50,6 +51,16 @@ const WorkerEnv = z
     RESEND_API_KEY: text().optional(),
     MAIL_FROM: z.email({ error: "adresse email attendue" }).optional(),
     EMAIL_DELIVERY: z.literal("log", { error: "seule la valeur log est admise" }).optional(),
+    PROJECT_ROOMS: z
+      .custom<ProjectRooms>(
+        (value) =>
+          typeof value === "object" &&
+          value !== null &&
+          "getByName" in value &&
+          typeof value.getByName === "function",
+        { error: "binding Durable Object attendu" },
+      )
+      .optional(),
   })
   .refine((env) => env.HYPERDRIVE !== undefined || env.DATABASE_URL !== undefined, {
     path: ["HYPERDRIVE"],
@@ -149,6 +160,7 @@ export const readApiConfig = (
 export type WorkerConfig = Omit<ApiConfig, "smtp" | "port"> & {
   readonly email?: { readonly apiKey: string; readonly from: string };
   readonly emailDelivery?: "log";
+  readonly projectRooms?: ProjectRooms;
 };
 
 export const readWorkerConfig = (bindings: unknown): Result<WorkerConfig, readonly string[]> => {
@@ -169,6 +181,7 @@ export const readWorkerConfig = (bindings: unknown): Result<WorkerConfig, readon
       ? { email: { apiKey: data.RESEND_API_KEY, from: data.MAIL_FROM } }
       : {}),
     ...(data.EMAIL_DELIVERY ? { emailDelivery: data.EMAIL_DELIVERY } : {}),
+    ...(data.PROJECT_ROOMS ? { projectRooms: data.PROJECT_ROOMS } : {}),
   });
 };
 

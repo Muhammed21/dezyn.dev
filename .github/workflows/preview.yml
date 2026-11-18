@@ -4,7 +4,9 @@ name: Preview
 # sur sa propre branche Neon, et commente son URL sur la PR (ADR 0034). Le Worker dezyn-preview-router
 # sert cet alias sur pr-<N>-api-preview.dezyn.dev (ADR 0045). Le build de l'app web produit par la CI
 # de la PR est téléversé dans dezyn-web-preview sous le même alias, servi sur pr-<N>-preview.dezyn.dev. La fermeture de la PR
-# supprime sa branche Neon ; les versions restent sur Cloudflare.
+# supprime sa branche Neon ; les versions restent sur Cloudflare. Le Worker dezyn-realtime-preview, qui porte le
+# Durable Object des signaux (ADR 0046), est déployé avant la version de l'API qui s'y lie ; il est commun à
+# toutes les PRs, et la dernière publiée l'emporte.
 # Aucun code de la PR ne tourne ici, dans le contexte de main : la CI de la PR produit le bundle,
 # et seuls les fichiers SQL de ses migrations sont pris dans son commit, appliqués par le code de main.
 
@@ -78,6 +80,13 @@ jobs:
       - if: steps.origin.outputs.publish == 'true'
         uses: actions/download-artifact@v4
         with:
+          name: realtime-preview-bundle
+          path: ${{ runner.temp }}/realtime-bundle
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+      - if: steps.origin.outputs.publish == 'true'
+        uses: actions/download-artifact@v4
+        with:
           name: web-preview
           path: ${{ runner.temp }}/web-preview
           run-id: ${{ github.event.workflow_run.id }}
@@ -115,6 +124,17 @@ jobs:
         run: pnpm migrate
         env:
           DATABASE_URL_MIGRATOR: ${{ steps.branch.outputs.migrator_url }}
+      - name: Deploy realtime
+        if: steps.origin.outputs.publish == 'true'
+        working-directory: apps/realtime
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          pnpm exec wrangler deploy "$RUNNER_TEMP/realtime-bundle/worker.js" \
+            --config wrangler.jsonc \
+            --no-bundle \
+            --env preview \
+            --message "$HEAD_SHA"
       - id: upload
         name: Upload
         if: steps.origin.outputs.publish == 'true'
