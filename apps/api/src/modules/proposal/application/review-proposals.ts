@@ -226,18 +226,14 @@ export const reviewProposal =
         const occurredAt = now();
         const before = validatedOf(await validatedTokensOf(projectId), proposal);
         if (reviewed.status === "validated") {
-          const validated = {
+          const failed = await unit.tokens.write({
             projectId,
-            token: proposal.token,
+            writes: [proposal],
             pending: await proposals.pendingTokensOf(projectId),
             createdAt: occurredAt,
-          };
-          const failure =
-            proposal.kind === "create"
-              ? await unit.tokens.create(validated)
-              : await unit.tokens.replace(validated);
-          if (failure !== undefined) {
-            return err(failure);
+          });
+          if (failed !== undefined) {
+            return err(failed.failure);
           }
           await unit.figmaStates.proposalsValidated([proposalId]);
         } else {
@@ -289,15 +285,6 @@ type Decided = {
   readonly proposal: Proposal;
   readonly status: "validated" | "rejected";
 };
-
-const inSequence = async <Item, Failure>(
-  items: readonly Item[],
-  step: (item: Item) => Promise<Failure | undefined>,
-): Promise<Failure | undefined> =>
-  items.reduce<Promise<Failure | undefined>>(
-    async (previous, item) => (await previous) ?? step(item),
-    Promise.resolve(undefined),
-  );
 
 export const validateBatch =
   ({
@@ -356,21 +343,18 @@ export const validateBatch =
               : { code: "unknown_propositions", ids: plan.ids },
           );
         }
-        const invalid = await inSequence(
-          plan.toValidate,
-          async (proposal): Promise<InvalidProposal | undefined> => {
-            const written = { projectId, token: proposal.token, pending, createdAt: occurredAt };
-            const failure =
-              proposal.kind === "create"
-                ? await unit.tokens.create(written)
-                : await unit.tokens.replace(written);
-            return failure === undefined
-              ? undefined
-              : { code: "invalid_proposition", proposalId: proposal.id, failure };
-          },
-        );
-        if (invalid !== undefined) {
-          return err(invalid);
+        const failed = await unit.tokens.write({
+          projectId,
+          writes: plan.toValidate,
+          pending,
+          createdAt: occurredAt,
+        });
+        if (failed !== undefined) {
+          return err({
+            code: "invalid_proposition",
+            proposalId: failed.write.id,
+            failure: failed.failure,
+          });
         }
         const decided = [
           ...plan.toValidate.map((proposal): Decided => ({ proposal, status: "validated" })),

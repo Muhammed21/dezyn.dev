@@ -517,6 +517,35 @@ describe("un lot se valide cibles d'abord, et tout ou rien", () => {
       expect(await readTokenNames(app, { token: accessToken, projectId })).toEqual([]);
     }));
 
+  it("un lot qui contient deux propositions invalides est refusé sur la première", () =>
+    withIdentityApp(async (app, db) => {
+      const { accessToken, projectId } = await seedProject(app, db);
+      const { batch, proposals } = await seedClosedBatch(app, {
+        accessToken,
+        projectId,
+        tokens: [
+          makeColorToken({ name: "couleur.fond.primaire", $value: "{couleur.bleu.500}" }),
+          makeColorToken({ name: "couleur.fond.secondaire", $value: "{couleur.vert.500}" }),
+          makeColorToken({ name: "couleur.bleu.500" }),
+          makeColorToken({ name: "couleur.vert.500" }),
+        ],
+      });
+
+      const response = await validateBatch(app, {
+        accessToken,
+        batchId: batch.id,
+        body: { rejected: [proposals[2].id, proposals[3].id] },
+      });
+
+      expect(response.status).toBe(409);
+      expect(InvalidBatchProblem.parse(await response.json()).errors).toEqual([
+        {
+          path: `proposals.${proposals[0].id}.$value`,
+          message: "Référence vers un token non validé",
+        },
+      ]);
+    }));
+
   it("un nom pris entre-temps répond 409 sur ce nom, et annule les validations du lot", () =>
     withIdentityApp(async (app, db) => {
       const { accessToken, projectId } = await seedProject(app, db);
@@ -546,6 +575,32 @@ describe("un lot se valide cibles d'abord, et tout ou rien", () => {
       expect(await readTokenNames(app, { token: accessToken, projectId })).not.toContain(
         "couleur.bleu.500",
       );
+    }));
+
+  it("un nom pris entre-temps est signalé avant une proposition invalide qui le suit dans le lot", () =>
+    withIdentityApp(async (app, db) => {
+      const { accessToken, projectId } = await seedProject(app, db);
+      const { batch, proposals } = await seedClosedBatch(app, {
+        accessToken,
+        projectId,
+        tokens: [
+          makeColorToken({ name: "couleur.fond.primaire" }),
+          makeColorToken({ name: "couleur.fond.secondaire", $value: "{couleur.bleu.500}" }),
+          makeColorToken({ name: "couleur.bleu.500" }),
+        ],
+      });
+      await seedValidatedToken(db, { projectId, name: "couleur.fond.primaire" });
+
+      const response = await validateBatch(app, {
+        accessToken,
+        batchId: batch.id,
+        body: { rejected: [proposals[2].id] },
+      });
+
+      expect(response.status).toBe(409);
+      expect(InvalidBatchProblem.parse(await response.json()).errors).toEqual([
+        { path: `proposals.${proposals[0].id}.name`, message: "Nom déjà pris dans le projet" },
+      ]);
     }));
 
   it("si l'historique échoue, rien n'est validé", () =>

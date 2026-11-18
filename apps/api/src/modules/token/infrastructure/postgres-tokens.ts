@@ -27,6 +27,7 @@ import type {
 import type { FigmaStateReader, ValidatedTokenReader } from "../application/read-tokens.ts";
 import type {
   ModeReader,
+  CreatedToken,
   ModeValue,
   ProjectTokenReader,
   TokenWriter,
@@ -97,19 +98,22 @@ const insertValues = async (
   tx: Queryable,
   {
     newId,
-    tokenId,
-    values,
+    valuesOf,
   }: {
     readonly newId: () => string;
-    readonly tokenId: string;
-    readonly values: readonly ModeValue[];
+    readonly valuesOf: readonly {
+      readonly tokenId: string;
+      readonly values: readonly ModeValue[];
+    }[];
   },
 ) => {
-  const rows = values.map((stored) => ({ id: newId(), stored }));
+  const rows = valuesOf.flatMap(({ tokenId, values }) =>
+    values.map((stored) => ({ id: newId(), tokenId, stored })),
+  );
   const writtenValues = await tx
     .insert(tokenValue)
     .values(
-      rows.map(({ id, stored: { modeId, value, referencedTokenId } }) => ({
+      rows.map(({ id, tokenId, stored: { modeId, value, referencedTokenId } }) => ({
         id,
         tokenId,
         modeId,
@@ -133,66 +137,93 @@ const insertValues = async (
   return [...writtenValues, ...writtenReferences];
 };
 
+const createAllOn =
+  (
+    tx: Queryable,
+    { newId, meter }: { readonly newId: () => string; readonly meter: StorageMeter },
+  ) =>
+  async <Created extends CreatedToken>(
+    created: readonly Created[],
+  ): Promise<Created | undefined> => {
+    const [first] = created;
+    if (first === undefined) {
+      return undefined;
+    }
+    const inserted = await tx
+      .insert(token)
+      .values(
+        created.map(({ token: added }) => ({
+          id: added.id,
+          projectId: added.projectId,
+          name: added.name,
+          type: added.$type,
+          description: added.$description ?? null,
+          extensions: added.$extensions ?? null,
+          status: added.status,
+          createdAt: added.createdAt,
+        })),
+      )
+      .onConflictDoNothing({ target: [token.projectId, token.name] })
+      .returning();
+    const taken = created.find(({ token: added }) => !inserted.some(({ id }) => id === added.id));
+    if (taken !== undefined) {
+      return taken;
+    }
+    const written = await insertValues(tx, {
+      newId,
+      valuesOf: created.map(({ token: added, values }) => ({ tokenId: added.id, values })),
+    });
+    await meter.add(first.token.projectId, [...inserted, ...written]);
+    return undefined;
+  };
+
 export const postgresTokenWriter = (
   tx: Queryable,
   { newId, meter }: { readonly newId: () => string; readonly meter: StorageMeter },
-): TokenWriter => ({
-  create: async (added, values) => {
-    const inserted = await tx
-      .insert(token)
-      .values({
-        id: added.id,
-        projectId: added.projectId,
-        name: added.name,
-        type: added.$type,
-        description: added.$description ?? null,
-        extensions: added.$extensions ?? null,
-        status: added.status,
-        createdAt: added.createdAt,
-      })
-      .onConflictDoNothing({ target: [token.projectId, token.name] })
-      .returning();
-    if (inserted.length === 0) {
-      return "name_taken";
-    }
-    const written = await insertValues(tx, { newId, tokenId: added.id, values });
-    await meter.add(added.projectId, [...inserted, ...written]);
-    return "created";
-  },
-  replace: async (replaced, values) => {
-    const [before] = await tx
-      .select()
-      .from(token)
-      .where(and(eq(token.projectId, replaced.projectId), eq(token.name, replaced.name)));
-    if (before === undefined) {
-      return;
-    }
-    const updated = await tx
-      .update(token)
-      .set({
-        description: replaced.$description ?? null,
-        extensions: replaced.$extensions ?? null,
-      })
-      .where(eq(token.id, before.id))
-      .returning();
-    const removedReferences = await tx
-      .select({ row: tokenValueReference })
-      .from(tokenValueReference)
-      .innerJoin(tokenValue, eq(tokenValue.id, tokenValueReference.tokenValueId))
-      .where(eq(tokenValue.tokenId, before.id));
-    const removedValues = await tx
-      .delete(tokenValue)
-      .where(eq(tokenValue.tokenId, before.id))
-      .returning();
-    const written = await insertValues(tx, { newId, tokenId: before.id, values });
-    await meter.remove(replaced.projectId, [
-      before,
-      ...removedValues,
-      ...removedReferences.map(({ row }) => row),
-    ]);
-    await meter.add(replaced.projectId, [...updated, ...written]);
-  },
-});
+): TokenWriter => {
+  const createAll = createAllOn(tx, { newId, meter });
+  return {
+    createAll,
+    create: async (added, values) =>
+      (await createAll([{ token: added, values }])) === undefined ? "created" : "name_taken",
+    replace: async (replaced, values) => {
+      const [before] = await tx
+        .select()
+        .from(token)
+        .where(and(eq(token.projectId, replaced.projectId), eq(token.name, replaced.name)));
+      if (before === undefined) {
+        return;
+      }
+      const updated = await tx
+        .update(token)
+        .set({
+          description: replaced.$description ?? null,
+          extensions: replaced.$extensions ?? null,
+        })
+        .where(eq(token.id, before.id))
+        .returning();
+      const removedReferences = await tx
+        .select({ row: tokenValueReference })
+        .from(tokenValueReference)
+        .innerJoin(tokenValue, eq(tokenValue.id, tokenValueReference.tokenValueId))
+        .where(eq(tokenValue.tokenId, before.id));
+      const removedValues = await tx
+        .delete(tokenValue)
+        .where(eq(tokenValue.tokenId, before.id))
+        .returning();
+      const written = await insertValues(tx, {
+        newId,
+        valuesOf: [{ tokenId: before.id, values }],
+      });
+      await meter.remove(replaced.projectId, [
+        before,
+        ...removedValues,
+        ...removedReferences.map(({ row }) => row),
+      ]);
+      await meter.add(replaced.projectId, [...updated, ...written]);
+    },
+  };
+};
 
 export const postgresTokenUnitOfWork = ({
   db,

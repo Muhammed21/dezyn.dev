@@ -21,14 +21,25 @@ export type CheckTokens = (written: {
 
 export type ValidatedTokenFailure = TokenCheckFailure | { readonly code: "name_taken" };
 
-export type ValidatedToken = {
-  readonly projectId: string;
+export type ValidatedWrite = {
+  readonly kind: "create" | "update";
   readonly token: TokenDefinition;
+};
+
+export type ValidatedTokens<Write extends ValidatedWrite> = {
+  readonly projectId: string;
+  readonly writes: readonly Write[];
   readonly pending: readonly WrittenToken[];
   readonly createdAt: Date;
 };
 
+export type FailedWrite<Write extends ValidatedWrite> = {
+  readonly write: Write;
+  readonly failure: ValidatedTokenFailure;
+};
+
 export interface ValidatedTokenWriter {
-  create(validated: ValidatedToken): Promise<ValidatedTokenFailure | undefined>;
-  replace(validated: ValidatedToken): Promise<ValidatedTokenFailure | undefined>;
+  write<Write extends ValidatedWrite>(
+    validated: ValidatedTokens<Write>,
+  ): Promise<FailedWrite<Write> | undefined>;
 }

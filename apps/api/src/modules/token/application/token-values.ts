@@ -30,8 +30,13 @@ export type ModeValue = {
   readonly fieldReferences: readonly FieldReference[];
 };
 
+export type CreatedToken = { readonly token: Token; readonly values: readonly ModeValue[] };
+
 export interface TokenWriter {
   create(token: Token, values: readonly ModeValue[]): Promise<"created" | "name_taken">;
+  createAll<Created extends CreatedToken>(
+    created: readonly Created[],
+  ): Promise<Created | undefined>;
   replace(
     token: TokenDefinition & { readonly projectId: string },
     values: readonly ModeValue[],

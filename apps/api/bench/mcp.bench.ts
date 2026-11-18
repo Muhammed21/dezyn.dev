@@ -1,6 +1,11 @@
 import { bench, describe } from "vitest";
 
-import { callMcp, type IdentityApp, startIdentityApp } from "#testing/authorization-flow.ts";
+import {
+  BASE_URL,
+  callMcp,
+  type IdentityApp,
+  startIdentityApp,
+} from "#testing/authorization-flow.ts";
 import { seedProject } from "#testing/project-fixtures.ts";
 import { addToken, makeColorToken } from "#testing/token-fixtures.ts";
 
@@ -55,6 +60,18 @@ const callTool = async (
   if (response.status !== 200 || body.result === undefined || body.result.isError === true) {
     throw new Error(`${name} a échoué : ${JSON.stringify(body)}`);
   }
+  return body.result.structuredContent;
+};
+
+const validateBatch = async ({ opened, accessToken }: OpenProject, batchId: string) => {
+  const response = await opened.app.request(`${BASE_URL}/v1/proposal-batches/${batchId}/validate`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json" },
+    body: JSON.stringify({ rejected: [] }),
+  });
+  if (response.status !== 200) {
+    throw new Error(`La validation du lot a échoué : ${await response.text()}`);
+  }
 };
 
 const projectBench = (
@@ -96,5 +113,27 @@ describe(`/v1/mcp sur un projet de ${TOKEN_COUNT} tokens`, () => {
       name: "write_tokens",
       args: { projectId: project.projectId, tokens: makePaletteTokens(round * TOKEN_COUNT) },
     }),
+  );
+});
+
+describe(`/v1/proposal-batches/:id/validate sur un projet de ${TOKEN_COUNT} tokens`, () => {
+  projectBench(
+    `write_tokens, close_proposal_batch, puis validate de ${TOKEN_COUNT} créations`,
+    async (project, round) => {
+      const { batch } = await callTool(project, {
+        name: "write_tokens",
+        args: {
+          projectId: project.projectId,
+          tokens: indexes.map((index) =>
+            makeColorToken({ name: `couleur.lot${round}.${index}`, $value: makeColorOf(index) }),
+          ),
+        },
+      });
+      await callTool(project, {
+        name: "close_proposal_batch",
+        args: { projectId: project.projectId },
+      });
+      await validateBatch(project, batch.id);
+    },
   );
 });
