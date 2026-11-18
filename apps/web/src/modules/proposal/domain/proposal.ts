@@ -20,6 +20,7 @@ export type Proposal = {
   readonly status: ProposalStatus;
   readonly validated: TokenValue | undefined;
   readonly proposed: TokenValue;
+  readonly duplicates: readonly string[];
 };
 
 export type Batch = {

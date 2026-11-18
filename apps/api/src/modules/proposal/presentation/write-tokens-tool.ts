@@ -13,7 +13,7 @@ import { Uuid } from "@repo/contracts";
 import { err, type Result } from "@repo/result";
 
 import type { ProposalUseCases } from "../application/proposal-use-cases.ts";
-import type { UncheckedTokens, Written } from "../application/write-tokens.ts";
+import type { UncheckedTokens, WrittenWithDuplicates } from "../application/write-tokens.ts";
 import { WrittenTokensOutput } from "../contracts/proposal.ts";
 
 type InvalidTokens = { readonly code: "invalid_tokens"; readonly issues: readonly string[] };
@@ -45,9 +45,15 @@ const issuesOf = (failure: InvalidTokens | UncheckedTokens): readonly string[] =
 const errorTextOf = (failure: WriteFailure): string =>
   typeof failure === "string" ? RECORD_FAILURE_TEXT[failure] : issuesOf(failure).join("\n");
 
-const writtenOutputOf = ({ batch, proposals, unchanged, replaced }: Written) => ({
+const writtenOutputOf = ({ batch, proposals, unchanged, replaced }: WrittenWithDuplicates) => ({
   batch: batch === null ? null : { id: batch.id, state: batch.state },
-  proposals: proposals.map(({ id, name, kind, status }) => ({ id, name, kind, status })),
+  proposals: proposals.map(({ id, name, kind, status, duplicates }) => ({
+    id,
+    name,
+    kind,
+    status,
+    duplicates,
+  })),
   unchanged,
   replaced,
 });
@@ -62,7 +68,7 @@ export const registerWriteTokens =
       "write_tokens",
       {
         description:
-          "Propose la création ou la modification de tokens DTCG dans un projet : chaque token devient une proposition Proposée, rangée dans le lot ouvert de l'IA, à relire par un éditeur. Un token identique à sa valeur validée ou en attente revient dans unchanged ; une nouvelle valeur remplace la proposition en attente sur le même nom et revient dans replaced. Chaque nom n'apparaît qu'une fois par appel. $extensions garde, sous une clé en notation de domaine inversé (com.figma), les données d'un autre outil que dezyn n'interprète pas : une valeur de design n'y va jamais.",
+          "Propose la création ou la modification de tokens DTCG dans un projet : chaque token devient une proposition Proposée, rangée dans le lot ouvert de l'IA, à relire par un éditeur. Un token identique à sa valeur validée ou en attente revient dans unchanged ; une nouvelle valeur remplace la proposition en attente sur le même nom et revient dans replaced. Chaque nom n'apparaît qu'une fois par appel. $extensions garde, sous une clé en notation de domaine inversé (com.figma), les données d'un autre outil que dezyn n'interprète pas : une valeur de design n'y va jamais. Chaque proposition porte duplicates, les noms des tokens validés ou en attente de même type et de même valeur. Réutilise un token existant par alias ({nom.du.token}) plutôt que de recopier sa valeur ; ne crée un nouveau token que si aucun token ne porte déjà cette valeur.",
         inputSchema: { projectId: Uuid, tokens: z.array(z.unknown()).optional() },
         outputSchema: WrittenTokensOutput,
       },
@@ -74,7 +80,9 @@ export const registerWriteTokens =
           clientId: identity.clientId,
           correlationId,
           input: { tokens },
-          run: async (project): Promise<Result<Written, InvalidTokens | UncheckedTokens>> => {
+          run: async (
+            project,
+          ): Promise<Result<WrittenWithDuplicates, InvalidTokens | UncheckedTokens>> => {
             const parsed = TokensInput.safeParse(tokens);
             if (!parsed.success) {
               return err({

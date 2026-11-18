@@ -117,6 +117,7 @@ describe("l'éditeur relit les propositions de l'IA, lot par lot (ADR 0012 §1, 
             status: "proposed",
             validated: null,
             proposed: { $type: "color", $value: PRIMARY_BLUE, $description: "Fond des boutons" },
+            duplicates: [],
           },
         ],
       });

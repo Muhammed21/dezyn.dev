@@ -180,6 +180,7 @@ describe("lecture d'un lot de propositions dans l'app web (ADR 0044 §6)", () =>
             status: "proposed",
             validated: undefined,
             proposed: { $type: "color", $value: PRIMARY_BLUE },
+            duplicates: [],
           },
           {
             id: update.id,
@@ -188,10 +189,26 @@ describe("lecture d'un lot de propositions dans l'app web (ADR 0044 §6)", () =>
             status: "validated",
             validated: { $type: "color", $value: PRIMARY_BLUE },
             proposed: { $type: "color", $value: NIGHT_BLUE, $description: "Bleu nuit" },
+            duplicates: [],
           },
         ],
       }),
     );
+  });
+
+  it("donne les tokens qui portent déjà la valeur de chaque proposition", async () => {
+    const { proposals } = answering(
+      json(
+        makeLotOutput({
+          proposals: [makeProposalOutput({ duplicates: ["couleur.bleu.nuit", "couleur.bord"] })],
+        }),
+      ),
+    );
+
+    expect((await firstProposalOf(proposals))?.duplicates).toEqual([
+      "couleur.bleu.nuit",
+      "couleur.bord",
+    ]);
   });
 
   it("donne un lot sans intention", async () => {

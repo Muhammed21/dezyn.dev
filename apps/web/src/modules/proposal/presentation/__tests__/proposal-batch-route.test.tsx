@@ -64,6 +64,7 @@ const makeProposal = (overrides: Partial<Proposal> = {}): Proposal => ({
   status: "proposed",
   validated: undefined,
   proposed: { $type: "color", $value: PRIMARY_BLUE },
+  duplicates: [],
   ...overrides,
 });
 
@@ -165,6 +166,31 @@ describe("page d'un lot de propositions (ADR 0012 §1, ADR 0044 §6)", () => {
     const { screen } = await renderBatch(reading(makeBatch(overrides)));
 
     await expect.element(screen.getByText(text, { exact: true })).toBeVisible();
+  });
+
+  it("signale les tokens qui portent déjà la valeur d'une proposition", async () => {
+    const { screen } = await renderBatch(
+      reading(
+        makeBatch({
+          proposals: [makeProposal({ duplicates: ["couleur.bleu.nuit", "couleur.bord"] })],
+        }),
+      ),
+    );
+
+    await expect
+      .element(proposalItems(screen).getByText("Même valeur que couleur.bleu.nuit, couleur.bord"))
+      .toBeVisible();
+  });
+
+  it("ne signale rien pour une proposition sans doublon", async () => {
+    const { screen } = await renderBatch(reading(makeBatch()));
+
+    await expect.element(proposalItems(screen)).toBeVisible();
+    expect(
+      proposalItems(screen)
+        .getByText(/Même valeur que/)
+        .elements(),
+    ).toHaveLength(0);
   });
 
   it("liste les propositions dans l'ordre de l'API, avec leur nom, leur nature, leur statut et leurs valeurs", async () => {

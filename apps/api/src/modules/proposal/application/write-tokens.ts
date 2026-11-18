@@ -4,6 +4,7 @@ import type {
   StorageAlertDecision,
   StorageAlertSender,
 } from "#modules/space/contracts/storage-alert.ts";
+import { type ComparedToken, duplicatesOf } from "#modules/token/contracts/duplicates.ts";
 import {
   type ComparedDefinition,
   sameDefinition,
@@ -17,7 +18,7 @@ import {
 import { err, ok, type Result } from "@repo/result";
 
 import { batchExpirySignal } from "../domain/proposal-batch.ts";
-import type { Proposal, ProposalBatch } from "../domain/proposal.ts";
+import { comparedTokens, type Proposal, type ProposalBatch } from "../domain/proposal.ts";
 import { liveBatchOf } from "./proposal-batches.ts";
 
 export type Writer = {
@@ -38,6 +39,7 @@ export type Replaced = { readonly id: string; readonly name: string; readonly ba
 export interface ProposalStore {
   pendingNamesOf(projectId: string): Promise<readonly string[]>;
   pendingOf(projectId: string, names: readonly string[]): Promise<readonly Proposal[]>;
+  pendingTokensOf(projectId: string): Promise<readonly TokenDefinition[]>;
   replace(proposalIds: readonly string[]): Promise<void>;
   findOpenBatch(writer: Writer): Promise<ProposalBatch | undefined>;
   openBatchOf(candidate: ProposalBatch): Promise<ProposalBatch>;
@@ -63,6 +65,10 @@ export type Written = {
   readonly proposals: readonly Proposal[];
   readonly unchanged: readonly string[];
   readonly replaced: readonly Replaced[];
+};
+
+export type WrittenWithDuplicates = Omit<Written, "proposals"> & {
+  readonly proposals: readonly (Proposal & { readonly duplicates: readonly string[] })[];
 };
 
 export type UncheckedTokens = {
@@ -168,7 +174,7 @@ export const writeTokens =
   }: Writer & {
     readonly spaceId: string;
     readonly tokens: readonly TokenDefinition[];
-  }): Promise<Result<Written, UncheckedTokens>> => {
+  }): Promise<Result<WrittenWithDuplicates, UncheckedTokens>> => {
     const outcome = await unitOfWork.run(
       async ({ store, storageAlert, project, checkTokens, validatedTokensOf }) => {
         await project.write(writer.projectId);
@@ -187,14 +193,25 @@ export const writeTokens =
           return err(refused);
         }
         const createdAt = now();
+        const written = await proposeTokens(store, {
+          ...writer,
+          tokens,
+          validated,
+          createdAt,
+          newId,
+        });
+        const among = comparedTokens<ComparedToken>({
+          validated,
+          pending: await store.pendingTokensOf(writer.projectId),
+        });
         return ok({
-          written: await proposeTokens(store, {
-            ...writer,
-            tokens,
-            validated,
-            createdAt,
-            newId,
-          }),
+          written: {
+            ...written,
+            proposals: written.proposals.map((proposal) => ({
+              ...proposal,
+              duplicates: duplicatesOf({ token: proposal.token, among }),
+            })),
+          },
           alert: await storageAlert(spaceId),
           createdAt,
         });

@@ -58,13 +58,22 @@ const batchSummaryOf = ({ id, intent, state, toReview }: BatchSummaryOutput): Ba
   toReview,
 });
 
-const proposalOf = ({ id, name, kind, status, validated, proposed }: ProposalOutput): Proposal => ({
+const proposalOf = ({
+  id,
+  name,
+  kind,
+  status,
+  validated,
+  proposed,
+  duplicates,
+}: ProposalOutput): Proposal => ({
   id,
   name,
   kind: kindOf(kind),
   status: statusOf(status),
   validated: validated ?? undefined,
   proposed,
+  duplicates: duplicates ?? [],
 });
 
 const read = async <Body>(

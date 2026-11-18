@@ -126,6 +126,14 @@ export const postgresProposalStore = (
       .for("update", { of: proposal });
     return rows.map((row) => proposalOf(row.proposal));
   },
+  pendingTokensOf: async (projectId) =>
+    (
+      await tx
+        .select({ payload: proposal.payload })
+        .from(proposal)
+        .innerJoin(proposalBatch, eq(proposalBatch.id, proposal.batchId))
+        .where(and(eq(proposalBatch.projectId, projectId), eq(proposal.status, "proposed")))
+    ).map(({ payload }) => TokenDefinitionInput.parse(payload)),
   replace: async (proposalIds) => {
     const before = await tx
       .select()

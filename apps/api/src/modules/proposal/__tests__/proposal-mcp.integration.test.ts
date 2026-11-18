@@ -47,8 +47,20 @@ describe("une écriture de l'IA est une proposition, rangée dans un lot (ADR 00
       expect(result.structuredContent).toEqual({
         batch: { id: expect.any(String), state: "open" },
         proposals: [
-          { id: expect.any(String), name: "couleur.bleu.500", kind: "create", status: "proposed" },
-          { id: expect.any(String), name: "couleur.bleu.700", kind: "create", status: "proposed" },
+          {
+            id: expect.any(String),
+            name: "couleur.bleu.500",
+            kind: "create",
+            status: "proposed",
+            duplicates: ["couleur.bleu.700"],
+          },
+          {
+            id: expect.any(String),
+            name: "couleur.bleu.700",
+            kind: "create",
+            status: "proposed",
+            duplicates: ["couleur.bleu.500"],
+          },
         ],
         unchanged: [],
         replaced: [],
@@ -318,7 +330,7 @@ describe("write_tokens s'annonce à l'IA", () => {
             expect.objectContaining({
               name: "write_tokens",
               description:
-                "Propose la création ou la modification de tokens DTCG dans un projet : chaque token devient une proposition Proposée, rangée dans le lot ouvert de l'IA, à relire par un éditeur. Un token identique à sa valeur validée ou en attente revient dans unchanged ; une nouvelle valeur remplace la proposition en attente sur le même nom et revient dans replaced. Chaque nom n'apparaît qu'une fois par appel. $extensions garde, sous une clé en notation de domaine inversé (com.figma), les données d'un autre outil que dezyn n'interprète pas : une valeur de design n'y va jamais.",
+                "Propose la création ou la modification de tokens DTCG dans un projet : chaque token devient une proposition Proposée, rangée dans le lot ouvert de l'IA, à relire par un éditeur. Un token identique à sa valeur validée ou en attente revient dans unchanged ; une nouvelle valeur remplace la proposition en attente sur le même nom et revient dans replaced. Chaque nom n'apparaît qu'une fois par appel. $extensions garde, sous une clé en notation de domaine inversé (com.figma), les données d'un autre outil que dezyn n'interprète pas : une valeur de design n'y va jamais. Chaque proposition porte duplicates, les noms des tokens validés ou en attente de même type et de même valeur. Réutilise un token existant par alias ({nom.du.token}) plutôt que de recopier sa valeur ; ne crée un nouveau token que si aucun token ne porte déjà cette valeur.",
               inputSchema: expect.objectContaining({
                 required: ["projectId"],
                 properties: expect.objectContaining({ tokens: expect.anything() }),

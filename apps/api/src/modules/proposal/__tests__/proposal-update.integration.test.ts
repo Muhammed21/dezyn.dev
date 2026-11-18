@@ -62,6 +62,7 @@ describe("l'IA propose la modification d'un token validé (ADR 0012 §3)", () =>
             name: "couleur.fond.primaire",
             kind: "update",
             status: "proposed",
+            duplicates: [],
           },
         ],
         unchanged: [],
@@ -101,6 +102,7 @@ describe("l'IA propose la modification d'un token validé (ADR 0012 §3)", () =>
           status: "proposed",
           validated: { $type: "color", $value: PRIMARY_BLUE },
           proposed: { $type: "color", $value: NIGHT_BLUE, $description: "Fond sombre" },
+          duplicates: ["couleur.bleu.500"],
         },
       ]);
     }));
