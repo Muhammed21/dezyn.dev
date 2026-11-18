@@ -85,7 +85,11 @@ const appRouter = ({
           subscribe: projectEvents.subscribe,
         }),
       }),
-      projectHistoryRoute({ parent: root, readHistory: projectHistory.readHistory }),
+      projectHistoryRoute({
+        parent: root,
+        readHistory: projectHistory.readHistory,
+        subscribe: projectEvents.subscribe,
+      }),
       proposalBatchRoute({
         parent: root,
         readBatch: proposals.readBatch,

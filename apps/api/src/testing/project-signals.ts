@@ -13,12 +13,15 @@ const pendingCountOf = async (db: PostgresDatabase) => {
   return rows[0]?.count;
 };
 
-export const makeSignalRecorder = () => {
+export const makeProposalSignalRecorder = () => {
   const state: { db?: PostgresDatabase; received: RecordedSignal[] } = { received: [] };
   return {
     state,
     signals: {
       changed: async (signal: Signal) => {
+        if (!signal.topics.includes("proposals")) {
+          return;
+        }
         state.received.push({
           ...signal,
           pending: state.db === undefined ? undefined : await pendingCountOf(state.db),

@@ -1,11 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 
-export type SubscribeToProject = (subscription: {
-  readonly projectId: string;
-  readonly onTopics: (topics: readonly string[]) => void;
-  readonly onResync: () => void;
-}) => () => void;
+import { followTopic, type SubscribeToProject } from "../../../platform/project-signals.ts";
 
 export const useProposalSignals = ({
   subscribe,
@@ -22,17 +18,13 @@ export const useProposalSignals = ({
     if (projectId === undefined) {
       return undefined;
     }
-    const refetch = () => {
-      void queryClient.invalidateQueries({ queryKey: [scope, id] });
-    };
-    return subscribe({
+    return followTopic({
+      subscribe,
       projectId,
-      onTopics: (topics) => {
-        if (topics.includes("proposals")) {
-          refetch();
-        }
+      topic: "proposals",
+      refetch: () => {
+        void queryClient.invalidateQueries({ queryKey: [scope, id] });
       },
-      onResync: refetch,
     });
   }, [subscribe, projectId, queryClient, scope, id]);
 };

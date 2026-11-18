@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import type { PostgresDatabase, PostgresTransaction } from "#db";
+import type { ProjectSignals } from "#modules/project/contracts/project-signals.ts";
 import type { StorageMeter } from "#modules/project/contracts/storage-meter.ts";
 import type { ProjectAccess } from "#modules/space/contracts/membership.ts";
 import type { LogSink } from "#platform/logging.ts";
@@ -54,15 +55,18 @@ export const historyModule = ({
   db,
   access,
   writerOn,
+  signals,
 }: {
   readonly db: PostgresDatabase;
   readonly access: ProjectAccess;
   readonly writerOn: (tx: PostgresTransaction) => HistoryWriter;
+  readonly signals: ProjectSignals;
 }) => ({
   readHistory: readHistory({ access, history: postgresHistoryReader(db) }),
   recordProjectCall: recordProjectCall({
     access,
     history: { append: (entries) => db.orm.transaction((tx) => writerOn(tx).append(entries)) },
+    signals,
     now,
   }),
 });

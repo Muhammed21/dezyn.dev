@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import type { Result } from "@repo/result";
 
+import type { SubscribeToProject } from "../../../platform/project-signals.ts";
 import type {
   Batch,
   BatchState,
@@ -17,7 +18,7 @@ import type {
   ReviewFailure,
   ValidatedBatch,
 } from "../domain/proposal.ts";
-import { type SubscribeToProject, useProposalSignals } from "./proposal-signals.ts";
+import { useProposalSignals } from "./proposal-signals.ts";
 
 type ReadBatch = (batch: { readonly batchId: string }) => Promise<Result<Batch, ProposalFailure>>;
 

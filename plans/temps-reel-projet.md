@@ -46,22 +46,28 @@ La classe du Durable Object se teste dans workerd avec `@cloudflare/vitest-plugi
 - **Cookie sur la poignée de main WebSocket** : `app.dezyn.dev` et `api.dezyn.dev` sont le même site, le cookie `SameSite=Lax` part. Le contrôle de l'origine reste obligatoire contre le détournement de WebSocket entre sites.
 - **Un membre retiré** garde sa connexion jusqu'à la prochaine coupure. Il ne reçoit que des sujets sans données, et chaque relecture lui répond 404. Accepté pour la story 1.
 
-## Story 4 : les autres sources de propositions apparaissent
+## Story 5 : l'historique avance en direct
 
-Avant le code : `tdd`, `testing`, `mutation-testing`, `refactoring`.
+Avant le code : `tdd`, `testing`, `mutation-testing`, `refactoring`, `react-testing`.
 
-**Valeur** : la liste des lots et la page d'un lot suivent toutes les propositions, pas seulement celles de `write_tokens`.
-**Chemin** : `declareFigmaStates`, `addToken` et `importTokens` appellent `ProjectSignals.changed` avec `proposals` après leur commit, quand ils ont écrit ou remplacé une proposition.
+**Valeur** : « je vois l'IA travailler » (synthèse, L15) : la page d'historique montre chaque appel de l'IA et chaque action d'un membre sans recharger.
+
+### Tranche 5.1 : les appels de l'IA apparaissent dans l'historique
+
+**Chemin** : `recordProjectCall` écrit l'entrée `mcp.<outil>`, puis appelle `ProjectSignals.changed` avec `history` → le Durable Object diffuse → la page d'historique relit `["history", projectId]`.
 **Critères** :
 
-- `declare_figma_states` signale `proposals` une fois, après le commit, quand il écrit au moins une proposition. Sans proposition écrite, ou s'il est refusé, il ne signale rien.
-- Ajouter un token qui remplace une proposition en attente signale `proposals` une fois, après le commit. Sans remplacement, ou s'il est refusé, rien n'est signalé.
-- Un import qui remplace au moins une proposition signale `proposals` une seule fois. Sans remplacement, ou s'il est refusé, il ne signale rien.
-- Un signal qui échoue est journalisé, et la réponse reste la même.
+- Après chaque appel MCP sur un projet, une fois l'entrée écrite, `history` est signalé pour ce projet, que l'outil réussisse ou échoue. Si l'historique ne s'écrit pas (`history_unavailable`), aucun signal ne part.
+- La page d'historique s'abonne au projet de l'adresse. Un signal `history` la relit ; un signal d'un autre sujet ne relit rien.
+- Après une coupure, la réouverture de la WebSocket relit l'historique, sans signal.
+- Quitter la page ferme l'abonnement.
+- Un signal qui échoue est journalisé, et la réponse de l'outil reste la même.
 
-**Reporte** : le sujet `tokens` après un ajout ou un import (story 6).
+### Tranche 5.2 : les actions des membres apparaissent dans l'historique
 
-**RED** : tests d'intégration avec l'enregistreur de signaux partagé (`src/testing/project-signals.ts`).
+**Critères** : l'ajout, l'import, la validation et le rejet signalent `history` après le commit, avec `proposals` quand ils le signalent déjà.
+
+**Reporte** : la création d'un projet, dont personne ne regarde encore l'historique ; la pagination en direct.
 
 ---
 

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { LogRecord } from "#platform/logging.ts";
 import { type App, BASE_URL, callMcp, withIdentityApp } from "#testing/authorization-flow.ts";
 import { seedProject } from "#testing/project-fixtures.ts";
-import { makeSignalRecorder } from "#testing/project-signals.ts";
+import { makeProposalSignalRecorder } from "#testing/project-signals.ts";
 import { addToken, makeColorToken } from "#testing/token-fixtures.ts";
 
 const NIGHT_BLUE = { colorSpace: "srgb", components: [0.1, 0.2, 0.4] };
@@ -62,7 +62,7 @@ const color = (value: unknown) => ({ $type: "color", $value: value });
 
 describe("declare_figma_states signale les propositions qu'il écrit (ADR 0046)", () => {
   it("une divergence proposée signale proposals une fois, après le commit", () => {
-    const recorder = makeSignalRecorder();
+    const recorder = makeProposalSignalRecorder();
     return withIdentityApp(
       async (app, db) => {
         recorder.state.db = db;
@@ -81,7 +81,7 @@ describe("declare_figma_states signale les propositions qu'il écrit (ADR 0046)"
   });
 
   it("une déclaration sans proposition ne signale rien", () => {
-    const recorder = makeSignalRecorder();
+    const recorder = makeProposalSignalRecorder();
     return withIdentityApp(
       async (app, db) => {
         const seeded = await seedProject(app, db);
@@ -100,7 +100,7 @@ describe("declare_figma_states signale les propositions qu'il écrit (ADR 0046)"
   });
 
   it("relire la valeur Figma déjà proposée ne signale rien de plus", () => {
-    const recorder = makeSignalRecorder();
+    const recorder = makeProposalSignalRecorder();
     return withIdentityApp(
       async (app, db) => {
         const seeded = await seedProject(app, db);
@@ -118,7 +118,7 @@ describe("declare_figma_states signale les propositions qu'il écrit (ADR 0046)"
   });
 
   it("une déclaration refusée ne signale rien", () => {
-    const recorder = makeSignalRecorder();
+    const recorder = makeProposalSignalRecorder();
     return withIdentityApp(
       async (app, db) => {
         const seeded = await seedProject(app, db);
@@ -135,7 +135,7 @@ describe("declare_figma_states signale les propositions qu'il écrit (ADR 0046)"
 
 describe("ajouter un token qui remplace une proposition la signale (ADR 0046)", () => {
   it("l'ajout qui remplace une proposition en attente signale proposals une fois, après le commit", () => {
-    const recorder = makeSignalRecorder();
+    const recorder = makeProposalSignalRecorder();
     return withIdentityApp(
       async (app, db) => {
         recorder.state.db = db;
@@ -155,7 +155,7 @@ describe("ajouter un token qui remplace une proposition la signale (ADR 0046)", 
   });
 
   it("l'ajout sans proposition à remplacer ne signale rien", () => {
-    const recorder = makeSignalRecorder();
+    const recorder = makeProposalSignalRecorder();
     return withIdentityApp(
       async (app, db) => {
         const seeded = await seedProject(app, db);
@@ -172,7 +172,7 @@ describe("ajouter un token qui remplace une proposition la signale (ADR 0046)", 
   });
 
   it("un ajout refusé ne signale rien", () => {
-    const recorder = makeSignalRecorder();
+    const recorder = makeProposalSignalRecorder();
     return withIdentityApp(
       async (app, db) => {
         const seeded = await seedProject(app, db);
@@ -225,7 +225,7 @@ describe("ajouter un token qui remplace une proposition la signale (ADR 0046)", 
 
 describe("un import qui remplace des propositions les signale (ADR 0046)", () => {
   it("un import qui remplace deux propositions signale proposals une seule fois, après le commit", () => {
-    const recorder = makeSignalRecorder();
+    const recorder = makeProposalSignalRecorder();
     return withIdentityApp(
       async (app, db) => {
         recorder.state.db = db;
@@ -248,7 +248,7 @@ describe("un import qui remplace des propositions les signale (ADR 0046)", () =>
   });
 
   it("un import sans remplacement ne signale rien", () => {
-    const recorder = makeSignalRecorder();
+    const recorder = makeProposalSignalRecorder();
     return withIdentityApp(
       async (app, db) => {
         const seeded = await seedProject(app, db);
@@ -268,7 +268,7 @@ describe("un import qui remplace des propositions les signale (ADR 0046)", () =>
   });
 
   it("un import refusé ne signale rien", () => {
-    const recorder = makeSignalRecorder();
+    const recorder = makeProposalSignalRecorder();
     return withIdentityApp(
       async (app, db) => {
         const seeded = await seedProject(app, db);
