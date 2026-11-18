@@ -24,11 +24,13 @@ export class ProjectRoom extends DurableObject {
   async changed(topics: readonly string[]): Promise<void> {
     const now = Date.now();
     const lastSentAt = (await this.ctx.storage.get<number>("lastSentAt")) ?? 0;
+    const pending = (await this.ctx.storage.get<readonly string[]>("pending")) ?? [];
     if (now - lastSentAt >= SIGNAL_INTERVAL_MS) {
-      await this.send(topics, now);
+      await this.ctx.storage.delete("pending");
+      await this.ctx.storage.deleteAlarm();
+      await this.send(merged(pending, topics), now);
       return;
     }
-    const pending = (await this.ctx.storage.get<readonly string[]>("pending")) ?? [];
     await this.ctx.storage.put("pending", merged(pending, topics));
     await this.ctx.storage.setAlarm(lastSentAt + SIGNAL_INTERVAL_MS);
   }

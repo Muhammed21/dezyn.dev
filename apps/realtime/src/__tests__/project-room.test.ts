@@ -1,4 +1,4 @@
-import { evictDurableObject, runDurableObjectAlarm } from "cloudflare:test";
+import { evictDurableObject, runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { describe, expect, it, vi } from "vitest";
 
@@ -158,6 +158,37 @@ describe("le Durable Object d'un projet envoie au plus un signal par seconde", (
         PROPOSALS_CHANGED,
         changedSignal(["history"]),
         changedSignal(["tokens"]),
+      ]),
+    );
+  });
+
+  it("une alarme en retard n'est pas doublée par un envoi immédiat : l'envoi emporte l'attente", async () => {
+    const projectId = crypto.randomUUID();
+    const room = env.PROJECT_ROOMS.getByName(projectId);
+    const connection = await connect(projectId);
+    await room.changed(["proposals"]);
+    await room.changed(["history"]);
+    await runInDurableObject(room, (_instance, state) =>
+      state.storage.setAlarm(Date.now() + 60_000),
+    );
+    await pause(1100);
+
+    await room.changed(["tokens"]);
+
+    await vi.waitFor(() =>
+      expect(connection.received).toEqual([
+        PROPOSALS_CHANGED,
+        changedSignal(["history", "tokens"]),
+      ]),
+    );
+    expect(await runDurableObjectAlarm(room)).toBe(false);
+    await room.changed(["proposals"]);
+    await runDurableObjectAlarm(room);
+    await vi.waitFor(() =>
+      expect(connection.received).toEqual([
+        PROPOSALS_CHANGED,
+        changedSignal(["history", "tokens"]),
+        PROPOSALS_CHANGED,
       ]),
     );
   });
