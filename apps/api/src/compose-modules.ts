@@ -1,7 +1,13 @@
 import type { PostgresDatabase, PostgresTransaction } from "#db";
 import type { HistoryWriter } from "#modules/history/contracts/history-writer.ts";
 import { historyModule, historyWriterOn } from "#modules/history/history-module.ts";
-import { projectLockOn, projectModule, storageMeterOn } from "#modules/project/project-module.ts";
+import type { ProjectSignals } from "#modules/project/contracts/project-signals.ts";
+import {
+  bestEffortSignals,
+  projectLockOn,
+  projectModule,
+  storageMeterOn,
+} from "#modules/project/project-module.ts";
 import {
   proposalModule,
   proposalReplacerOn,
@@ -26,6 +32,7 @@ export const composeModules = ({
   log,
   wrapHistoryWriter = (writer) => writer,
   clock = () => new Date(),
+  signals = { changed: async () => undefined },
 }: {
   readonly db: PostgresDatabase;
   readonly mailer: Mailer;
@@ -33,6 +40,7 @@ export const composeModules = ({
   readonly log: LogSink;
   readonly wrapHistoryWriter?: (writer: HistoryWriter) => HistoryWriter;
   readonly clock?: Clock;
+  readonly signals?: ProjectSignals;
 }) => {
   const spaces = spaceModule({ db, mailer, webUrl, log });
   const writerOn = (tx: PostgresTransaction) =>
@@ -73,6 +81,7 @@ export const composeModules = ({
     storageMeterOn,
     storageAlertOn: spaces.storageAlertOn,
     sendStorageAlert: spaces.sendStorageAlert,
+    signals: bestEffortSignals(signals, log),
     clock,
   });
   return { spaces, projects, history, tokens, proposals };

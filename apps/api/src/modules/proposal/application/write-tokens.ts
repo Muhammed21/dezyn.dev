@@ -1,4 +1,5 @@
 import type { ProjectLock } from "#modules/project/contracts/project-lock.ts";
+import type { ProjectSignals } from "#modules/project/contracts/project-signals.ts";
 import type {
   StorageAlertDecision,
   StorageAlertSender,
@@ -149,11 +150,13 @@ export const writeTokens =
   ({
     unitOfWork,
     sendStorageAlert,
+    signals,
     newId,
     now,
   }: {
     readonly unitOfWork: ProposalUnitOfWork;
     readonly sendStorageAlert: StorageAlertSender;
+    readonly signals: ProjectSignals;
     readonly newId: () => string;
     readonly now: () => Date;
   }) =>
@@ -200,5 +203,6 @@ export const writeTokens =
     if (outcome.value.alert !== undefined) {
       await sendStorageAlert(outcome.value.alert);
     }
+    await signals.changed({ projectId: writer.projectId, topics: ["proposals"] });
     return ok(outcome.value.written);
   };
