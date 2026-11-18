@@ -65,12 +65,13 @@ export const composeModules = ({
   });
   const access = spaces.projectAccess(projectsOnly.finder);
   const projects = { ...projectsOnly, subscribeToProject: subscribeToProject({ access, channel }) };
+  const projectSignals = bestEffortSignals(signals, log);
   const history = historyModule({
     db,
     access,
     writerOn,
+    signals: projectSignals,
   });
-  const projectSignals = bestEffortSignals(signals, log);
   const tokens = tokenModule({
     db,
     access,

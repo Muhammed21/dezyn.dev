@@ -11,6 +11,7 @@ import { render } from "vitest-browser-react";
 
 import { err, ok, type Result } from "@repo/result";
 
+import { makeProjectEvents } from "../../../../testing/project-events.ts";
 import type { HistoryEntry, HistoryFailure, HistoryPage } from "../../domain/history.ts";
 import { projectHistoryRoute } from "../project-history-route.tsx";
 
@@ -41,7 +42,9 @@ const reading =
 
 const renderProjectHistory = (
   readHistory: ReadHistory,
+  events: ReturnType<typeof makeProjectEvents> = makeProjectEvents(),
   history = createMemoryHistory({ initialEntries: [`/projets/${PROJECT_ID}/historique`] }),
+  queryClient = new QueryClient(),
 ) => {
   const root = createRootRoute();
   const signIn = createRoute({
@@ -50,11 +53,14 @@ const renderProjectHistory = (
     component: () => <p>Page de connexion</p>,
   });
   const router = createRouter({
-    routeTree: root.addChildren([projectHistoryRoute({ parent: root, readHistory }), signIn]),
+    routeTree: root.addChildren([
+      projectHistoryRoute({ parent: root, readHistory, subscribe: events.subscribe }),
+      signIn,
+    ]),
     history,
   });
   return render(
-    <QueryClientProvider client={new QueryClient()}>
+    <QueryClientProvider client={queryClient}>
       <RouterProvider router={router} />
     </QueryClientProvider>,
   );
@@ -186,6 +192,7 @@ describe("page de l'historique d'un projet (ADR 0044 §6)", () => {
             makeEntry({ action: projectId === PROJECT_ID ? "project.created" : "token.created" }),
           ],
         })({ projectId }),
+      makeProjectEvents(),
       history,
     );
     await expect.element(entryItems(screen).nth(0)).toHaveTextContent("Projet créé");
@@ -330,5 +337,97 @@ describe("entrées plus anciennes de l'historique (ADR 0044 §6)", () => {
     await olderButton(screen).click();
 
     await expect.element(screen.getByText("Page de connexion")).toBeVisible();
+  });
+});
+
+const changingHistory = (initial: readonly HistoryEntry[]) => {
+  const state = { entries: initial };
+  const readHistory: ReadHistory = () =>
+    Promise.resolve(ok({ entries: state.entries, purgedBefore: undefined, nextCursor: undefined }));
+  return { state, readHistory };
+};
+
+const WRITTEN_BY_AI = makeEntry({
+  id: "6c8f3c1e-7b3d-4e8a-9f10-2c5d6e7f8a9b",
+  action: "mcp.write_tokens",
+});
+
+describe("l'historique d'un projet avance en direct (ADR 0046)", () => {
+  it("un signal history relit l'historique, et la nouvelle entrée apparaît", async () => {
+    const events = makeProjectEvents();
+    const { state, readHistory } = changingHistory([makeEntry()]);
+    const screen = await renderProjectHistory(readHistory, events);
+    await expect.element(entryItems(screen).nth(0)).toHaveTextContent("Projet créé");
+
+    state.entries = [WRITTEN_BY_AI, makeEntry()];
+    events.emit(PROJECT_ID, ["history"]);
+
+    await expect.element(entryItems(screen).nth(0)).toHaveTextContent("Tokens écrits par l'IA");
+  });
+
+  it("un signal d'un autre sujet ne relit rien", async () => {
+    const events = makeProjectEvents();
+    const reads: string[] = [];
+    const screen = await renderProjectHistory(({ projectId }) => {
+      reads.push(projectId);
+      return reading()({ projectId });
+    }, events);
+    await expect.element(entryItems(screen).nth(0)).toBeVisible();
+
+    events.emit(PROJECT_ID, ["proposals"]);
+    events.emit(PROJECT_ID, ["history"]);
+
+    await expect.poll(() => reads).toEqual([PROJECT_ID, PROJECT_ID]);
+  });
+
+  it("après une coupure, la réouverture relit l'historique, sans signal", async () => {
+    const events = makeProjectEvents();
+    const { state, readHistory } = changingHistory([makeEntry()]);
+    const screen = await renderProjectHistory(readHistory, events);
+    await expect.element(entryItems(screen).nth(0)).toHaveTextContent("Projet créé");
+
+    state.entries = [WRITTEN_BY_AI, makeEntry()];
+    events.resync(PROJECT_ID);
+
+    await expect.element(entryItems(screen).nth(0)).toHaveTextContent("Tokens écrits par l'IA");
+  });
+
+  it("un signal history ne relit que l'historique, pas les autres données du projet", async () => {
+    const events = makeProjectEvents();
+    const queryClient = new QueryClient();
+    const tokensKey = ["tokens", PROJECT_ID];
+    queryClient.setQueryData(tokensKey, { tokens: [] });
+    const screen = await renderProjectHistory(reading(), events, undefined, queryClient);
+    await expect.element(entryItems(screen).nth(0)).toBeVisible();
+
+    events.emit(PROJECT_ID, ["history"]);
+
+    await expect
+      .poll(() => queryClient.getQueryState(["history", PROJECT_ID])?.dataUpdateCount)
+      .toBe(2);
+    expect(queryClient.getQueryState(tokensKey)?.isInvalidated).toBe(false);
+  });
+
+  it("passer à un autre projet déplace l'abonnement sur ce projet", async () => {
+    const events = makeProjectEvents();
+    const otherProjectId = "9d8f3c1e-7b3d-4e8a-9f10-2c5d6e7f8a9b";
+    const history = createMemoryHistory({ initialEntries: [`/projets/${PROJECT_ID}/historique`] });
+    const screen = await renderProjectHistory(reading(), events, history);
+    await expect.element(entryItems(screen).nth(0)).toBeVisible();
+
+    history.push(`/projets/${otherProjectId}/historique`);
+
+    await expect.poll(() => events.subscribedProjects()).toEqual([otherProjectId]);
+  });
+
+  it("s'abonne au projet de l'adresse, et quitter la page ferme l'abonnement", async () => {
+    const events = makeProjectEvents();
+    const screen = await renderProjectHistory(reading(), events);
+    await expect.element(entryItems(screen).nth(0)).toBeVisible();
+    expect(events.subscribedProjects()).toEqual([PROJECT_ID]);
+
+    await screen.unmount();
+
+    expect(events.subscribedProjects()).toEqual([]);
   });
 });

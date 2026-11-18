@@ -3,8 +3,9 @@ import { Link, Navigate } from "@tanstack/react-router";
 
 import type { Result } from "@repo/result";
 
+import type { SubscribeToProject } from "../../../platform/project-signals.ts";
 import type { BatchState, BatchSummary, ProposalFailure } from "../domain/proposal.ts";
-import { type SubscribeToProject, useProposalSignals } from "./proposal-signals.ts";
+import { useProposalSignals } from "./proposal-signals.ts";
 
 type ListBatches = (project: {
   readonly projectId: string;

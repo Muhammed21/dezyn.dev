@@ -1,8 +1,10 @@
-import { type InfiniteData, useInfiniteQuery } from "@tanstack/react-query";
+import { type InfiniteData, useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { type AnyRootRoute, createRoute, Navigate } from "@tanstack/react-router";
+import { useEffect } from "react";
 
 import type { Result } from "@repo/result";
 
+import { followTopic, type SubscribeToProject } from "../../../platform/project-signals.ts";
 import type {
   HistoryAuthor,
   HistoryEntry,
@@ -59,10 +61,25 @@ const Entry = ({ entry }: { readonly entry: HistoryEntry }) => (
 const ProjectHistory = ({
   projectId,
   readHistory,
+  subscribe,
 }: {
   readonly projectId: string;
   readonly readHistory: ReadHistory;
+  readonly subscribe: SubscribeToProject;
 }) => {
+  const queryClient = useQueryClient();
+  useEffect(
+    () =>
+      followTopic({
+        subscribe,
+        projectId,
+        topic: "history",
+        refetch: () => {
+          void queryClient.invalidateQueries({ queryKey: ["history", projectId] });
+        },
+      }),
+    [subscribe, projectId, queryClient],
+  );
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery<
     HistoryReading,
     Error,
@@ -119,16 +136,20 @@ const ProjectHistory = ({
 export const projectHistoryRoute = ({
   parent,
   readHistory,
+  subscribe,
 }: {
   readonly parent: AnyRootRoute;
   readonly readHistory: ReadHistory;
+  readonly subscribe: SubscribeToProject;
 }) => {
   const route = createRoute({
     getParentRoute: () => parent,
     path: "/projets/$projectId/historique",
     component: function ProjectHistoryPage() {
       const { projectId } = route.useParams();
-      return <ProjectHistory projectId={projectId} readHistory={readHistory} />;
+      return (
+        <ProjectHistory projectId={projectId} readHistory={readHistory} subscribe={subscribe} />
+      );
     },
   });
   return route;

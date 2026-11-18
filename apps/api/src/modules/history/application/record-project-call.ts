@@ -1,3 +1,4 @@
+import type { ProjectSignals } from "#modules/project/contracts/project-signals.ts";
 import type { ProjectAccess, ProjectInSpace } from "#modules/space/contracts/membership.ts";
 import type { RecordFailure } from "#platform/project-call.ts";
 import { err, type Result } from "@repo/result";
@@ -8,10 +9,12 @@ export const recordProjectCall =
   ({
     access,
     history,
+    signals,
     now,
   }: {
     readonly access: ProjectAccess;
     readonly history: HistoryWriter;
+    readonly signals: ProjectSignals;
     readonly now: () => Date;
   }) =>
   async <T, E>({
@@ -54,5 +57,9 @@ export const recordProjectCall =
         () => true,
         () => false,
       );
-    return written ? outcome : err("history_unavailable");
+    if (!written) {
+      return err("history_unavailable");
+    }
+    await signals.changed({ projectId, topics: ["history"] });
+    return outcome;
   };

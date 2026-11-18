@@ -41,6 +41,9 @@ const recordSignals = () => {
     state,
     signals: {
       changed: async (signal: Signal) => {
+        if (!signal.topics.includes("proposals")) {
+          return;
+        }
         state.received.push({
           ...signal,
           proposals: state.db === undefined ? undefined : await proposalCountOf(state.db),

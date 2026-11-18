@@ -209,7 +209,7 @@ describe("le Worker de production", () => {
     90_000,
   );
   it(
-    "un membre abonné reçoit proposals après un write_tokens de l'IA sur son projet",
+    "un membre abonné reçoit proposals, puis history, après un write_tokens de l'IA sur son projet",
     () =>
       withThrowawayDatabase(async ({ migratorUrl, appUrl }) => {
         await migrate({ connectionString: migratorUrl });
@@ -230,7 +230,10 @@ describe("le Worker de production", () => {
           });
 
           await vi.waitFor(() =>
-            expect(received).toEqual([{ type: "changed", topics: ["proposals"] }]),
+            expect(received).toEqual([
+              { type: "changed", topics: ["proposals"] },
+              { type: "changed", topics: ["history"] },
+            ]),
           );
         });
       }),
