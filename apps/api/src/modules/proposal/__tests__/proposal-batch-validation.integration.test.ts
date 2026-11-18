@@ -577,6 +577,32 @@ describe("un lot se valide cibles d'abord, et tout ou rien", () => {
       );
     }));
 
+  it("un nom pris entre-temps est signalé avant une proposition invalide qui le suit dans le lot", () =>
+    withIdentityApp(async (app, db) => {
+      const { accessToken, projectId } = await seedProject(app, db);
+      const { batch, proposals } = await seedClosedBatch(app, {
+        accessToken,
+        projectId,
+        tokens: [
+          makeColorToken({ name: "couleur.fond.primaire" }),
+          makeColorToken({ name: "couleur.fond.secondaire", $value: "{couleur.bleu.500}" }),
+          makeColorToken({ name: "couleur.bleu.500" }),
+        ],
+      });
+      await seedValidatedToken(db, { projectId, name: "couleur.fond.primaire" });
+
+      const response = await validateBatch(app, {
+        accessToken,
+        batchId: batch.id,
+        body: { rejected: [proposals[2].id] },
+      });
+
+      expect(response.status).toBe(409);
+      expect(InvalidBatchProblem.parse(await response.json()).errors).toEqual([
+        { path: `proposals.${proposals[0].id}.name`, message: "Nom déjà pris dans le projet" },
+      ]);
+    }));
+
   it("si l'historique échoue, rien n'est validé", () =>
     withIdentityApp(
       async (app, db) => {

@@ -51,7 +51,13 @@ const checkedWrite = (
     return { failure: { code: "name_conflict", other } };
   }
   const checked = checkedValues(token, { projectModes, tokens: known, pending });
-  return checked.ok ? { values: checked.value.map(modeValueOf) } : { failure: checked.error };
+  if (!checked.ok) {
+    return { failure: checked.error };
+  }
+  if (kind === "create" && known.some(({ name }) => name === token.name)) {
+    return { failure: { code: "name_taken" } };
+  }
+  return { values: checked.value.map(modeValueOf) };
 };
 
 export const validatedTokenWriter = ({
