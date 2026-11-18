@@ -1,0 +1,36 @@
+name: Migration gate
+
+# Une migration non additive attend l'approbation du mainteneur : retirer le label la donne.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, unlabeled]
+    paths:
+      - packages/db/migrations/**
+
+concurrency:
+  group: migration-gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  gate:
+    name: Migration gate
+    if: github.event.action != 'unlabeled' || github.event.label.name == 'review:needs-approval'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+      - run: node packages/db/scripts/migration-gate.ts
+        env:
+          GH_TOKEN: ${{ github.token }}
