@@ -32,15 +32,17 @@ export type ModeValue = {
 
 export type CreatedToken = { readonly token: Token; readonly values: readonly ModeValue[] };
 
+export type ReplacedToken = {
+  readonly token: TokenDefinition & { readonly projectId: string };
+  readonly values: readonly ModeValue[];
+};
+
 export interface TokenWriter {
   create(token: Token, values: readonly ModeValue[]): Promise<"created" | "name_taken">;
   createAll<Created extends CreatedToken>(
     created: readonly Created[],
   ): Promise<Created | undefined>;
-  replace(
-    token: TokenDefinition & { readonly projectId: string },
-    values: readonly ModeValue[],
-  ): Promise<void>;
+  replaceAll(replaced: readonly ReplacedToken[]): Promise<void>;
 }
 
 export type InvalidModes = {

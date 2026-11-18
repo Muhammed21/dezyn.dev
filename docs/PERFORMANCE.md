@@ -27,6 +27,7 @@ La charge réelle se mesure à la mise en production.
 
 ## Optimization Ledger
 
-| Changement                                                                    | Avant                                                                 | Après                                                                  | Verdict (garder/annuler) | Date       |
-| ----------------------------------------------------------------------------- | --------------------------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------ | ---------- |
-| Les créations d'un lot validé s'écrivent en un nombre fixe de requêtes (#258) | 354 requêtes pour 67 créations ; bench du lot de 130 : moyenne 606 ms | 29 requêtes, quelle que soit la taille du lot ; bench : moyenne 257 ms | garder                   | 2026-11-18 |
+| Changement                                                                        | Avant                                                                 | Après                                                                  | Verdict (garder/annuler) | Date       |
+| --------------------------------------------------------------------------------- | --------------------------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------ | ---------- |
+| Les créations d'un lot validé s'écrivent en un nombre fixe de requêtes (#258)     | 354 requêtes pour 67 créations ; bench du lot de 130 : moyenne 606 ms | 29 requêtes, quelle que soit la taille du lot ; bench : moyenne 257 ms | garder                   | 2026-11-18 |
+| Les modifications d'un lot validé s'écrivent en un nombre fixe de requêtes (#258) | 495 requêtes pour 67 modifications                                    | 33 requêtes, quelle que soit la taille du lot                          | garder                   | 2026-11-18 |
