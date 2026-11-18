@@ -1,5 +1,6 @@
 import type { HistoryWriter } from "#modules/history/contracts/history-writer.ts";
 import type { ProjectLock } from "#modules/project/contracts/project-lock.ts";
+import type { ProjectSignals } from "#modules/project/contracts/project-signals.ts";
 import type { ProjectAccess } from "#modules/space/contracts/membership.ts";
 import type {
   DecidedStorageAlert,
@@ -60,12 +61,14 @@ export const addToken =
     access,
     unitOfWork,
     sendStorageAlert,
+    signals,
     newId,
     now,
   }: {
     readonly access: ProjectAccess;
     readonly unitOfWork: TokenUnitOfWork;
     readonly sendStorageAlert: StorageAlertSender;
+    readonly signals: ProjectSignals;
     readonly newId: () => string;
     readonly now: () => Date;
   }) =>
@@ -151,6 +154,9 @@ export const addToken =
     }
     if (result.value.alert !== undefined) {
       await sendStorageAlert(result.value.alert);
+    }
+    if (result.value.token.replaced !== null) {
+      await signals.changed({ projectId, topics: ["proposals"] });
     }
     return ok(result.value.token);
   };

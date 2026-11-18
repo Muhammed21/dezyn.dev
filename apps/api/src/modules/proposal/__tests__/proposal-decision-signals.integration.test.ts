@@ -1,7 +1,5 @@
-import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 
-import type { PostgresDatabase } from "#db";
 import type { LogRecord } from "#platform/logging.ts";
 import {
   type App,
@@ -12,9 +10,8 @@ import {
   withIdentityApp,
 } from "#testing/authorization-flow.ts";
 import { seedProject } from "#testing/project-fixtures.ts";
+import { makeSignalRecorder } from "#testing/project-signals.ts";
 import { makeColorToken } from "#testing/token-fixtures.ts";
-
-type Signal = { readonly projectId: string; readonly topics: readonly string[] };
 
 const callTool = async (
   app: App,
@@ -62,31 +59,6 @@ const validateBatch = (
     body: JSON.stringify({}),
   });
 
-const pendingCountOf = async (db: PostgresDatabase) => {
-  const { rows } = await db.orm.execute<{ count: number }>(
-    sql`select count(*)::int as count from proposal where status = 'proposed'`,
-  );
-  return rows[0]?.count;
-};
-
-const recordSignals = () => {
-  const state: { db?: PostgresDatabase; received: (Signal & { pending?: number })[] } = {
-    received: [],
-  };
-  return {
-    state,
-    signals: {
-      changed: async (signal: Signal) => {
-        state.received.push({
-          ...signal,
-          pending: state.db === undefined ? undefined : await pendingCountOf(state.db),
-        });
-      },
-    },
-    since: (mark: number) => state.received.slice(mark),
-  };
-};
-
 const PROPOSALS = ["proposals"];
 
 describe("les décisions d'un membre signalent les propositions de leur projet (ADR 0046)", () => {
@@ -96,7 +68,7 @@ describe("les décisions d'un membre signalent les propositions de leur projet (
   ] as const)(
     "%s une proposition signale proposals une fois, après le commit",
     (_case, decision) => {
-      const recorder = recordSignals();
+      const recorder = makeSignalRecorder();
       return withIdentityApp(
         async (app, db) => {
           recorder.state.db = db;
@@ -123,7 +95,7 @@ describe("les décisions d'un membre signalent les propositions de leur projet (
   );
 
   it("relire une proposition déjà relue ne signale rien", () => {
-    const recorder = recordSignals();
+    const recorder = makeSignalRecorder();
     return withIdentityApp(
       async (app, db) => {
         const { accessToken, projectId } = await seedProject(app, db);
@@ -146,7 +118,7 @@ describe("les décisions d'un membre signalent les propositions de leur projet (
   });
 
   it("la décision d'un non-membre, refusée en 404, ne signale rien", () => {
-    const recorder = recordSignals();
+    const recorder = makeSignalRecorder();
     return withIdentityApp(
       async (app, db) => {
         const { accessToken, projectId } = await seedProject(app, db);
@@ -172,7 +144,7 @@ describe("les décisions d'un membre signalent les propositions de leur projet (
   });
 
   it("valider un lot fermé signale proposals une fois, après le commit", () => {
-    const recorder = recordSignals();
+    const recorder = makeSignalRecorder();
     return withIdentityApp(
       async (app, db) => {
         recorder.state.db = db;
@@ -195,7 +167,7 @@ describe("les décisions d'un membre signalent les propositions de leur projet (
   });
 
   it("valider un lot encore ouvert, refusé, ne signale rien", () => {
-    const recorder = recordSignals();
+    const recorder = makeSignalRecorder();
     return withIdentityApp(
       async (app, db) => {
         const { accessToken, projectId } = await seedProject(app, db);
@@ -260,7 +232,7 @@ describe("les décisions d'un membre signalent les propositions de leur projet (
 
 describe("les lots déclarés par l'IA signalent les propositions de leur projet (ADR 0046)", () => {
   it("open_proposal_batch signale proposals pour son projet", () => {
-    const recorder = recordSignals();
+    const recorder = makeSignalRecorder();
     return withIdentityApp(
       async (app, db) => {
         const { accessToken, projectId } = await seedProject(app, db);
@@ -278,7 +250,7 @@ describe("les lots déclarés par l'IA signalent les propositions de leur projet
   });
 
   it("close_proposal_batch signale proposals quand il ferme un lot, et rien sans lot ouvert", () => {
-    const recorder = recordSignals();
+    const recorder = makeSignalRecorder();
     return withIdentityApp(
       async (app, db) => {
         const { accessToken, projectId } = await seedProject(app, db);

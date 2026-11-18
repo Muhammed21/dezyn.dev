@@ -70,6 +70,7 @@ export const composeModules = ({
     access,
     writerOn,
   });
+  const projectSignals = bestEffortSignals(signals, log);
   const tokens = tokenModule({
     db,
     access,
@@ -80,6 +81,7 @@ export const composeModules = ({
     storageMeterOn,
     storageAlertOn: spaces.storageAlertOn,
     sendStorageAlert: spaces.sendStorageAlert,
+    signals: projectSignals,
     clock,
   });
   const proposals = proposalModule({
@@ -95,7 +97,7 @@ export const composeModules = ({
     storageMeterOn,
     storageAlertOn: spaces.storageAlertOn,
     sendStorageAlert: spaces.sendStorageAlert,
-    signals: bestEffortSignals(signals, log),
+    signals: projectSignals,
     clock,
   });
   return { spaces, projects, history, tokens, proposals };
