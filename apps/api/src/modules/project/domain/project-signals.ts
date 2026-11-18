@@ -1,4 +1,4 @@
-export type ProjectTopic = "proposals" | "history";
+export type ProjectTopic = "proposals" | "history" | "tokens";
 
 export type ProjectSignal = {
   readonly projectId: string;

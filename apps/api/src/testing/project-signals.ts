@@ -23,11 +23,25 @@ export const makeProposalSignalRecorder = () => {
           return;
         }
         state.received.push({
-          ...signal,
+          projectId: signal.projectId,
+          topics: ["proposals"],
           pending: state.db === undefined ? undefined : await pendingCountOf(state.db),
         });
       },
     },
     since: (mark: number) => state.received.slice(mark),
+  };
+};
+
+export const makeAllSignalsRecorder = () => {
+  const received: Signal[] = [];
+  return {
+    received,
+    signals: {
+      changed: async (signal: Signal) => {
+        received.push(signal);
+      },
+    },
+    since: (mark: number) => received.slice(mark),
   };
 };

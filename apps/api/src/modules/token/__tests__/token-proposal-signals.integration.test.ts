@@ -10,8 +10,6 @@ const NIGHT_BLUE = { colorSpace: "srgb", components: [0.1, 0.2, 0.4] };
 
 const PROPOSALS = ["proposals"];
 
-const PROPOSALS_AND_HISTORY = ["proposals", "history"];
-
 const callTool = async (
   app: App,
   { accessToken, name, args }: { accessToken: string; name: string; args: object },
@@ -149,7 +147,7 @@ describe("ajouter un token qui remplace une proposition la signale (ADR 0046)", 
 
         expect(response.status).toBe(201);
         expect(recorder.since(mark)).toEqual([
-          { projectId: seeded.projectId, topics: PROPOSALS_AND_HISTORY, pending: 0 },
+          { projectId: seeded.projectId, topics: PROPOSALS, pending: 0 },
         ]);
       },
       { signals: recorder.signals },
@@ -242,7 +240,7 @@ describe("un import qui remplace des propositions les signale (ADR 0046)", () =>
 
         expect(response.status).toBe(201);
         expect(recorder.since(mark)).toEqual([
-          { projectId: seeded.projectId, topics: PROPOSALS_AND_HISTORY, pending: 0 },
+          { projectId: seeded.projectId, topics: PROPOSALS, pending: 0 },
         ]);
       },
       { signals: recorder.signals },

@@ -84,6 +84,7 @@ const appRouter = ({
           listBatches: proposals.listBatches,
           subscribe: projectEvents.subscribe,
         }),
+        subscribe: projectEvents.subscribe,
       }),
       projectHistoryRoute({
         parent: root,

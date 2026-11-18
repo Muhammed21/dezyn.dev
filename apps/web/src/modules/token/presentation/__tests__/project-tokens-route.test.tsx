@@ -11,6 +11,7 @@ import { render } from "vitest-browser-react";
 
 import { err, ok, type Result } from "@repo/result";
 
+import { makeProjectEvents } from "../../../../testing/project-events.ts";
 import type { ProjectTokens, Token, TokensFailure } from "../../domain/token.ts";
 import { projectTokensRoute, refreshProjectTokens } from "../project-tokens-route.tsx";
 
@@ -45,6 +46,7 @@ const renderProjectTokens = (
   readTokens: ReadTokens,
   history = createMemoryHistory({ initialEntries: [`/projets/${PROJECT_ID}`] }),
   queryClient = new QueryClient(),
+  events: ReturnType<typeof makeProjectEvents> = makeProjectEvents(),
 ) => {
   const root = createRootRoute();
   const signIn = createRoute({
@@ -54,7 +56,12 @@ const renderProjectTokens = (
   });
   const router = createRouter({
     routeTree: root.addChildren([
-      projectTokensRoute({ parent: root, readTokens, ProjectProposals }),
+      projectTokensRoute({
+        parent: root,
+        readTokens,
+        ProjectProposals,
+        subscribe: events.subscribe,
+      }),
       signIn,
     ]),
     history,
@@ -232,5 +239,106 @@ describe("page des tokens d'un projet (ADR 0044 §6)", () => {
 
     await expect.element(screen.getByRole("alert")).toHaveTextContent(message);
     expect(screen.getByRole("list").elements()).toHaveLength(0);
+  });
+});
+
+const changingTokens = (initial: readonly Token[]) => {
+  const state = { tokens: initial };
+  const readTokens: ReadTokens = () => Promise.resolve(ok({ modes: [], tokens: state.tokens }));
+  return { state, readTokens };
+};
+
+const NIGHT = makeToken({
+  id: "7c6f3c2a-8d4e-4f1a-9c7b-5e2d1a0f9b8c",
+  name: "couleur.fond.nuit",
+  value: { kind: "single", value: NIGHT_BLUE },
+});
+
+const renderLive = (readTokens: ReadTokens, events = makeProjectEvents()) =>
+  renderProjectTokens(
+    readTokens,
+    createMemoryHistory({ initialEntries: [`/projets/${PROJECT_ID}`] }),
+    new QueryClient(),
+    events,
+  );
+
+describe("les tokens validés d'un projet apparaissent en direct (ADR 0046)", () => {
+  it("un signal tokens relit les tokens, et le nouveau token apparaît", async () => {
+    const events = makeProjectEvents();
+    const { state, readTokens } = changingTokens([makeToken()]);
+    const screen = await renderLive(readTokens, events);
+    await expect.element(tokenItems(screen).nth(0)).toBeVisible();
+
+    state.tokens = [makeToken(), NIGHT];
+    events.emit(PROJECT_ID, ["history", "tokens"]);
+
+    await expect.element(tokenItems(screen).nth(1)).toHaveTextContent("couleur.fond.nuit");
+  });
+
+  it("un signal d'un autre sujet ne relit pas les tokens", async () => {
+    const events = makeProjectEvents();
+    const reads: string[] = [];
+    const screen = await renderLive(({ projectId }) => {
+      reads.push(projectId);
+      return reading({ modes: [], tokens: [makeToken()] })({ projectId });
+    }, events);
+    await expect.element(tokenItems(screen).nth(0)).toBeVisible();
+
+    events.emit(PROJECT_ID, ["proposals", "history"]);
+    events.emit(PROJECT_ID, ["tokens"]);
+
+    await expect.poll(() => reads).toEqual([PROJECT_ID, PROJECT_ID]);
+  });
+
+  it("après une coupure, la réouverture relit les tokens, sans signal", async () => {
+    const events = makeProjectEvents();
+    const { state, readTokens } = changingTokens([makeToken()]);
+    const screen = await renderLive(readTokens, events);
+    await expect.element(tokenItems(screen).nth(0)).toBeVisible();
+
+    state.tokens = [makeToken(), NIGHT];
+    events.resync(PROJECT_ID);
+
+    await expect.element(tokenItems(screen).nth(1)).toHaveTextContent("couleur.fond.nuit");
+  });
+
+  it("un signal tokens ne relit que les tokens, pas les autres données du projet", async () => {
+    const events = makeProjectEvents();
+    const queryClient = new QueryClient();
+    const historyKey = ["history", PROJECT_ID];
+    queryClient.setQueryData(historyKey, { pages: [], pageParams: [] });
+    const screen = await renderProjectTokens(
+      reading({ modes: [], tokens: [makeToken()] }),
+      createMemoryHistory({ initialEntries: [`/projets/${PROJECT_ID}`] }),
+      queryClient,
+      events,
+    );
+    await expect.element(tokenItems(screen).nth(0)).toBeVisible();
+
+    events.emit(PROJECT_ID, ["tokens"]);
+
+    await expect
+      .poll(() => queryClient.getQueryState(["tokens", PROJECT_ID])?.dataUpdateCount)
+      .toBe(2);
+    expect(queryClient.getQueryState(historyKey)?.isInvalidated).toBe(false);
+  });
+
+  it("passer à un autre projet déplace l'abonnement, et quitter la page le ferme", async () => {
+    const events = makeProjectEvents();
+    const history = createMemoryHistory({ initialEntries: [`/projets/${PROJECT_ID}`] });
+    const screen = await renderProjectTokens(
+      reading({ modes: [], tokens: [makeToken()] }),
+      history,
+      new QueryClient(),
+      events,
+    );
+    await expect.element(tokenItems(screen).nth(0)).toBeVisible();
+    expect(events.subscribedProjects()).toEqual([PROJECT_ID]);
+
+    history.push(`/projets/${OTHER_PROJECT_ID}`);
+    await expect.poll(() => events.subscribedProjects()).toEqual([OTHER_PROJECT_ID]);
+
+    await screen.unmount();
+    expect(events.subscribedProjects()).toEqual([]);
   });
 });
