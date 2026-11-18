@@ -1,4 +1,5 @@
 import type { HistoryWriter } from "#modules/history/contracts/history-writer.ts";
+import type { ProjectSignals } from "#modules/project/contracts/project-signals.ts";
 import type { ProjectAccess } from "#modules/space/contracts/membership.ts";
 import { err, ok, type Result } from "@repo/result";
 
@@ -115,12 +116,14 @@ export const importTokens =
     access,
     unitOfWork,
     parseTokenDefinition,
+    signals,
     newId,
     now,
   }: {
     readonly access: ProjectAccess;
     readonly unitOfWork: TokenImportUnitOfWork;
     readonly parseTokenDefinition: ParseTokenDefinition;
+    readonly signals: ProjectSignals;
     readonly newId: () => string;
     readonly now: () => Date;
   }) =>
@@ -148,164 +151,190 @@ export const importTokens =
       );
     }
     const { definitions, issues } = parsedDocument(read, parseTokenDefinition);
-    return unitOfWork.run(async ({ target, modes: modesWriter, tokens, history, proposals }) => {
-      const {
-        modifier: projectModifier,
-        modes: projectModes,
-        tokens: existing,
-      } = await target.lock(projectId);
-      const createdModes =
-        read.resolver?.modifier !== undefined && projectModifier === undefined
-          ? {
-              projectId,
-              modifier: read.resolver.modifier,
-              modes: read.resolver.modes.map((name) => ({ id: newId(), name })),
-            }
-          : undefined;
-      const targetModes = createdModes?.modes ?? projectModes;
-      const modesIssues = modesMismatch(read.resolver, {
-        modifier: createdModes?.modifier ?? projectModifier,
-        modes: targetModes.map(({ name }) => name),
-      });
-      const createdAt = now();
-      const ordered = referencesFirst(definitions, (token) => token).map((token) => ({
-        token,
-        id: newId(),
-      }));
-      const placed: readonly ProjectToken[] = [
-        ...existing,
-        ...ordered.map(({ token, id }) => ({
-          id,
-          name: token.name,
-          $type: token.$type,
-          status: "validated",
-        })),
-      ];
-      const pendingNames = await proposals.pendingNamesOf(projectId);
-      const otherNames = [
-        ...existing.map(({ name }) => name),
-        ...pendingNames,
-        ...definitions.map(({ name }) => name),
-      ];
-      const checked = ordered.map(({ token, id }) => {
-        const other = groupConflict(token.name, otherNames);
-        const conflict: ValidatedTokenFailure | undefined =
-          other === undefined ? undefined : { code: "name_conflict", other };
-        return {
+    const outcome = await unitOfWork.run(
+      async ({
+        target,
+        modes: modesWriter,
+        tokens,
+        history,
+        proposals,
+      }): Promise<Result<Imported & { readonly replacedAny: boolean }, ImportFailure>> => {
+        const {
+          modifier: projectModifier,
+          modes: projectModes,
+          tokens: existing,
+        } = await target.lock(projectId);
+        const createdModes =
+          read.resolver?.modifier !== undefined && projectModifier === undefined
+            ? {
+                projectId,
+                modifier: read.resolver.modifier,
+                modes: read.resolver.modes.map((name) => ({ id: newId(), name })),
+              }
+            : undefined;
+        const targetModes = createdModes?.modes ?? projectModes;
+        const modesIssues = modesMismatch(read.resolver, {
+          modifier: createdModes?.modifier ?? projectModifier,
+          modes: targetModes.map(({ name }) => name),
+        });
+        const createdAt = now();
+        const ordered = referencesFirst(definitions, (token) => token).map((token) => ({
           token,
-          id,
-          conflict,
-          values: checkedValues(token, {
-            projectModes: targetModes,
-            tokens: placed.filter((candidate) => candidate.id !== id),
-          }),
-        };
-      });
-      const checks = checked.flatMap(
-        ({ token, conflict, values }): readonly TokenCheckOfImport[] => [
-          ...(conflict === undefined ? [] : [{ name: token.name, failure: conflict }]),
-          ...(values.ok ? [] : [{ name: token.name, failure: values.error }]),
-        ],
-      );
-      const cycles = inCycle(definitions, (token) => token).map(({ name }) => ({
-        path: tokenIssuePath(name, "$value"),
-        message: "Référence circulaire",
-      }));
-      const creationIssues: readonly ImportIssue[] =
-        createdModes === undefined
-          ? []
-          : [
-              ...(createdModes.modes.length === 0
-                ? [
-                    {
-                      path: "modifiers",
-                      message: "Au moins un contexte attendu pour créer les modes",
-                    },
-                  ]
-                : []),
-              ...(existing.length > 0
-                ? [
-                    {
-                      path: "modifiers",
-                      message: "Document Resolver dans un projet sans modes qui a déjà des tokens",
-                    },
-                  ]
-                : []),
-              ...(pendingNames.length > 0
-                ? [
-                    {
-                      path: "modifiers",
-                      message:
-                        "Propositions en attente : relisez-les avant d'importer un document Resolver",
-                    },
-                  ]
-                : []),
-            ];
-      const documentIssues = [...modesIssues, ...creationIssues, ...issues, ...cycles];
-      if (documentIssues.length > 0 || checks.length > 0) {
-        return err(invalidDocument(documentIssues, checks));
-      }
-      const taken = definitions
-        .filter(({ name }) => existing.some((token) => token.name === name))
-        .map(({ name }) => name);
-      if (taken.length > 0) {
-        return err({ names: taken });
-      }
-      if (createdModes !== undefined) {
-        await modesWriter.create(createdModes);
-        await history.append([
-          {
-            spaceId: project.spaceId,
-            projectId,
-            action: "modes.created",
-            userId,
-            clientId: null,
-            before: null,
-            after: {
-              modifier: createdModes.modifier,
-              modes: createdModes.modes.map(({ name }) => name),
-            },
-            correlationId,
-            occurredAt: createdAt,
-          },
-        ]);
-      }
-      const writable = checked.flatMap(({ token, id, values }) =>
-        values.ok ? [{ token, id, values: values.value }] : [],
-      );
-      const written = await writable.reduce<Promise<Result<number, ImportFailure>>>(
-        async (previous, { token, id, values }) => {
-          const before = await previous;
-          if (!before.ok) {
-            return before;
-          }
-          const created = await tokens.create(
-            { ...token, id, projectId, status: "validated", createdAt },
-            values.map(modeValueOf),
-          );
-          if (created === "name_taken") {
-            return err({ names: [token.name] });
-          }
-          const replaced = await proposals.replace({ projectId, name: token.name });
+          id: newId(),
+        }));
+        const placed: readonly ProjectToken[] = [
+          ...existing,
+          ...ordered.map(({ token, id }) => ({
+            id,
+            name: token.name,
+            $type: token.$type,
+            status: "validated",
+          })),
+        ];
+        const pendingNames = await proposals.pendingNamesOf(projectId);
+        const otherNames = [
+          ...existing.map(({ name }) => name),
+          ...pendingNames,
+          ...definitions.map(({ name }) => name),
+        ];
+        const checked = ordered.map(({ token, id }) => {
+          const other = groupConflict(token.name, otherNames);
+          const conflict: ValidatedTokenFailure | undefined =
+            other === undefined ? undefined : { code: "name_conflict", other };
+          return {
+            token,
+            id,
+            conflict,
+            values: checkedValues(token, {
+              projectModes: targetModes,
+              tokens: placed.filter((candidate) => candidate.id !== id),
+            }),
+          };
+        });
+        const checks = checked.flatMap(
+          ({ token, conflict, values }): readonly TokenCheckOfImport[] => [
+            ...(conflict === undefined ? [] : [{ name: token.name, failure: conflict }]),
+            ...(values.ok ? [] : [{ name: token.name, failure: values.error }]),
+          ],
+        );
+        const cycles = inCycle(definitions, (token) => token).map(({ name }) => ({
+          path: tokenIssuePath(name, "$value"),
+          message: "Référence circulaire",
+        }));
+        const creationIssues: readonly ImportIssue[] =
+          createdModes === undefined
+            ? []
+            : [
+                ...(createdModes.modes.length === 0
+                  ? [
+                      {
+                        path: "modifiers",
+                        message: "Au moins un contexte attendu pour créer les modes",
+                      },
+                    ]
+                  : []),
+                ...(existing.length > 0
+                  ? [
+                      {
+                        path: "modifiers",
+                        message:
+                          "Document Resolver dans un projet sans modes qui a déjà des tokens",
+                      },
+                    ]
+                  : []),
+                ...(pendingNames.length > 0
+                  ? [
+                      {
+                        path: "modifiers",
+                        message:
+                          "Propositions en attente : relisez-les avant d'importer un document Resolver",
+                      },
+                    ]
+                  : []),
+              ];
+        const documentIssues = [...modesIssues, ...creationIssues, ...issues, ...cycles];
+        if (documentIssues.length > 0 || checks.length > 0) {
+          return err(invalidDocument(documentIssues, checks));
+        }
+        const taken = definitions
+          .filter(({ name }) => existing.some((token) => token.name === name))
+          .map(({ name }) => name);
+        if (taken.length > 0) {
+          return err({ names: taken });
+        }
+        if (createdModes !== undefined) {
+          await modesWriter.create(createdModes);
           await history.append([
             {
               spaceId: project.spaceId,
               projectId,
-              action: "token.created",
+              action: "modes.created",
               userId,
               clientId: null,
               before: null,
-              after: { ...token, replaced },
+              after: {
+                modifier: createdModes.modifier,
+                modes: createdModes.modes.map(({ name }) => name),
+              },
               correlationId,
               occurredAt: createdAt,
             },
           ]);
-          return ok(before.value + 1);
-        },
-        Promise.resolve(ok(0)),
-      );
-      return written.ok
-        ? ok({ imported: written.value, modes: targetModes.map(({ name }) => name) })
-        : written;
-    });
+        }
+        const writable = checked.flatMap(({ token, id, values }) =>
+          values.ok ? [{ token, id, values: values.value }] : [],
+        );
+        const written = await writable.reduce<
+          Promise<Result<{ readonly count: number; readonly replacedAny: boolean }, ImportFailure>>
+        >(
+          async (previous, { token, id, values }) => {
+            const before = await previous;
+            if (!before.ok) {
+              return before;
+            }
+            const created = await tokens.create(
+              { ...token, id, projectId, status: "validated", createdAt },
+              values.map(modeValueOf),
+            );
+            if (created === "name_taken") {
+              return err({ names: [token.name] });
+            }
+            const replaced = await proposals.replace({ projectId, name: token.name });
+            await history.append([
+              {
+                spaceId: project.spaceId,
+                projectId,
+                action: "token.created",
+                userId,
+                clientId: null,
+                before: null,
+                after: { ...token, replaced },
+                correlationId,
+                occurredAt: createdAt,
+              },
+            ]);
+            return ok({
+              count: before.value.count + 1,
+              replacedAny: before.value.replacedAny || replaced !== null,
+            });
+          },
+          Promise.resolve(ok({ count: 0, replacedAny: false })),
+        );
+        return written.ok
+          ? ok({
+              imported: written.value.count,
+              modes: targetModes.map(({ name }) => name),
+              replacedAny: written.value.replacedAny,
+            })
+          : written;
+      },
+    );
+    if (!outcome.ok) {
+      return outcome;
+    }
+    const { replacedAny, ...imported } = outcome.value;
+    if (replacedAny) {
+      await signals.changed({ projectId, topics: ["proposals"] });
+    }
+    return ok(imported);
   };

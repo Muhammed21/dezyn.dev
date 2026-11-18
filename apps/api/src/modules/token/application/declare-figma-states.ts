@@ -1,3 +1,4 @@
+import type { ProjectSignals } from "#modules/project/contracts/project-signals.ts";
 import type { ProjectAccess } from "#modules/space/contracts/membership.ts";
 import type {
   StorageAlertDecision,
@@ -157,6 +158,7 @@ export const declareFigmaStates =
     checkTokens,
     unitOfWork,
     sendStorageAlert,
+    signals,
     now,
   }: {
     readonly access: ProjectAccess;
@@ -167,6 +169,7 @@ export const declareFigmaStates =
     readonly checkTokens: CheckTokens;
     readonly unitOfWork: FigmaUnitOfWork;
     readonly sendStorageAlert: StorageAlertSender;
+    readonly signals: ProjectSignals;
     readonly now: () => Date;
   }) =>
   async ({
@@ -268,6 +271,9 @@ export const declareFigmaStates =
     );
     if (alert !== undefined) {
       await sendStorageAlert(alert);
+    }
+    if (proposed.proposals.length > 0) {
+      await signals.changed({ projectId, topics: ["proposals"] });
     }
     const proposalOf = (name: string): FigmaProposal | null => {
       const found = proposed.proposals.find((proposal) => proposal.name === name);

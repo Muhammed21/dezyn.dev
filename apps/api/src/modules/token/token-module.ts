@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { PostgresDatabase, PostgresTransaction } from "#db";
 import type { HistoryWriter } from "#modules/history/contracts/history-writer.ts";
 import type { ProjectLock } from "#modules/project/contracts/project-lock.ts";
+import type { ProjectSignals } from "#modules/project/contracts/project-signals.ts";
 import type { StorageMeter } from "#modules/project/contracts/storage-meter.ts";
 import type { ProjectAccess } from "#modules/space/contracts/membership.ts";
 import type {
@@ -64,6 +65,7 @@ export const tokenModule = ({
   storageMeterOn,
   storageAlertOn,
   sendStorageAlert,
+  signals,
   clock,
 }: {
   readonly db: PostgresDatabase;
@@ -75,6 +77,7 @@ export const tokenModule = ({
   readonly storageMeterOn: (tx: PostgresTransaction) => StorageMeter;
   readonly storageAlertOn: (tx: PostgresTransaction) => StorageAlertDecision;
   readonly sendStorageAlert: StorageAlertSender;
+  readonly signals: ProjectSignals;
   readonly clock: Clock;
 }) => {
   const check = checkTokens({
@@ -99,6 +102,7 @@ export const tokenModule = ({
         newId: randomUUID,
       }),
       sendStorageAlert,
+      signals,
       newId: randomUUID,
       now: clock,
     }),
@@ -116,6 +120,7 @@ export const tokenModule = ({
         newId: randomUUID,
       }),
       parseTokenDefinition,
+      signals,
       newId: randomUUID,
       now: clock,
     }),
@@ -136,6 +141,7 @@ export const tokenModule = ({
       checkTokens: check,
       unitOfWork: postgresFigmaUnitOfWork({ db, proposalWriterOn, storageMeterOn, storageAlertOn }),
       sendStorageAlert,
+      signals,
       now: clock,
     }),
   };

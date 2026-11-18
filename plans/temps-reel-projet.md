@@ -46,23 +46,22 @@ La classe du Durable Object se teste dans workerd avec `@cloudflare/vitest-plugi
 - **Cookie sur la poignée de main WebSocket** : `app.dezyn.dev` et `api.dezyn.dev` sont le même site, le cookie `SameSite=Lax` part. Le contrôle de l'origine reste obligatoire contre le détournement de WebSocket entre sites.
 - **Un membre retiré** garde sa connexion jusqu'à la prochaine coupure. Il ne reçoit que des sujets sans données, et chaque relecture lui répond 404. Accepté pour la story 1.
 
-## Story 3 : les décisions d'un autre membre apparaissent
+## Story 4 : les autres sources de propositions apparaissent
 
 Avant le code : `tdd`, `testing`, `mutation-testing`, `refactoring`.
 
-**Valeur** : un membre voit les validations, les rejets et les lots ouverts ou fermés par les autres, et évite les `409 already_reviewed`.
-**Chemin** : `reviewProposal`, `validateBatch`, `openBatch` et `closeBatch` appellent `ProjectSignals.changed` avec `proposals` après leur commit → le Durable Object diffuse → les pages relisent, comme pour `write_tokens`.
+**Valeur** : la liste des lots et la page d'un lot suivent toutes les propositions, pas seulement celles de `write_tokens`.
+**Chemin** : `declareFigmaStates`, `addToken` et `importTokens` appellent `ProjectSignals.changed` avec `proposals` après leur commit, quand ils ont écrit ou remplacé une proposition.
 **Critères** :
 
-- Valider ou rejeter une proposition signale `proposals` pour son projet, une fois, après le commit. `already_reviewed`, une proposition invalide ou introuvable, et l'absence de droit ne signalent rien.
-- Valider un lot signale `proposals` après le commit. `batch_open`, un lot invalide ou introuvable ne signalent rien.
-- `open_proposal_batch` signale `proposals`.
-- `close_proposal_batch` signale `proposals` quand il ferme un lot, rien quand aucun lot n'est ouvert.
+- `declare_figma_states` signale `proposals` une fois, après le commit, quand il écrit au moins une proposition. Sans proposition écrite, ou s'il est refusé, il ne signale rien.
+- Ajouter un token qui remplace une proposition en attente signale `proposals` une fois, après le commit. Sans remplacement, ou s'il est refusé, rien n'est signalé.
+- Un import qui remplace au moins une proposition signale `proposals` une seule fois. Sans remplacement, ou s'il est refusé, il ne signale rien.
 - Un signal qui échoue est journalisé, et la réponse reste la même.
 
-**Reporte** : la fermeture d'un lot par inactivité, calculée à la lecture, qu'une alarme du Durable Object pourrait signaler ; le sujet `tokens` après une validation (story 6).
+**Reporte** : le sujet `tokens` après un ajout ou un import (story 6).
 
-**RED** : tests d'intégration avec l'enregistreur de signaux en mémoire, par REST pour les décisions et par MCP pour les lots.
+**RED** : tests d'intégration avec l'enregistreur de signaux partagé (`src/testing/project-signals.ts`).
 
 ---
 
