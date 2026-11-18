@@ -1,4 +1,5 @@
 import type { ProjectSignals } from "#modules/project/contracts/project-signals.ts";
+import { batchExpirySignal } from "#modules/proposal/contracts/batch-expiry.ts";
 import type { ProjectAccess } from "#modules/space/contracts/membership.ts";
 import type {
   StorageAlertDecision,
@@ -274,6 +275,11 @@ export const declareFigmaStates =
     }
     if (proposed.proposals.length > 0) {
       await signals.changed({ projectId, topics: ["proposals"] });
+    }
+    if (proposed.proposals.length > 0 && proposed.batch !== null) {
+      await signals.signalAt(
+        batchExpirySignal({ projectId, batchId: proposed.batch.id, lastWrittenAt: declaredAt }),
+      );
     }
     const proposalOf = (name: string): FigmaProposal | null => {
       const found = proposed.proposals.find((proposal) => proposal.name === name);

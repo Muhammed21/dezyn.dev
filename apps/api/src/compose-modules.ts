@@ -34,7 +34,7 @@ export const composeModules = ({
   log,
   wrapHistoryWriter = (writer) => writer,
   clock = () => new Date(),
-  signals = { changed: async () => undefined },
+  signals = { changed: async () => undefined, signalAt: async () => undefined },
   channel = {
     connect: async () =>
       new Response(

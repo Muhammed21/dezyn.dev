@@ -1,6 +1,11 @@
 import type { ProjectSignals } from "#modules/project/contracts/project-signals.ts";
 
-import { closedBatch, declareBatch, batchStateAt } from "../domain/proposal-batch.ts";
+import {
+  batchExpirySignal,
+  closedBatch,
+  declareBatch,
+  batchStateAt,
+} from "../domain/proposal-batch.ts";
 import type { ProposalBatch } from "../domain/proposal.ts";
 import type { ProposalStore, ProposalUnitOfWork, Writer } from "./write-tokens.ts";
 
@@ -55,6 +60,13 @@ export const openBatch =
       return { batch: await store.openBatchOf(batch), closed };
     });
     await signals.changed({ projectId: writer.projectId, topics: ["proposals"] });
+    await signals.signalAt(
+      batchExpirySignal({
+        projectId: writer.projectId,
+        batchId: opened.batch.id,
+        lastWrittenAt: opened.batch.lastWrittenAt,
+      }),
+    );
     return opened;
   };
 

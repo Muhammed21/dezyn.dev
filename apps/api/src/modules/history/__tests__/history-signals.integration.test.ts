@@ -43,6 +43,7 @@ const makeHistoryRecorder = () => {
   return {
     state,
     signals: {
+      signalAt: async () => undefined,
       changed: async (signal: Signal) => {
         state.received.push({
           ...signal,
@@ -153,6 +154,7 @@ describe("chaque appel de l'IA sur un projet signale son historique (ADR 0046)",
       {
         log: (record) => logged.push(record),
         signals: {
+          signalAt: async () => undefined,
           changed: async () => {
             throw new Error("Durable Object injoignable");
           },

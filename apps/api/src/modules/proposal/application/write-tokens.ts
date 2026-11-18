@@ -16,6 +16,7 @@ import {
 } from "#modules/token/contracts/token-issues.ts";
 import { err, ok, type Result } from "@repo/result";
 
+import { batchExpirySignal } from "../domain/proposal-batch.ts";
 import type { Proposal, ProposalBatch } from "../domain/proposal.ts";
 import { liveBatchOf } from "./proposal-batches.ts";
 
@@ -185,15 +186,17 @@ export const writeTokens =
           const refused: UncheckedTokens = { code: "unchecked_tokens", checks: conflicts };
           return err(refused);
         }
+        const createdAt = now();
         return ok({
           written: await proposeTokens(store, {
             ...writer,
             tokens,
             validated,
-            createdAt: now(),
+            createdAt,
             newId,
           }),
           alert: await storageAlert(spaceId),
+          createdAt,
         });
       },
     );
@@ -203,9 +206,18 @@ export const writeTokens =
     if (outcome.value.alert !== undefined) {
       await sendStorageAlert(outcome.value.alert);
     }
-    const { proposals, replaced } = outcome.value.written;
+    const { proposals, replaced, batch } = outcome.value.written;
     if (proposals.length > 0 || replaced.length > 0) {
       await signals.changed({ projectId: writer.projectId, topics: ["proposals"] });
+    }
+    if (proposals.length > 0 && batch !== null) {
+      await signals.signalAt(
+        batchExpirySignal({
+          projectId: writer.projectId,
+          batchId: batch.id,
+          lastWrittenAt: outcome.value.createdAt,
+        }),
+      );
     }
     return ok(outcome.value.written);
   };

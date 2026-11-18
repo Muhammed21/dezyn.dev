@@ -12,6 +12,23 @@ export const declareBatch = ({
 
 const IDLE_LIMIT_MS = 30 * 60 * 1000;
 
+const EXPIRY_MARGIN_MS = 1000;
+
+export const batchExpirySignal = ({
+  projectId,
+  batchId,
+  lastWrittenAt,
+}: {
+  readonly projectId: string;
+  readonly batchId: string;
+  readonly lastWrittenAt: Date;
+}) => ({
+  projectId,
+  key: `batch:${batchId}`,
+  topics: ["proposals" as const],
+  at: new Date(lastWrittenAt.getTime() + IDLE_LIMIT_MS + EXPIRY_MARGIN_MS),
+});
+
 export const batchStateAt = ({
   batch,
   now,
