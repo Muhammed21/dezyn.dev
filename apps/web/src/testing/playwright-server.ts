@@ -9,6 +9,7 @@ import { z } from "zod";
 
 export const PLAYWRIGHT_SERVER_PORT = 53_300;
 
+const CONTAINER_NAME = "dezyn-visual-playwright";
 const CORE_MOUNT = "/opt/playwright-core";
 const STARTUP_TIMEOUT_MS = 120_000;
 const POLL_INTERVAL_MS = 250;
@@ -27,13 +28,30 @@ const playwrightCore = () => {
 
 const docker = async (args: readonly string[]) => (await run("docker", [...args])).stdout.trim();
 
+const stderrOf = (error: unknown) =>
+  error instanceof Error && "stderr" in error && typeof error.stderr === "string"
+    ? error.stderr.trim()
+    : String(error);
+
+const removeLeftoverContainer = async () => {
+  try {
+    await docker(["rm", "--force", CONTAINER_NAME]);
+  } catch (error) {
+    if (!/no such container/i.test(stderrOf(error))) {
+      throw new Error(`Docker ne répond pas : ${stderrOf(error)}`, { cause: error });
+    }
+  }
+};
+
 const startContainer = async () => {
   const core = playwrightCore();
+  await removeLeftoverContainer();
   try {
     return await docker([
       "run",
       "--detach",
       "--rm",
+      `--name=${CONTAINER_NAME}`,
       "--init",
       "--ipc=host",
       "--platform=linux/amd64",
@@ -48,7 +66,7 @@ const startContainer = async () => {
       "--host=0.0.0.0",
     ]);
   } catch (error) {
-    throw new Error("Le conteneur Playwright ne démarre pas. Docker tourne-t-il ?", {
+    throw new Error(`Le conteneur Playwright ne démarre pas : ${stderrOf(error)}`, {
       cause: error,
     });
   }
@@ -66,9 +84,16 @@ const waitUntilListening = async (container: string, deadline: number): Promise<
   return waitUntilListening(container, deadline);
 };
 
+const stopContainer = (container: string) => docker(["stop", "--timeout=2", container]);
+
 const startServer = async () => {
   const container = await startContainer();
-  await waitUntilListening(container, Date.now() + STARTUP_TIMEOUT_MS);
+  try {
+    await waitUntilListening(container, Date.now() + STARTUP_TIMEOUT_MS);
+  } catch (error) {
+    await stopContainer(container).catch(() => undefined);
+    throw error;
+  }
   return container;
 };
 
@@ -84,7 +109,7 @@ export default async function setup() {
   const container = await serverOnce();
   return async () => {
     if (servers.delete("server")) {
-      await docker(["stop", "--timeout=2", container]);
+      await stopContainer(container);
     }
   };
 }
