@@ -8,6 +8,7 @@ Chaque page de `docs/`, une ligne chacune : titre, [mode](README.md#carte), stat
 
 ## Charte
 
+- [API REST](API.md) — _reference_ — L'API REST de dezyn est servie sous `/v1`. Ses schémas partagés avec les clients vivent dans `packages/contracts` (ADR 0023, 0044).
 - [Plan d'optimisation de l'architecture](ARCHITECTURE-OPTIMIZATION-PLAN.md) — _reference_ — Démarré le 2026-10-20, avec le skill `architecture-optimization`.
 - [Architecture](ARCHITECTURE.md) — _reference_ — Une seule app Hono sert l'API HTTP, le MCP en Streamable HTTP et le serveur OAuth des apps d'IA (ADR 0007, 0008).
 - [Performance](PERFORMANCE.md) — _reference_ — Outil de mesure : les logs `request` de l'API (`durationMs`, `src/platform/request-context.ts`), capturés pendant un import réel.
