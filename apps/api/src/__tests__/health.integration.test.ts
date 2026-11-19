@@ -6,6 +6,7 @@ import {
   makeAuth,
   makeHistory,
   makeIdempotent,
+  makeProjectAccess,
   makeProjects,
   makeSpaces,
   makeProposals,
@@ -33,6 +34,7 @@ describe("GET /health", () => {
       tokens: makeTokens(),
       proposals: makeProposals(),
       idempotent: makeIdempotent(),
+      projectAccess: makeProjectAccess(),
     });
 
     const response = await app.request("/health");
@@ -53,6 +55,7 @@ describe("GET /health", () => {
       tokens: makeTokens(),
       proposals: makeProposals(),
       idempotent: makeIdempotent(),
+      projectAccess: makeProjectAccess(),
     });
     const startedAt = performance.now();
 
@@ -76,6 +79,7 @@ describe("GET /health", () => {
       tokens: makeTokens(),
       proposals: makeProposals(),
       idempotent: makeIdempotent(),
+      projectAccess: makeProjectAccess(),
     });
 
     const response = await app.request("/health");

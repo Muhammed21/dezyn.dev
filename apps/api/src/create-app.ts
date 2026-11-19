@@ -20,6 +20,7 @@ import {
 } from "#modules/proposal/presentation/review-routes.ts";
 import { registerWriteTokens } from "#modules/proposal/presentation/write-tokens-tool.ts";
 import type { SpaceUseCases } from "#modules/space/application/spaces.ts";
+import type { Action, ProjectAccess } from "#modules/space/contracts/membership.ts";
 import { invitationsRoutes } from "#modules/space/presentation/invitations-routes.ts";
 import { registerListSpaces } from "#modules/space/presentation/list-spaces-tool.ts";
 import { spacesRoutes } from "#modules/space/presentation/spaces-routes.ts";
@@ -32,6 +33,7 @@ import { type AuthenticatedEnv, requireAccessToken } from "#platform/access-toke
 import type { Database } from "#platform/database.ts";
 import type { AppEnv } from "#platform/http.ts";
 import type { Idempotent } from "#platform/idempotency.ts";
+import { idempotentRequest, type Replayable } from "#platform/idempotent-request.ts";
 import { errorDetails, type LogSink } from "#platform/logging.ts";
 import { mcpEndpoint } from "#platform/mcp.ts";
 import { type MemberEnv, requireMember, requireWebOrigin } from "#platform/member-identity.ts";
@@ -39,8 +41,20 @@ import { clientProblem, INTERNAL_ERROR, problemResponse } from "#platform/proble
 import { requestContext } from "#platform/request-context.ts";
 import { serverTiming } from "#platform/server-timing.ts";
 import { webCors } from "#platform/web-cors.ts";
+import { Uuid } from "@repo/contracts";
 
 const MAX_BODY_BYTES = 1024 * 1024;
+
+const allowedOnProject =
+  (projectAccess: ProjectAccess, action: Action): Replayable =>
+  async (c) => {
+    const projectId = Uuid.safeParse(c.req.param("projectId")).data;
+    if (projectId === undefined) {
+      return false;
+    }
+    const project = await projectAccess({ projectId, userId: c.get("identity").userId, action });
+    return project !== undefined;
+  };
 
 const unavailable = (c: Context<AppEnv>) =>
   problemResponse(c, { type: "about:blank", title: "Service indisponible", status: 503 });
@@ -56,6 +70,7 @@ export const createApp = ({
   tokens,
   proposals,
   idempotent,
+  projectAccess,
 }: {
   readonly webUrl: string;
   readonly db: Database;
@@ -67,6 +82,7 @@ export const createApp = ({
   readonly tokens: TokenUseCases;
   readonly proposals: ProposalUseCases;
   readonly idempotent: Idempotent;
+  readonly projectAccess: ProjectAccess;
 }) => {
   const app = new Hono<AppEnv>();
 
@@ -148,6 +164,13 @@ export const createApp = ({
   v1.use("/projects/:projectId/events", requireWebOrigin(webUrl));
   v1.route("/projects", projectEventsRoutes(projects));
   v1.route("/projects", historyRoutes(history));
+  v1.post(
+    "/projects/:projectId/tokens",
+    idempotentRequest({
+      idempotent,
+      replayable: allowedOnProject(projectAccess, "token.create"),
+    }),
+  );
   v1.route("/projects", tokensRoutes(tokens));
   v1.route("/projects", projectBatchesRoutes(proposals));
   v1.route("/", reviewRoutes(proposals));

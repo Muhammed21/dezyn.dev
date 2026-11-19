@@ -198,12 +198,14 @@ export const BeforeAfter = ({
   validated,
   proposed,
   aliases,
+  projectModes,
 }: {
   readonly validated: TokenValue | undefined;
   readonly proposed: TokenValue;
   readonly aliases: AliasSources;
+  readonly projectModes: readonly string[];
 }) => {
-  const rows = modeRows({ validated, proposed });
+  const rows = modeRows({ validated, proposed, projectModes });
   if (rows !== undefined) {
     return <ModesBeforeAfter rows={rows} creation={validated === undefined} aliases={aliases} />;
   }
