@@ -6,6 +6,7 @@ import { historyRoutes } from "#modules/history/presentation/history-routes.ts";
 import { registerReadHistory } from "#modules/history/presentation/read-history-tool.ts";
 import type { Auth } from "#modules/identity/application/auth.ts";
 import { authPages } from "#modules/identity/presentation/auth-pages.ts";
+import { CONSENT_PATH, LOGIN_PATH } from "#modules/identity/presentation/pages.ts";
 import { registerWhoami } from "#modules/identity/presentation/whoami-tool.ts";
 import type { ProjectUseCases } from "#modules/project/application/project-use-cases.ts";
 import { registerListProjects } from "#modules/project/presentation/list-projects-tool.ts";
@@ -35,6 +36,7 @@ import { mcpEndpoint } from "#platform/mcp.ts";
 import { type MemberEnv, requireMember, requireWebOrigin } from "#platform/member-identity.ts";
 import { clientProblem, INTERNAL_ERROR, problemResponse } from "#platform/problem.ts";
 import { requestContext } from "#platform/request-context.ts";
+import { serverTiming } from "#platform/server-timing.ts";
 import { webCors } from "#platform/web-cors.ts";
 
 const MAX_BODY_BYTES = 1024 * 1024;
@@ -65,6 +67,7 @@ export const createApp = ({
 }) => {
   const app = new Hono<AppEnv>();
 
+  app.use(serverTiming({ db, untimedPaths: ["/auth/", LOGIN_PATH, CONSENT_PATH] }));
   app.use(requestContext(log));
   app.use(
     bodyLimit({
