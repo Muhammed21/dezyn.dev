@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 
 import { createPostgresDatabase, type PostgresDatabase } from "#db";
+import { makeStoredEntry } from "#testing/history-fixtures.ts";
 import { migrate, schema } from "@repo/db";
 import { withThrowawayDatabase } from "@repo/db/testing";
 
@@ -23,7 +24,7 @@ const seedHistoryEntry = async (db: PostgresDatabase) => {
     .insert(schema.project)
     .values({ id: projectId, spaceId, name: "Site vitrine", createdAt: now });
   await db.orm.insert(schema.historyAuthor).values({ id: authorId, spaceId, userId });
-  const entry = {
+  const entry = makeStoredEntry({
     id: randomUUID(),
     spaceId,
     projectId,
@@ -34,7 +35,7 @@ const seedHistoryEntry = async (db: PostgresDatabase) => {
     after: { name: "Site vitrine" },
     correlationId: "seed",
     occurredAt: now,
-  };
+  });
   await db.orm.insert(schema.historyEntry).values(entry);
   return entry;
 };

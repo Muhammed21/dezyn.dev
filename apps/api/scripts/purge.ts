@@ -1,5 +1,5 @@
 import { createPostgresDatabase } from "#db";
-import { historyPurge } from "#modules/history/history-module.ts";
+import { historyPurge, PURGE_STATEMENT_TIMEOUT_MS } from "#modules/history/history-module.ts";
 import { storageMeterOn } from "#modules/project/project-module.ts";
 import { readPurgeConfig } from "#platform/api-config.ts";
 import { createJsonLineSink } from "#platform/json-line-sink.ts";
@@ -21,7 +21,11 @@ const log = createJsonLineSink({
   now: () => new Date(),
 });
 const mailer = createSmtpMailer({ ...config.value.smtp, log });
-const db = createPostgresDatabase({ url: config.value.databaseUrl, log });
+const db = createPostgresDatabase({
+  url: config.value.databaseUrl,
+  log,
+  statementTimeoutMs: PURGE_STATEMENT_TIMEOUT_MS,
+});
 try {
   const purged = await historyPurge({ db, meterOn: storageMeterOn, mailer, log })();
   const purgedKeys = await purgeExpiredIdempotencyKeys(db);

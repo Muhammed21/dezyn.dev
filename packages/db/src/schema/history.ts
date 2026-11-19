@@ -36,6 +36,7 @@ export const historyEntry = pgTable(
     after: jsonb("after"),
     correlationId: text("correlation_id").notNull(),
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+    storedSize: integer("stored_size").notNull(),
   },
   (table) => [
     index("history_entry_project_id_occurred_at_id_idx").on(

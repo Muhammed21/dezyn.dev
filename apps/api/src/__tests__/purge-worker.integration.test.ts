@@ -6,6 +6,7 @@ import { createTestHarness } from "wrangler";
 
 import { createPostgresDatabase, type PostgresDatabase } from "#db";
 import type { LogRecord } from "#platform/logging.ts";
+import { makeStoredEntry } from "#testing/history-fixtures.ts";
 import { assertSchemaVersion, LATEST_MIGRATION } from "@repo/db";
 import { migrate, schema } from "@repo/db";
 import { withThrowawayDatabase } from "@repo/db/testing";
@@ -37,18 +38,20 @@ const seedSpaceAtItsLimit = async (app: PostgresDatabase) => {
     .values({ id: projectId, spaceId, name: "Site vitrine", createdAt: new Date() });
   await app.orm.update(project).set({ storedBytes: FREE_LIMIT }).where(eq(project.id, projectId));
   await app.orm.insert(historyAuthor).values({ id: authorId, spaceId, userId: ownerId });
-  await app.orm.insert(historyEntry).values({
-    id: randomUUID(),
-    spaceId,
-    projectId,
-    action: "project.created",
-    authorId,
-    clientId: null,
-    before: null,
-    after: { name: "Site vitrine" },
-    correlationId: "semis",
-    occurredAt: new Date("2026-01-01T00:00:00.000Z"),
-  });
+  await app.orm.insert(historyEntry).values(
+    makeStoredEntry({
+      id: randomUUID(),
+      spaceId,
+      projectId,
+      action: "project.created",
+      authorId,
+      clientId: null,
+      before: null,
+      after: { name: "Site vitrine" },
+      correlationId: "semis",
+      occurredAt: new Date("2026-01-01T00:00:00.000Z"),
+    }),
+  );
   return { projectId, ownerEmail };
 };
 
@@ -250,6 +253,47 @@ describe("un passage du Worker dezyn-purge", () => {
         await app.close();
       }
     }));
+});
+
+const SLOWER_THAN_AN_API_QUERY_SECONDS = 3;
+
+const slowDownHistoryDeletes = (migratorUrl: string) =>
+  revokeAsMigrator(
+    migratorUrl,
+    sql.raw(`
+      CREATE FUNCTION slow_delete() RETURNS trigger AS $$
+      BEGIN
+        PERFORM pg_sleep(${SLOWER_THAN_AN_API_QUERY_SECONDS});
+        RETURN NULL;
+      END;
+      $$ LANGUAGE plpgsql;
+      CREATE TRIGGER slow_delete BEFORE DELETE ON history_entry
+        FOR EACH STATEMENT EXECUTE FUNCTION slow_delete();`),
+  );
+
+describe("le Worker dezyn-purge laisse à une requête de purge plus de temps qu'à une requête de l'API", () => {
+  it(
+    "une suppression d'entrées qui dure plus de 2 s aboutit",
+    () =>
+      withThrowawayDatabase(async ({ migratorUrl, appUrl, maintainerUrl }) => {
+        await migrate({ connectionString: migratorUrl });
+        const app = createPostgresDatabase({ url: appUrl });
+        try {
+          const { projectId } = await seedSpaceAtItsLimit(app);
+          await slowDownHistoryDeletes(migratorUrl);
+
+          const { thrown } = await runPurgePass(maintainerUrl);
+
+          expect(thrown).toBeUndefined();
+          expect(
+            await app.orm.select().from(historyEntry).where(eq(historyEntry.projectId, projectId)),
+          ).toEqual([]);
+        } finally {
+          await app.close();
+        }
+      }),
+    30_000,
+  );
 });
 
 describe("le Worker dezyn-purge oublie les clés d'idempotence de plus de 24 heures", () => {

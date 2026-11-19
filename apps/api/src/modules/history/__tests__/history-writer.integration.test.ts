@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import type { PostgresDatabase } from "#db";
 import { GRACE, obtainAccessToken, withIdentityApp } from "#testing/authorization-flow.ts";
+import { jsonSizeOfEntry, PAYLOADS_OF_EVERY_SHAPE } from "#testing/history-fixtures.ts";
 import { seedProject, seedProjectAsEditor } from "#testing/project-fixtures.ts";
 import { bytesOfProjectRows, storageMeterOn, storedBytesOf } from "#testing/project-storage.ts";
 import { schema } from "@repo/db";
@@ -120,6 +121,35 @@ describe("l'écriture d'une entrée d'historique en base", () => {
       );
       expect(await storedBytesOf(db, editor.projectId)).toBe(
         await bytesOfProjectRows(db, editor.projectId),
+      );
+    }));
+
+  it("chaque entrée porte sa taille stockée, celle de son JSON, que le compteur ajoute", () =>
+    withIdentityApp(async (app, db) => {
+      const { spaceId, projectId, userId } = await seedProject(app, db);
+      const storedBefore = (await storedBytesOf(db, projectId)) ?? 0;
+      const entriesOf = () =>
+        db.orm
+          .select()
+          .from(schema.historyEntry)
+          .where(eq(schema.historyEntry.projectId, projectId));
+      const earlier = new Set((await entriesOf()).map(({ id }) => id));
+      const entries = [
+        ...PAYLOADS_OF_EVERY_SHAPE.map((payload) => ({
+          ...makeEntryDraft({ spaceId, projectId, userId }),
+          ...payload,
+        })),
+        { ...makeEntryDraft({ spaceId, projectId, userId }), before: undefined, after: undefined },
+      ];
+
+      await db.orm.transaction((tx) =>
+        postgresHistoryWriter(tx, { newId: randomUUID, meter: storageMeterOn(tx) }).append(entries),
+      );
+
+      const written = (await entriesOf()).filter(({ id }) => !earlier.has(id));
+      expect(written.map(({ storedSize }) => storedSize)).toEqual(written.map(jsonSizeOfEntry));
+      expect(await storedBytesOf(db, projectId)).toBe(
+        storedBefore + written.reduce((total, { storedSize }) => total + storedSize, 0),
       );
     }));
 });

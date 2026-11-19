@@ -1,5 +1,5 @@
 import { createPostgresDatabase } from "#db";
-import { historyPurge } from "#modules/history/history-module.ts";
+import { historyPurge, PURGE_STATEMENT_TIMEOUT_MS } from "#modules/history/history-module.ts";
 import { storageMeterOn } from "#modules/project/project-module.ts";
 import { readPurgeWorkerConfig } from "#platform/api-config.ts";
 import { createJsonLineSink } from "#platform/json-line-sink.ts";
@@ -56,7 +56,11 @@ export const createPurgeWorker = ({
       log({ level: "error", msg: "schema check failed", ...errorDetails(error) });
       return;
     }
-    const db = createPostgresDatabase({ url: config.value.databaseUrl, log });
+    const db = createPostgresDatabase({
+      url: config.value.databaseUrl,
+      log,
+      statementTimeoutMs: PURGE_STATEMENT_TIMEOUT_MS,
+    });
     try {
       const historyFailures = await loggingFailure(log, "history purge failed", async () => {
         const purged = await historyPurge({

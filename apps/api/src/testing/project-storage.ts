@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { createPostgresDatabase, type PostgresDatabase } from "#db";
 import { storedSize } from "#modules/project/domain/storage.ts";
 import { storageMeterOn } from "#modules/project/project-module.ts";
+import { jsonSizeOfEntry } from "#testing/history-fixtures.ts";
 import { schema } from "@repo/db";
 
 const {
@@ -74,7 +75,7 @@ export const bytesOfProjectRows = async (db: PostgresDatabase, projectId: string
     (await bytesOfTokenRows(db, projectId)) +
     sizeOfRows(batches) +
     sizeOfRows(proposals) +
-    sizeOfRows(entries)
+    entries.reduce((total, entry) => total + jsonSizeOfEntry(entry), 0)
   );
 };
 

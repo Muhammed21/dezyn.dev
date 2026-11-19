@@ -2,7 +2,7 @@ import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import type { PostgresDatabase, PostgresTransaction } from "#db";
-import { type StorageMeter, storedSize } from "#modules/project/contracts/storage-meter.ts";
+import type { StorageMeter } from "#modules/project/contracts/storage-meter.ts";
 import { PLANS } from "#modules/space/contracts/plan.ts";
 import { schema } from "@repo/db";
 
@@ -58,21 +58,26 @@ const purgeBatchOn = (
     const { plan, storedBytes } = StoredCandidate.parse(row);
     return { plan, storedBytes };
   },
-  oldestEntriesOf: async (projectId, count) => {
-    const rows = await tx
-      .select()
+  oldestEntriesOf: (projectId, count) =>
+    tx
+      .select({
+        id: historyEntry.id,
+        occurredAt: historyEntry.occurredAt,
+        size: historyEntry.storedSize,
+      })
       .from(historyEntry)
       .where(eq(historyEntry.projectId, projectId))
       .orderBy(asc(historyEntry.occurredAt), asc(historyEntry.id))
-      .limit(count);
-    return rows.map((row) => ({ id: row.id, occurredAt: row.occurredAt, size: storedSize(row) }));
-  },
+      .limit(count),
   purge: async ({ projectId, entryIds, purgedBefore, purgedAt }) => {
     const deleted = await tx
       .delete(historyEntry)
       .where(inArray(historyEntry.id, [...entryIds]))
-      .returning();
-    await meter.remove(projectId, deleted);
+      .returning({ size: historyEntry.storedSize });
+    await meter.removeBytes(
+      projectId,
+      deleted.reduce((total, { size }) => total + size, 0),
+    );
     await tx
       .update(project)
       .set({ historyPurgedBefore: purgedBefore, historyPurgedAt: purgedAt })
