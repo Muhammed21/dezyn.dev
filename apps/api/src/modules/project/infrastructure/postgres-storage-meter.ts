@@ -20,8 +20,14 @@ export const postgresStorageMeter = (tx: PostgresTransaction): StorageMeter => {
     add: async (projectId, rows) => {
       await shift(projectId, sizeOfRows(rows));
     },
+    addBytes: async (projectId, bytes) => {
+      await shift(projectId, bytes);
+    },
     remove: async (projectId, rows) => {
       await shift(projectId, -sizeOfRows(rows));
+    },
+    removeBytes: async (projectId, bytes) => {
+      await shift(projectId, -bytes);
     },
     resize: async (projectId, { removed, added }) => {
       await shift(projectId, sizeOfRows(added) - sizeOfRows(removed));

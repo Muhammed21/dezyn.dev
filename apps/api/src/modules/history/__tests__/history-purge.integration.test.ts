@@ -1,13 +1,17 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 
 import { asc, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 
 import { createPostgresDatabase, type PostgresDatabase } from "#db";
-import { historyPurge, purgeLockOn } from "#modules/history/history-module.ts";
-import { storedSize } from "#modules/project/contracts/storage-meter.ts";
+import {
+  historyPurge,
+  PURGE_STATEMENT_TIMEOUT_MS,
+  purgeLockOn,
+} from "#modules/history/history-module.ts";
 import type { LogRecord } from "#platform/logging.ts";
 import type { Mailer, OutgoingEmail } from "#platform/mailer.ts";
+import { type EntryPayload, jsonSizeOfEntry, makeStoredEntry } from "#testing/history-fixtures.ts";
 import { seedStoredBytes, storageMeterOn, storedBytesOf } from "#testing/project-storage.ts";
 import { makeOutbox } from "#testing/space-fixtures.ts";
 import { migrate, schema } from "@repo/db";
@@ -34,6 +38,7 @@ type Databases = {
   readonly app: PostgresDatabase;
   readonly maintainer: PostgresDatabase;
   readonly migratorUrl: string;
+  readonly maintainerUrl: string;
 };
 
 // Une requête qui écrit ou lit des entrées de BIG_PAYLOAD octets (26 à 78 Mo) prend 0,2 à 0,6 s
@@ -54,7 +59,7 @@ const withDatabases = (run: (databases: Databases) => Promise<void>) =>
       statementTimeoutMs: STATEMENT_TIMEOUT_FOR_BIG_PAYLOADS_MS,
     });
     try {
-      await run({ app, maintainer, migratorUrl });
+      await run({ app, maintainer, migratorUrl, maintainerUrl });
     } finally {
       await Promise.all([app.close(), maintainer.close()]);
     }
@@ -174,15 +179,15 @@ const seedEntries = async (
   );
   if (payloadBytes > 1_000_000) {
     return entries.reduce<Promise<readonly Entry[]>>(async (written, entry) => {
-      const rows = await app.orm.insert(historyEntry).values(entry).returning();
+      const rows = await app.orm.insert(historyEntry).values(makeStoredEntry(entry)).returning();
       return [...(await written), ...rows];
     }, Promise.resolve([]));
   }
-  return app.orm.insert(historyEntry).values(entries).returning();
+  return app.orm.insert(historyEntry).values(entries.map(makeStoredEntry)).returning();
 };
 
 const sizeOf = (entries: readonly Entry[]) =>
-  entries.reduce((total, entry) => total + storedSize(entry), 0);
+  entries.reduce((total, entry) => total + jsonSizeOfEntry(entry), 0);
 
 const remainingIdsOf = async (app: PostgresDatabase, projectId: string) => {
   const rows = await app.orm
@@ -579,6 +584,100 @@ describe("après un passage qui supprime, chaque propriétaire ouvert reçoit un
       ]);
       expect(await remainingIdsOf(app, projectId)).toEqual([]);
     }));
+});
+
+const makeEntryCarrying = (
+  seeded: { readonly spaceId: string; readonly authorId: string },
+  {
+    projectId,
+    minute,
+    payload,
+  }: { readonly projectId: string; readonly minute: number; readonly payload: EntryPayload },
+) => ({
+  ...makeEntry(seeded, { projectId, occurredAt: minutesAfterFirst(minute), payloadBytes: 0 }),
+  ...payload,
+});
+
+const NEAR_REQUEST_LIMIT = 1_000_000;
+
+const FULL_BATCH = 500;
+
+const SEED_CHUNK = 10;
+
+const makePayloadNearRequestLimit = (): EntryPayload => ({
+  clientId: null,
+  before: null,
+  after: { value: randomBytes(NEAR_REQUEST_LIMIT / 2).toString("hex") },
+  correlationId: "purge",
+});
+
+const seedEntriesNearRequestLimit = async (
+  app: PostgresDatabase,
+  seeded: { readonly spaceId: string; readonly authorId: string },
+  { projectId, count }: { readonly projectId: string; readonly count: number },
+): Promise<readonly Entry[]> => {
+  const chunks = Array.from({ length: Math.ceil(count / SEED_CHUNK) }, (_, chunk) =>
+    Array.from({ length: Math.min(SEED_CHUNK, count - chunk * SEED_CHUNK) }, (_, index) =>
+      makeEntryCarrying(seeded, {
+        projectId,
+        minute: chunk * SEED_CHUNK + index,
+        payload: makePayloadNearRequestLimit(),
+      }),
+    ),
+  );
+  return chunks.reduce<Promise<readonly Entry[]>>(async (written, entries) => {
+    const before = await written;
+    const rows = await app.orm
+      .insert(historyEntry)
+      .values(entries.map(makeStoredEntry))
+      .returning();
+    return [...before, ...rows];
+  }, Promise.resolve([]));
+};
+
+const withPurgeWorkerDatabase = async (
+  maintainerUrl: string,
+  run: (purgeWorker: PostgresDatabase) => Promise<void>,
+) => {
+  const purgeWorker = createPostgresDatabase({
+    url: maintainerUrl,
+    statementTimeoutMs: PURGE_STATEMENT_TIMEOUT_MS,
+  });
+  try {
+    await run(purgeWorker);
+  } finally {
+    await purgeWorker.close();
+  }
+};
+
+describe("un lot d'entrées proches de 1 Mo est purgé sous le délai par requête du Worker de purge", () => {
+  it(
+    "supprime un lot plein de 500 entrées de 1 Mo et retire exactement leur taille du compteur",
+    () =>
+      withDatabases(async ({ app, maintainerUrl }) => {
+        const seeded = await seedSpace(app);
+        const projectId = await seedProjectIn(app, { spaceId: seeded.spaceId, storedBytes: 0 });
+        const entries = await seedEntriesNearRequestLimit(app, seeded, {
+          projectId,
+          count: FULL_BATCH + 1,
+        });
+        await seedStoredBytes(app, {
+          projectId,
+          bytes: FREE_TARGET + sizeOf(entries.slice(0, FULL_BATCH)),
+        });
+
+        await withPurgeWorkerDatabase(maintainerUrl, async (purgeWorker) => {
+          const report = await purgeOf(purgeWorker)();
+
+          expect(await remainingIdsOf(app, projectId)).toEqual(idsOf(entries.slice(FULL_BATCH)));
+          expect(await storedBytesOf(app, projectId)).toBe(FREE_TARGET);
+          expect(report.flatMap(({ projects }) => projects)).toEqual([
+            expect.objectContaining({ projectId, deletedEntries: FULL_BATCH }),
+          ]);
+        });
+      }),
+    120_000,
+  );
 });
 
 const seedTwoSpacesInPurgeOrder = async (app: PostgresDatabase) => {

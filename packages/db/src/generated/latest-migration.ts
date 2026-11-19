@@ -1,1 +1,1 @@
-export const LATEST_MIGRATION = { tag: "0019_idempotency_key_purge", when: 1795097642758 };
+export const LATEST_MIGRATION = { tag: "0020_history_entry_stored_size", when: 1795120890330 };

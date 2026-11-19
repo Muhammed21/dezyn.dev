@@ -5,6 +5,8 @@ import { Client } from "pg";
 
 import { urlOf } from "./clients.ts";
 
+export { migrateUntil } from "./migrate-until.ts";
+
 const onDatabase = (url: URL, database: string): string => {
   const copy = new URL(url);
   copy.pathname = `/${database}`;
