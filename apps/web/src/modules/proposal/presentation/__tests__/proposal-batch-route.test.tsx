@@ -350,6 +350,29 @@ describe("aperçu avant/après d'une proposition", () => {
     expect(proposalItems(screen).getByRole("img").elements()).toHaveLength(0);
   });
 
+  it("dessine 16px et 1rem en deux barres de même largeur, à la même échelle", async () => {
+    const { screen } = await renderBatch(
+      reading(
+        makeBatch({
+          proposals: [
+            makeUpdate({
+              validated: { $type: "dimension", $value: { value: 16, unit: "px" } },
+              proposed: { $type: "dimension", $value: { value: 1, unit: "rem" } },
+            }),
+          ],
+        }),
+      ),
+    );
+    const barWidth = (name: string) => {
+      const bar = preview(screen, name).element().querySelector('[aria-hidden="true"]');
+      return bar === null ? undefined : getComputedStyle(bar).width;
+    };
+
+    await expect.element(preview(screen, "Avant : 16px")).toBeVisible();
+    expect(barWidth("Avant : 16px")).toBe("16px");
+    expect(barWidth("Après : 1rem")).toBe("16px");
+  });
+
   it("montre un nombre en texte lisible, avant et après", async () => {
     const { screen } = await renderBatch(
       reading(
