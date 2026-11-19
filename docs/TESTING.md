@@ -4,6 +4,7 @@
 
 - Unitaires (`pnpm test`) : domaine et contrats, sans base. 442 tests.
 - Intégration (`pnpm test:integration`) : l'app entière en mémoire (`app.request()`), sur une vraie PostgreSQL, un fichier par comportement d'ADR. 510 tests.
+- Visuels (`pnpm --filter @repo/web test:visual`) : `*.visual.test.tsx` de l'app web, comparés à une référence de `__tests__/__references__/` ; le Chromium tourne dans l'image Docker de Playwright, Docker est donc requis (ADR 0047). `--update` régénère les références.
 - Mutation (`pnpm --filter @repo/api mutation`, Stryker en place, en local seulement) : mesure la force des tests ; seuils 90 / 100 %, sans blocage. `--mutate <fichiers>` restreint le run aux fichiers touchés.
 - Bench (`pnpm bench`) : `apps/api/bench/*.bench.ts`, sur une vraie PostgreSQL ; voir [PERFORMANCE.md](PERFORMANCE.md).
 - Vert = les deux suites en CI (`ci.yml`).
@@ -40,6 +41,6 @@ Exemple : `MembershipReader` (`apps/api/src/modules/space/application/membership
 
 ## CI Gates
 
-- `ci.yml` : `pnpm test` et `pnpm test:integration` bloquent le merge.
+- `ci.yml` : `pnpm test`, `pnpm test:integration` et le projet visuel de l'app web (job `Test (visual)`) bloquent le merge.
 - Stryker tourne en local seulement : sur un diff de 10 fichiers, le run dépasse 60 min en CI, même sans les mutants statiques.
 - `perf-pr.yml` et `perf-main.yml` comparent les benchs à la référence de `main`, à titre informatif, sans jamais bloquer ; un bench sans échantillon fait échouer le job.
