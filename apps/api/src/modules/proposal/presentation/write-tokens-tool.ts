@@ -4,16 +4,17 @@ import { z } from "zod";
 
 import { TokenDefinitionInput } from "#modules/token/contracts/token-definition.ts";
 import { issuesOfCheck } from "#modules/token/contracts/token-issues.ts";
-import type { Execution, IdempotencyRefusal } from "#platform/idempotency.ts";
-import { IDEMPOTENCY_REFUSAL_TEXT, IdempotencyKeyArgument, type McpCall } from "#platform/mcp.ts";
+import type { Execution } from "#platform/idempotency.ts";
+import { IdempotencyKeyArgument, type McpCall } from "#platform/mcp.ts";
 import {
+  idempotentProjectCall,
   isServerFailure,
   RECORD_FAILURE_TEXT,
   type RecordFailure,
   type RecordProjectCall,
 } from "#platform/project-call.ts";
 import { Uuid } from "@repo/contracts";
-import { err, ok, type Result } from "@repo/result";
+import { err, type Result } from "@repo/result";
 
 import type { ProposalUseCases } from "../application/proposal-use-cases.ts";
 import type { UncheckedTokens, WrittenWithDuplicates } from "../application/write-tokens.ts";
@@ -21,12 +22,7 @@ import { WrittenTokensOutput } from "../contracts/proposal.ts";
 
 type InvalidTokens = { readonly code: "invalid_tokens"; readonly issues: readonly string[] };
 
-type WriteFailure = RecordFailure | IdempotencyRefusal | InvalidTokens | UncheckedTokens;
-
-const FAILURE_TEXT: Readonly<Record<RecordFailure | IdempotencyRefusal, string>> = {
-  ...RECORD_FAILURE_TEXT,
-  ...IDEMPOTENCY_REFUSAL_TEXT,
-};
+type WriteFailure = RecordFailure | InvalidTokens | UncheckedTokens;
 
 const MAX_TOKENS_PER_CALL = 500;
 
@@ -51,7 +47,7 @@ const issuesOf = (failure: InvalidTokens | UncheckedTokens): readonly string[] =
       );
 
 const errorTextOf = (failure: WriteFailure): string =>
-  typeof failure === "string" ? FAILURE_TEXT[failure] : issuesOf(failure).join("\n");
+  typeof failure === "string" ? RECORD_FAILURE_TEXT[failure] : issuesOf(failure).join("\n");
 
 const errorOf = (failure: WriteFailure): CallToolResult => ({
   content: [{ type: "text", text: errorTextOf(failure) }],
@@ -76,7 +72,8 @@ export const registerWriteTokens =
     writeTokens,
     recordProjectCall,
   }: Pick<ProposalUseCases, "writeTokens"> & { readonly recordProjectCall: RecordProjectCall }) =>
-  (server: McpServer, { identity, correlationId, idempotent }: McpCall) => {
+  (server: McpServer, call: McpCall) => {
+    const { identity, correlationId } = call;
     const write = async ({
       projectId,
       tokens,
@@ -124,37 +121,7 @@ export const registerWriteTokens =
         memorable: true,
       };
     };
-    const replay = async (
-      { projectId, tokens }: { readonly projectId: string; readonly tokens?: readonly unknown[] },
-      stored: CallToolResult,
-    ): Promise<CallToolResult> => {
-      const replayed = await recordProjectCall({
-        tool: "write_tokens",
-        projectId,
-        userId: identity.userId,
-        clientId: identity.clientId,
-        correlationId,
-        input: { tokens },
-        replayed: true,
-        run: async (): Promise<Result<CallToolResult, never>> => ok(stored),
-      });
-      return replayed.ok ? replayed.value : errorOf(replayed.error);
-    };
-    const refuse = async (
-      { projectId, tokens }: { readonly projectId: string; readonly tokens?: readonly unknown[] },
-      refusal: IdempotencyRefusal,
-    ): Promise<CallToolResult> => {
-      const refused = await recordProjectCall({
-        tool: "write_tokens",
-        projectId,
-        userId: identity.userId,
-        clientId: identity.clientId,
-        correlationId,
-        input: { tokens },
-        run: async (): Promise<Result<never, IdempotencyRefusal>> => err(refusal),
-      });
-      return refused.ok ? refused.value : errorOf(refused.error);
-    };
+    const projectCall = idempotentProjectCall({ recordProjectCall, call });
     server.registerTool(
       "write_tokens",
       {
@@ -168,12 +135,11 @@ export const registerWriteTokens =
         outputSchema: WrittenTokensOutput,
       },
       async (args) =>
-        idempotent({
+        projectCall({
           tool: "write_tokens",
           args,
+          input: { tokens: args.tokens },
           run: () => write(args),
-          replay: (stored) => replay(args, stored),
-          refuse: (refusal) => refuse(args, refusal),
         }),
     );
   };

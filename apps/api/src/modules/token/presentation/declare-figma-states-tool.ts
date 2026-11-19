@@ -1,8 +1,12 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 
-import type { McpCall } from "#platform/mcp.ts";
+import type { Execution } from "#platform/idempotency.ts";
+import { IdempotencyKeyArgument, type McpCall } from "#platform/mcp.ts";
 import {
+  idempotentProjectCall,
+  isServerFailure,
   RECORD_FAILURE_TEXT,
   type RecordFailure,
   type RecordProjectCall,
@@ -104,51 +108,79 @@ export const registerDeclareFigmaStates =
   }: Pick<TokenUseCases, "declareFigmaStates"> & {
     readonly recordProjectCall: RecordProjectCall;
   }) =>
-  (server: McpServer, { identity, correlationId }: McpCall) => {
+  (server: McpServer, call: McpCall) => {
+    const { identity, correlationId } = call;
+    const projectCall = idempotentProjectCall({ recordProjectCall, call });
+    const declare = async ({
+      projectId,
+      states,
+    }: {
+      readonly projectId: string;
+      readonly states?: readonly unknown[];
+    }): Promise<Execution<CallToolResult>> => {
+      const declared = await recordProjectCall({
+        tool: "declare_figma_states",
+        projectId,
+        userId: identity.userId,
+        clientId: identity.clientId,
+        correlationId,
+        input: { states },
+        run: async (): Promise<
+          Result<DeclaredFigmaStates, MalformedStates | InvalidDeclaration | "not_found">
+        > => {
+          const parsed = StatesInput.safeParse(states);
+          if (!parsed.success) {
+            return err({
+              code: "malformed_states",
+              issues: parsed.error.issues.map(
+                ({ path, message }) => `${pathOf(path)} : ${message}`,
+              ),
+            });
+          }
+          return declareFigmaStates({
+            projectId,
+            userId: identity.userId,
+            clientId: identity.clientId,
+            entries: parsed.data,
+          });
+        },
+      });
+      if (!declared.ok) {
+        return {
+          response: {
+            content: [{ type: "text", text: errorTextOf(declared.error) }],
+            isError: true,
+          },
+          memorable: !isServerFailure(declared.error),
+        };
+      }
+      const output = declaredOutputOf(declared.value);
+      return {
+        response: {
+          content: [{ type: "text", text: JSON.stringify(output) }],
+          structuredContent: output,
+        },
+        memorable: true,
+      };
+    };
     server.registerTool(
       "declare_figma_states",
       {
         description:
           "Déclare l'état Figma de tokens d'un projet, après comparaison avec Figma : synced si la variable Figma a la même valeur dans chaque mode, missing_in_figma si elle n'existe pas, duplicate_in_figma si plusieurs variables Figma correspondent au token, avec leurs noms dans figmaVariables (au moins deux), diverged si la valeur Figma diffère dans au moins un mode, avec cette valeur dans figmaValue ($value ou modes) : elle devient une proposition dans le lot ouvert de l'IA, ou dans un lot automatique. La déclaration s'applique sans relecture et remplace l'état précédent ; une entrée invalide refuse toute la déclaration.",
-        inputSchema: { projectId: Uuid, states: z.array(z.unknown()).optional() },
+        inputSchema: {
+          projectId: Uuid,
+          states: z.array(z.unknown()).optional(),
+          idempotencyKey: IdempotencyKeyArgument,
+        },
         outputSchema: DeclaredFigmaStatesOutput,
       },
-      async ({ projectId, states }) => {
-        const declared = await recordProjectCall({
+      async (args) =>
+        projectCall({
           tool: "declare_figma_states",
-          projectId,
-          userId: identity.userId,
-          clientId: identity.clientId,
-          correlationId,
-          input: { states },
-          run: async (): Promise<
-            Result<DeclaredFigmaStates, MalformedStates | InvalidDeclaration | "not_found">
-          > => {
-            const parsed = StatesInput.safeParse(states);
-            if (!parsed.success) {
-              return err({
-                code: "malformed_states",
-                issues: parsed.error.issues.map(
-                  ({ path, message }) => `${pathOf(path)} : ${message}`,
-                ),
-              });
-            }
-            return declareFigmaStates({
-              projectId,
-              userId: identity.userId,
-              clientId: identity.clientId,
-              entries: parsed.data,
-            });
-          },
-        });
-        if (!declared.ok) {
-          return { content: [{ type: "text", text: errorTextOf(declared.error) }], isError: true };
-        }
-        const output = declaredOutputOf(declared.value);
-        return {
-          content: [{ type: "text", text: JSON.stringify(output) }],
-          structuredContent: output,
-        };
-      },
+          args,
+          input: { states: args.states },
+          run: () => declare(args),
+        }),
     );
   };

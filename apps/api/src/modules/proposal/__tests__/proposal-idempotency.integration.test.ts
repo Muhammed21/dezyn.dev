@@ -421,19 +421,44 @@ describe("write_tokens relancé avec la même clé d'idempotence rejoue son prem
       });
     }));
 
-  it("annonce idempotencyKey comme un argument optionnel de write_tokens, et dit quand le réutiliser", () =>
+  it.each(["write_tokens", "open_proposal_batch", "close_proposal_batch", "declare_figma_states"])(
+    "annonce idempotencyKey comme un argument optionnel de %s, et dit quand le réutiliser",
+    (toolName) =>
+      withIdentityApp(async (app, db) => {
+        const { accessToken } = await seedProject(app, db);
+
+        const response = await callMcp(app, { token: accessToken, method: "tools/list" });
+
+        const { result } = await response.json();
+        const tool = result.tools.find(({ name }: { name: string }) => name === toolName);
+        expect(tool.inputSchema.properties.idempotencyKey).toMatchObject({
+          type: "string",
+          description: IDEMPOTENCY_KEY_DESCRIPTION,
+        });
+        expect(tool.inputSchema.required).not.toContain("idempotencyKey");
+      }),
+  );
+
+  it("n'annonce idempotencyKey sur aucun outil de lecture", () =>
     withIdentityApp(async (app, db) => {
       const { accessToken } = await seedProject(app, db);
 
       const response = await callMcp(app, { token: accessToken, method: "tools/list" });
 
       const { result } = await response.json();
-      const tool = result.tools.find(({ name }: { name: string }) => name === "write_tokens");
-      expect(tool.inputSchema.properties.idempotencyKey).toMatchObject({
-        type: "string",
-        description: IDEMPOTENCY_KEY_DESCRIPTION,
-      });
-      expect(tool.inputSchema.required).not.toContain("idempotencyKey");
+      const keyed = result.tools
+        .filter(
+          ({ inputSchema }: { inputSchema: { properties?: Record<string, unknown> } }) =>
+            inputSchema.properties?.idempotencyKey !== undefined,
+        )
+        .map(({ name }: { name: string }) => name)
+        .toSorted();
+      expect(keyed).toEqual([
+        "close_proposal_batch",
+        "declare_figma_states",
+        "open_proposal_batch",
+        "write_tokens",
+      ]);
     }));
 });
 
