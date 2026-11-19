@@ -38,7 +38,10 @@ export type ValidatedToken = {
     | { readonly kind: "by_mode"; readonly values: Readonly<Record<string, unknown>> };
 };
 
-export type ValidatedTokens = { readonly tokens: readonly ValidatedToken[] };
+export type ValidatedTokens = {
+  readonly modes: readonly string[];
+  readonly tokens: readonly ValidatedToken[];
+};
 
 export type ProposalFailure = "unauthenticated" | "not_found" | "unavailable" | "invalid_response";
 

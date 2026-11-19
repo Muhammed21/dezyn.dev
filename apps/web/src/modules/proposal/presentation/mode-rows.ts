@@ -57,7 +57,31 @@ const simpleProposedRows = (
     change: sameValue(before, proposed.$value) ? "unchanged" : "changed",
   }));
 
+const inProjectOrder = (
+  rows: readonly ModeRow[],
+  projectModes: readonly string[],
+): readonly ModeRow[] => {
+  const positionOf = (mode: string) => {
+    const position = projectModes.indexOf(mode);
+    return position === -1 ? projectModes.length : position;
+  };
+  return rows.toSorted((left, right) => positionOf(left.mode) - positionOf(right.mode));
+};
+
 export const modeRows = ({
+  validated,
+  proposed,
+  projectModes,
+}: {
+  readonly validated: TokenValue | undefined;
+  readonly proposed: TokenValue;
+  readonly projectModes: readonly string[];
+}): readonly ModeRow[] | undefined => {
+  const rows = rowsOf({ validated, proposed });
+  return rows === undefined ? undefined : inProjectOrder(rows, projectModes);
+};
+
+const rowsOf = ({
   validated,
   proposed,
 }: {
