@@ -105,7 +105,12 @@ describe("aperçu avant/après", () => {
   it.each(CASES)("garde le rendu de référence : $name", async ({ name, validated, proposed }) => {
     const screen = await render(
       <div style={{ width: "32rem", padding: "1rem", background: "#ffffff", color: "#1a1a1a" }}>
-        <BeforeAfter validated={validated} proposed={proposed} aliases={NO_ALIASES} />
+        <BeforeAfter
+          validated={validated}
+          proposed={proposed}
+          aliases={NO_ALIASES}
+          projectModes={[]}
+        />
       </div>,
     );
 
