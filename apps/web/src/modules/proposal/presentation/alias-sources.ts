@@ -13,7 +13,7 @@ export type ReadTokens = (project: {
 
 export type AliasSources = { readonly before: AliasValues; readonly after: AliasValues };
 
-const tokensKeyOf = (projectId: string | undefined) => ["tokens", projectId];
+export const tokensKeyOf = (projectId: string | undefined) => ["tokens", projectId];
 
 type Entry = readonly [string, unknown];
 
