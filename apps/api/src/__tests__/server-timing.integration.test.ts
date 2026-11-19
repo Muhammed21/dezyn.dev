@@ -86,6 +86,17 @@ describe("chaque réponse de l'API porte Server-Timing", () => {
       expect(response.headers.get("server-timing")).toMatch(/^[\x20-\x7e]+$/);
     }));
 
+  it("une connexion n'annonce pas ses requêtes SQL, qui trahiraient si l'e-mail existe", () =>
+    withIdentityApp(async (app) => {
+      const response = await app.request(`${BASE_URL}/auth/sign-in/email`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: "inconnu@exemple.fr", password: "mot-de-passe-faux" }),
+      });
+
+      expect(response.headers.get("server-timing")).toBeNull();
+    }));
+
   it("des requêtes simultanées comptent chacune leurs propres requêtes SQL", () =>
     withIdentityApp(async (app, db) => {
       const project = await seedProject(app, db);
