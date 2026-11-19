@@ -93,6 +93,16 @@ type Access = { readonly access: ProjectAccess };
 
 type Clocked = { readonly now: () => Date };
 
+export const projectOfProposal =
+  ({ proposals }: { readonly proposals: ProposalReader }) =>
+  async (proposalId: string): Promise<string | undefined> =>
+    (await proposals.proposal(proposalId))?.projectId;
+
+export const projectOfBatch =
+  ({ proposals }: { readonly proposals: ProposalReader }) =>
+  async (batchId: string): Promise<string | undefined> =>
+    (await proposals.batch(batchId))?.projectId;
+
 export const listBatches =
   ({ proposals, now, access }: Access & Clocked & { readonly proposals: ProposalReader }) =>
   async ({

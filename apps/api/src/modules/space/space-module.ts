@@ -4,7 +4,7 @@ import type { PostgresDatabase, PostgresTransaction } from "#db";
 import type { LogSink } from "#platform/logging.ts";
 import type { Mailer } from "#platform/mailer.ts";
 
-import { acceptInvitation } from "./application/accept-invitation.ts";
+import { acceptInvitation, invitedSpaceOf } from "./application/accept-invitation.ts";
 import { decideStorageAlert, sendStorageAlert } from "./application/alert-storage.ts";
 import { inviteMember } from "./application/invite-member.ts";
 import { leaveSpace } from "./application/leave-space.ts";
@@ -12,11 +12,13 @@ import { listMembers } from "./application/list-members.ts";
 import { changeRole, removeMember } from "./application/manage-members.ts";
 import { projectAccess } from "./application/project-access.ts";
 import { readSpace } from "./application/read-space.ts";
+import { spaceAccess } from "./application/space-access.ts";
 import { createPersonalSpace, listMySpaces } from "./application/spaces.ts";
 import type { ProjectLocator } from "./domain/project-access.ts";
 import { postgresDepartures } from "./infrastructure/postgres-departures.ts";
 import { postgresInvitationAcceptance } from "./infrastructure/postgres-invitation-acceptance.ts";
 import { postgresInvitationStore } from "./infrastructure/postgres-invitation-store.ts";
+import { postgresInvitedSpaces } from "./infrastructure/postgres-invited-spaces.ts";
 import { postgresMemberDirectory } from "./infrastructure/postgres-member-directory.ts";
 import { postgresMemberList } from "./infrastructure/postgres-member-list.ts";
 import { postgresMemberManagement } from "./infrastructure/postgres-member-management.ts";
@@ -45,6 +47,7 @@ export const spaceModule = ({
   const memberships = postgresMembershipReader(db);
   return {
     memberships,
+    allowedInSpace: spaceAccess({ memberships }),
     projectAccess: (projects: ProjectLocator) => projectAccess({ projects, memberships }),
     createPersonalSpace: createPersonalSpace({ store, newId: randomUUID, now }),
     listMySpaces: listMySpaces({ store }),
@@ -65,6 +68,7 @@ export const spaceModule = ({
       now,
       webUrl,
     }),
+    invitedSpaceOf: invitedSpaceOf({ invitations: postgresInvitedSpaces(db), hashToken }),
     acceptInvitation: acceptInvitation({
       acceptance: postgresInvitationAcceptance(db),
       hashToken,

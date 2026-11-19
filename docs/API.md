@@ -12,11 +12,20 @@ Une erreur répond en `application/problem+json` (RFC 9457) : `type`, `title`, `
 
 Un client qui renvoie une écriture après un timeout, sans savoir si la première est passée, joint l'en-tête `Idempotency-Key`. Tant que la même clé revient, dezyn rejoue la réponse de la première requête sans rien réécrire.
 
-Routes qui acceptent la clé (les autres écritures suivent avec #293) :
+Routes qui acceptent la clé, avec le droit revérifié avant un rejeu :
 
-- `POST /v1/projects/{projectId}/tokens`
+| Route                                          | Écriture                     | Droit revérifié au rejeu                 |
+| ---------------------------------------------- | ---------------------------- | ---------------------------------------- |
+| `POST /v1/spaces/{spaceId}/projects`           | Création de projet           | `project.create` dans l'espace           |
+| `POST /v1/spaces/{spaceId}/invitations`        | Invitation                   | `member.invite` dans l'espace            |
+| `POST /v1/invitations/{token}/accept`          | Acceptation d'une invitation | Membre actif de l'espace de l'invitation |
+| `POST /v1/projects/{projectId}/tokens`         | Ajout d'un token             | `token.create` sur le projet             |
+| `POST /v1/projects/{projectId}/tokens/import`  | Import                       | `token.create` sur le projet             |
+| `POST /v1/proposals/{proposalId}/validate`     | Validation d'une proposition | `proposal.review` sur le projet          |
+| `POST /v1/proposals/{proposalId}/reject`       | Rejet d'une proposition      | `proposal.review` sur le projet          |
+| `POST /v1/proposal-batches/{batchId}/validate` | Validation d'un lot          | `proposal.review` sur le projet          |
 
-Sans en-tête, la route répond comme toute requête.
+Sans en-tête, la route répond comme toute requête. Les autres routes ignorent l'en-tête : les changements de rôle et les départs, idempotents par nature, les pages d'autorisation OAuth et les routes de better-auth (`/auth/*`).
 
 ### Règles
 
@@ -24,7 +33,7 @@ Sans en-tête, la route répond comme toute requête.
 - **Portée** : une clé appartient au membre authentifié, à la méthode et au chemin de la requête. La même clé sur un autre chemin, une autre méthode ou pour un autre membre est une nouvelle requête.
 - **Empreinte** : le corps de la requête. La même clé avec un autre corps est refusée.
 - **Réponses mémorisées** : les 2xx et les 4xx. Une 5xx n'est pas mémorisée : la clé est libérée et une relance s'exécute pour de bon.
-- **Rejeu** : même statut, même corps, même `content-type`, avec l'en-tête `Idempotency-Replayed: true`. Un rejeu n'écrit rien : pas de nouvelle entrée d'historique, pas de signal temps réel.
+- **Rejeu** : même statut, même corps (aucun pour un 204), même `content-type`, avec l'en-tête `Idempotency-Replayed: true`. Un rejeu n'écrit rien : pas de nouvelle entrée d'historique, pas de signal temps réel.
 - **Accès** : avant un rejeu, dezyn revérifie que le membre a encore le droit d'écrire. Un membre qui l'a perdu (retiré de l'espace, par exemple) reçoit la réponse d'un envoi sans clé, sans `Idempotency-Replayed`.
 - **Durée** : l'oubli d'une clé au bout de 24 heures et la purge des clés expirées arrivent avec #294.
 

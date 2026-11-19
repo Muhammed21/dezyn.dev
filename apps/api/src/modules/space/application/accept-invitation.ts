@@ -21,6 +21,21 @@ export interface InvitationAcceptance {
   ): Promise<Result<SpaceWithRole, AcceptanceRefusal>>;
 }
 
+export interface InvitedSpaces {
+  spaceOf(tokenHash: string): Promise<string | undefined>;
+}
+
+export const invitedSpaceOf =
+  ({
+    invitations,
+    hashToken,
+  }: {
+    readonly invitations: InvitedSpaces;
+    readonly hashToken: (token: string) => string;
+  }) =>
+  (token: string): Promise<string | undefined> =>
+    invitations.spaceOf(hashToken(token));
+
 export const acceptInvitation =
   ({
     acceptance,

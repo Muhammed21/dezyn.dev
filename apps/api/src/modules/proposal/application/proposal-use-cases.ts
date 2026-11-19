@@ -3,6 +3,8 @@ import type {
   batchOf,
   listBatches,
   pendingProposalsOf,
+  projectOfBatch,
+  projectOfProposal,
   reviewProposal,
   validateBatch,
 } from "./review-proposals.ts";
@@ -17,4 +19,6 @@ export type ProposalUseCases = {
   readonly reviewProposal: ReturnType<typeof reviewProposal>;
   readonly validateBatch: ReturnType<typeof validateBatch>;
   readonly pendingProposalsOf: ReturnType<typeof pendingProposalsOf>;
+  readonly projectOfProposal: ReturnType<typeof projectOfProposal>;
+  readonly projectOfBatch: ReturnType<typeof projectOfBatch>;
 };
