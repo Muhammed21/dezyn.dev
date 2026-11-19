@@ -19,6 +19,8 @@ import {
   type FigmaStateSynchronizer,
   listBatches,
   pendingProposalsOf,
+  projectOfBatch,
+  projectOfProposal,
   reviewProposal,
   validateBatch,
 } from "./application/review-proposals.ts";
@@ -121,5 +123,7 @@ export const proposalModule = ({
       signals,
     }),
     pendingProposalsOf: pendingProposalsOf(reading),
+    projectOfProposal: projectOfProposal(reading),
+    projectOfBatch: projectOfBatch(reading),
   };
 };

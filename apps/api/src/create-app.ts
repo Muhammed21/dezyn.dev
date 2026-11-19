@@ -45,15 +45,50 @@ import { Uuid } from "@repo/contracts";
 
 const MAX_BODY_BYTES = 1024 * 1024;
 
+type ProjectOf = (id: string) => Promise<string | undefined>;
+
+const itself: ProjectOf = async (projectId) => projectId;
+
 const allowedOnProject =
-  (projectAccess: ProjectAccess, action: Action): Replayable =>
+  ({
+    projectAccess,
+    action,
+    param = "projectId",
+    projectOf = itself,
+  }: {
+    readonly projectAccess: ProjectAccess;
+    readonly action: Action;
+    readonly param?: string;
+    readonly projectOf?: ProjectOf;
+  }): Replayable =>
   async (c) => {
-    const projectId = Uuid.safeParse(c.req.param("projectId")).data;
+    const id = Uuid.safeParse(c.req.param(param)).data;
+    const projectId = id === undefined ? undefined : await projectOf(id);
     if (projectId === undefined) {
       return false;
     }
     const project = await projectAccess({ projectId, userId: c.get("identity").userId, action });
     return project !== undefined;
+  };
+
+const allowedInSpace =
+  (spaces: SpaceUseCases, action: Action): Replayable =>
+  async (c) => {
+    const spaceId = Uuid.safeParse(c.req.param("spaceId")).data;
+    return (
+      spaceId !== undefined &&
+      spaces.allowedInSpace({ spaceId, userId: c.get("identity").userId, action })
+    );
+  };
+
+const memberOfInvitedSpace =
+  (spaces: SpaceUseCases): Replayable =>
+  async (c) => {
+    const spaceId = await spaces.invitedSpaceOf(c.req.param("token") ?? "");
+    return (
+      spaceId !== undefined &&
+      spaces.allowedInSpace({ spaceId, userId: c.get("identity").userId, action: "space.read" })
+    );
   };
 
 const unavailable = (c: Context<AppEnv>) =>
@@ -159,6 +194,14 @@ export const createApp = ({
       },
     }),
   );
+  v1.post(
+    "/spaces/:spaceId/projects",
+    idempotentRequest({ idempotent, replayable: allowedInSpace(spaces, "project.create") }),
+  );
+  v1.post(
+    "/spaces/:spaceId/invitations",
+    idempotentRequest({ idempotent, replayable: allowedInSpace(spaces, "member.invite") }),
+  );
   v1.route("/spaces", spacesRoutes(spaces));
   v1.route("/spaces", projectsRoutes(projects));
   v1.use("/projects/:projectId/events", requireWebOrigin(webUrl));
@@ -168,12 +211,40 @@ export const createApp = ({
     "/projects/:projectId/tokens",
     idempotentRequest({
       idempotent,
-      replayable: allowedOnProject(projectAccess, "token.create"),
+      replayable: allowedOnProject({ projectAccess, action: "token.create" }),
+    }),
+  );
+  v1.post(
+    "/projects/:projectId/tokens/import",
+    idempotentRequest({
+      idempotent,
+      replayable: allowedOnProject({ projectAccess, action: "token.create" }),
     }),
   );
   v1.route("/projects", tokensRoutes(tokens));
   v1.route("/projects", projectBatchesRoutes(proposals));
+  const reviewIdempotency = (param: string, projectOf: ProjectOf) =>
+    idempotentRequest({
+      idempotent,
+      replayable: allowedOnProject({ projectAccess, action: "proposal.review", param, projectOf }),
+    });
+  v1.post(
+    "/proposals/:proposalId/validate",
+    reviewIdempotency("proposalId", proposals.projectOfProposal),
+  );
+  v1.post(
+    "/proposals/:proposalId/reject",
+    reviewIdempotency("proposalId", proposals.projectOfProposal),
+  );
+  v1.post(
+    "/proposal-batches/:batchId/validate",
+    reviewIdempotency("batchId", proposals.projectOfBatch),
+  );
   v1.route("/", reviewRoutes(proposals));
+  v1.post(
+    "/invitations/:token/accept",
+    idempotentRequest({ idempotent, replayable: memberOfInvitedSpace(spaces) }),
+  );
   v1.route("/invitations", invitationsRoutes(spaces));
   app.route("/v1/mcp", mcp);
   app.route("/v1", v1);

@@ -45,7 +45,7 @@ const storedOf = async (response: Response): Promise<StoredResponse> => ({
 });
 
 const replayedResponse = ({ status, contentType, body }: StoredResponse) =>
-  new Response(body, {
+  new Response(body === "" ? null : body, {
     status,
     headers: {
       ...(contentType === null ? {} : { "content-type": contentType }),

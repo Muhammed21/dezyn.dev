@@ -76,3 +76,38 @@ describe("idempotentRequest : la portée d'une clé REST comprend la méthode", 
     expect(writes).toEqual(["PUT"]);
   });
 });
+
+const makeBodylessApp = () => {
+  const writes: string[] = [];
+  const app = new Hono<MemberEnv>()
+    .use(async (c, next) => {
+      c.set("identity", { userId: "ada" });
+      await next();
+    })
+    .delete(
+      "/ecriture",
+      idempotentRequest({
+        idempotent: idempotent({ store: makeMemoryStore() }),
+        replayable: async () => true,
+      }),
+      (c) => {
+        writes.push("DELETE");
+        return c.body(null, 204);
+      },
+    );
+  return { app, writes };
+};
+
+describe("idempotentRequest : une réponse sans corps se rejoue", () => {
+  it("rejoue un 204 sans corps, signalé par Idempotency-Replayed, sans réécrire", async () => {
+    const { app, writes } = makeBodylessApp();
+    await send(app, "DELETE");
+
+    const retried = await send(app, "DELETE");
+
+    expect(retried.status).toBe(204);
+    expect(retried.headers.get(IDEMPOTENCY_REPLAYED_HEADER)).toBe("true");
+    expect(retried.body).toBeNull();
+    expect(writes).toEqual(["DELETE"]);
+  });
+});

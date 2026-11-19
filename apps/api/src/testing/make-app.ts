@@ -32,10 +32,12 @@ export const makeAuth = (overrides: Partial<Auth> = {}): Auth => ({
 });
 
 export const makeSpaces = (): SpaceUseCases => ({
+  allowedInSpace: () => Promise.resolve(false),
   listMySpaces: () => Promise.resolve([]),
   readSpace: () => Promise.resolve(err("not_found")),
   listMembers: () => Promise.resolve(err("not_found")),
   inviteMember: () => Promise.resolve(err("not_found")),
+  invitedSpaceOf: () => Promise.resolve(undefined),
   acceptInvitation: () => Promise.resolve(err("gone")),
   leaveSpace: () => Promise.resolve(err("not_found")),
   changeRole: () => Promise.resolve(err("not_found")),
@@ -72,6 +74,8 @@ export const makeProposals = (): ProposalUseCases => ({
   reviewProposal: () => Promise.resolve(err("not_found")),
   validateBatch: () => Promise.resolve(err("not_found")),
   pendingProposalsOf: () => Promise.resolve([]),
+  projectOfProposal: () => Promise.resolve(undefined),
+  projectOfBatch: () => Promise.resolve(undefined),
 });
 
 export const makeIdempotent =

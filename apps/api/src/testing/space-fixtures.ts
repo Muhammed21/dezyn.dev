@@ -97,6 +97,30 @@ export const promoteToOwner = (
     .set({ role: "owner" })
     .where(and(eq(schema.spaceMember.spaceId, spaceId), eq(schema.spaceMember.userId, userId)));
 
+export const demoteToEditor = (
+  db: PostgresDatabase,
+  { spaceId, userId }: { spaceId: string; userId: string },
+) =>
+  db.orm
+    .update(schema.spaceMember)
+    .set({ role: "editor" })
+    .where(and(eq(schema.spaceMember.spaceId, spaceId), eq(schema.spaceMember.userId, userId)));
+
+export const closeMembership = (
+  db: PostgresDatabase,
+  { spaceId, userId }: { spaceId: string; userId: string },
+) =>
+  db.orm
+    .update(schema.spaceMember)
+    .set({ closedAt: new Date(), closedReason: "removed" })
+    .where(
+      and(
+        eq(schema.spaceMember.spaceId, spaceId),
+        eq(schema.spaceMember.userId, userId),
+        isNull(schema.spaceMember.closedAt),
+      ),
+    );
+
 export const membershipsOf = (
   db: PostgresDatabase,
   { spaceId, userId }: { spaceId: string; userId: string },
