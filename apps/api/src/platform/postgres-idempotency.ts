@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 import { schema } from "@repo/db";
 
@@ -16,34 +16,40 @@ const ofClaim = ({ userId, scope, key }: IdempotencyClaim) =>
     eq(schema.idempotencyKey.key, key),
   );
 
-const storedOf = (row: {
-  readonly state: string;
+const storedOf = ({
+  fingerprint,
+  response,
+}: {
   readonly fingerprint: string;
   readonly response: string | null;
 }): StoredIdempotencyKey =>
-  row.state === COMPLETED && row.response !== null
-    ? { state: COMPLETED, fingerprint: row.fingerprint, response: row.response }
-    : { state: "in_progress", fingerprint: row.fingerprint };
+  response === null
+    ? { state: "in_progress", fingerprint }
+    : { state: COMPLETED, fingerprint, response };
 
 export const postgresIdempotencyStore = (db: PostgresDatabase): IdempotencyStore => ({
   reserve: async ({ createdAt, ...claim }) => {
-    const reserved = await db.orm
-      .insert(schema.idempotencyKey)
-      .values({ id: randomUUID(), ...claim, state: "in_progress", response: null, createdAt })
-      .onConflictDoNothing()
-      .returning({ id: schema.idempotencyKey.id });
-    if (reserved.length > 0) {
-      return { kind: "reserved" };
-    }
+    const id = randomUUID();
     const [row] = await db.orm
-      .select({
-        state: schema.idempotencyKey.state,
+      .insert(schema.idempotencyKey)
+      .values({ id, ...claim, state: "in_progress", response: null, createdAt })
+      .onConflictDoUpdate({
+        target: [
+          schema.idempotencyKey.userId,
+          schema.idempotencyKey.scope,
+          schema.idempotencyKey.key,
+        ],
+        set: { key: sql`excluded.key` },
+      })
+      .returning({
+        id: schema.idempotencyKey.id,
         fingerprint: schema.idempotencyKey.fingerprint,
         response: schema.idempotencyKey.response,
-      })
-      .from(schema.idempotencyKey)
-      .where(ofClaim(claim));
-    return { kind: "taken", stored: row === undefined ? undefined : storedOf(row) };
+      });
+    if (row === undefined || row.id === id) {
+      return { reserved: true };
+    }
+    return { reserved: false, stored: storedOf(row) };
   },
   complete: async (claim, response) => {
     await db.orm

@@ -7,7 +7,20 @@ import { z } from "zod";
 import type { AccessTokenIdentity } from "@repo/auth-verifier";
 
 import type { AuthenticatedEnv } from "./access-token.ts";
-import { type Execution, fingerprintOf, type Idempotent } from "./idempotency.ts";
+import {
+  type Execution,
+  fingerprintOf,
+  type Idempotent,
+  type IdempotencyRefusal,
+} from "./idempotency.ts";
+
+const REFUSAL_TEXT: Readonly<Record<IdempotencyRefusal, string>> = {
+  invalid_idempotency_key: "idempotencyKey compte de 1 à 255 caractères ASCII imprimables.",
+  idempotency_in_progress:
+    "un appel avec cette clé d'idempotence est encore en cours ; réessaie dans un instant.",
+  idempotency_key_reused:
+    "cette clé d'idempotence a déjà servi avec d'autres arguments ; choisis une clé nouvelle pour une autre écriture.",
+};
 
 export const IdempotencyKeyArgument = z
   .string()
@@ -37,7 +50,7 @@ const idempotentToolCall =
     if (idempotencyKey === undefined) {
       return (await run()).response;
     }
-    const { response } = await idempotent({
+    const outcome = await idempotent({
       claim: {
         userId,
         scope: `mcp:${tool}`,
@@ -48,7 +61,13 @@ const idempotentToolCall =
       run,
       replay,
     });
-    return response;
+    if ("refusal" in outcome) {
+      return {
+        content: [{ type: "text", text: `${outcome.refusal} : ${REFUSAL_TEXT[outcome.refusal]}` }],
+        isError: true,
+      };
+    }
+    return outcome.response;
   };
 
 export const mcpEndpoint =
