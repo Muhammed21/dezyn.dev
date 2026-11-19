@@ -1,4 +1,5 @@
 import { colorPreview } from "./color-preview.ts";
+import { dimensionPreview } from "./dimension-preview.ts";
 import { fontFamilyPreview, fontWeightPreview, typographyPreview } from "./font-preview.ts";
 import { gradientPreview } from "./gradient-preview.ts";
 import type { Preview, TextPreview } from "./preview.ts";
@@ -8,6 +9,7 @@ type ToPreview = (value: unknown) => Preview | undefined;
 
 const PREVIEWS: ReadonlyMap<unknown, ToPreview> = new Map<unknown, ToPreview>([
   ["color", colorPreview],
+  ["dimension", dimensionPreview],
   ["shadow", shadowPreview],
   ["gradient", gradientPreview],
   ["fontFamily", fontFamilyPreview],

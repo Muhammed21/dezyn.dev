@@ -41,6 +41,20 @@ const ShadowCard = ({ style }: { readonly style: { readonly boxShadow: string } 
   />
 );
 
+const Bar = ({ style }: { readonly style: { readonly width: string } }) => (
+  <span
+    aria-hidden="true"
+    style={{
+      ...style,
+      display: "block",
+      maxWidth: "100%",
+      height: "0.75rem",
+      borderRadius: "0.125rem",
+      backgroundColor: "currentColor",
+    }}
+  />
+);
+
 const Band = ({ style }: { readonly style: { readonly backgroundImage: string } }) => (
   <span
     aria-hidden="true"
@@ -67,6 +81,8 @@ const Drawing = ({ preview }: { readonly preview: Preview }) => {
   switch (preview.shape) {
     case "swatch":
       return <Swatch style={preview.style} />;
+    case "bar":
+      return <Bar style={preview.style} />;
     case "shadow":
       return <ShadowCard style={preview.style} />;
     case "band":

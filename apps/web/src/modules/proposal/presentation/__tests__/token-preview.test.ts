@@ -52,6 +52,34 @@ describe("aperçu d'une couleur srgb", () => {
   });
 });
 
+const makeDimension = (overrides: Readonly<Record<string, unknown>> = {}) => ({
+  value: 16,
+  unit: "px",
+  ...overrides,
+});
+
+describe("aperçu d'une dimension", () => {
+  it.each([
+    ["en px", makeDimension({ value: 16, unit: "px" }), "16px"],
+    ["en rem", makeDimension({ value: 1, unit: "rem" }), "1rem"],
+    ["décimale", makeDimension({ value: 0.5, unit: "rem" }), "0.5rem"],
+    ["nulle", makeDimension({ value: 0, unit: "px" }), "0px"],
+  ])("donne une barre à sa taille réelle et la valeur avec son unité, %s", (_case, value, text) => {
+    expect(previewOf({ type: "dimension", value })).toEqual({
+      shape: "bar",
+      text,
+      style: { width: text },
+    });
+  });
+
+  it("donne une dimension négative en texte avec son unité, sans barre", () => {
+    expect(previewOf({ type: "dimension", value: makeDimension({ value: -4 }) })).toEqual({
+      shape: "text",
+      text: "-4px",
+    });
+  });
+});
+
 describe("aperçu en texte brut", () => {
   it.each([
     ["un autre espace de couleur", makeColor({ colorSpace: "display-p3" })],
@@ -66,6 +94,20 @@ describe("aperçu en texte brut", () => {
     ["null", null],
   ])("montre une couleur mal formée en JSON : %s", (_case, value) => {
     expect(previewOf({ type: "color", value })).toEqual({
+      shape: "text",
+      text: JSON.stringify(value),
+    });
+  });
+
+  it.each([
+    ["une autre unité", makeDimension({ unit: "em" })],
+    ["une unité absente", { value: 16 }],
+    ["une valeur en texte", makeDimension({ value: "16" })],
+    ["une valeur absente", { unit: "px" }],
+    ["un alias", "{espace.moyen}"],
+    ["un nombre nu", 16],
+  ])("montre une dimension mal formée en JSON : %s", (_case, value) => {
+    expect(previewOf({ type: "dimension", value })).toEqual({
       shape: "text",
       text: JSON.stringify(value),
     });

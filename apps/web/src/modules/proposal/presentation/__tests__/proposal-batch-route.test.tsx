@@ -348,6 +348,68 @@ describe("aperçu avant/après d'une proposition", () => {
     await expect.element(preview(screen, "Après : #1a336600")).toBeVisible();
   });
 
+  it("montre la dimension validée avant et la dimension proposée après, chacune avec son unité", async () => {
+    const { screen } = await renderBatch(
+      reading(
+        makeBatch({
+          proposals: [
+            makeUpdate({
+              validated: { $type: "dimension", $value: { value: 16, unit: "px" } },
+              proposed: { $type: "dimension", $value: { value: 1, unit: "rem" } },
+            }),
+          ],
+        }),
+      ),
+    );
+
+    const before = preview(screen, "Avant : 16px");
+    await expect.element(before.getByText("16px", { exact: true })).toBeVisible();
+    const after = preview(screen, "Après : 1rem");
+    await expect.element(after.getByText("1rem", { exact: true })).toBeVisible();
+    expect(proposalItems(screen).getByRole("img").elements()).toHaveLength(0);
+  });
+
+  it("dessine 16px et 1rem en deux barres de même largeur, à la même échelle", async () => {
+    const { screen } = await renderBatch(
+      reading(
+        makeBatch({
+          proposals: [
+            makeUpdate({
+              validated: { $type: "dimension", $value: { value: 16, unit: "px" } },
+              proposed: { $type: "dimension", $value: { value: 1, unit: "rem" } },
+            }),
+          ],
+        }),
+      ),
+    );
+    const barWidth = (name: string) => {
+      const bar = preview(screen, name).element().querySelector('[aria-hidden="true"]');
+      return bar === null ? undefined : getComputedStyle(bar).width;
+    };
+
+    await expect.element(preview(screen, "Avant : 16px")).toBeVisible();
+    expect(barWidth("Avant : 16px")).toBe("16px");
+    expect(barWidth("Après : 1rem")).toBe("16px");
+  });
+
+  it("montre un nombre en texte lisible, avant et après", async () => {
+    const { screen } = await renderBatch(
+      reading(
+        makeBatch({
+          proposals: [
+            makeUpdate({
+              validated: { $type: "number", $value: 1.5 },
+              proposed: { $type: "number", $value: 2 },
+            }),
+          ],
+        }),
+      ),
+    );
+
+    await expect.element(preview(screen, "Avant : 1.5").getByText("1.5")).toBeVisible();
+    await expect.element(preview(screen, "Après : 2").getByText("2")).toBeVisible();
+  });
+
   it("ne montre que l'aperçu Après d'une création, marqué Nouveau token", async () => {
     const { screen } = await renderBatch(
       reading(
