@@ -4,6 +4,8 @@ import { createProjectEvents } from "../project-module.ts";
 
 const PROJECT_ID = "4f2a9c1e-7b3d-4e8a-9f10-2c5d6e7f8a9b";
 
+const OTHER_PROJECT_ID = "9c8b7a6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
+
 const PING_INTERVAL_MS = 30_000;
 
 type Listener = (event: { readonly data: unknown }) => void;
@@ -44,6 +46,7 @@ const makeSockets = () => {
       opened
         .filter(({ state }) => !state.closed)
         .forEach((socket) => dispatch(socket, "message", data)),
+    receiveOn: (index: number, data: string) => dispatch(opened[index], "message", data),
     open: (index: number) => dispatch(opened[index], "open"),
     drop: (index: number) => {
       const socket = opened[index];
@@ -95,6 +98,35 @@ const subscribed = ({ apiUrl = "https://api.dezyn.dev" }: { readonly apiUrl?: st
   });
   return { sockets, scheduler, received, resyncs, unsubscribe };
 };
+
+const makeAdapter = () => {
+  const sockets = makeSockets();
+  const scheduler = makeScheduler();
+  const events = createProjectEvents({
+    apiUrl: "https://api.dezyn.dev",
+    openSocket: sockets.openSocket,
+    schedule: scheduler.schedule,
+  });
+  const subscribe = (
+    projectId: string,
+    { onTopics = () => {} }: { readonly onTopics?: (topics: readonly string[]) => void } = {},
+  ) => {
+    const received: (readonly string[])[] = [];
+    const resyncs: string[] = [];
+    const unsubscribe = events.subscribe({
+      projectId,
+      onTopics: (topics) => {
+        received.push(topics);
+        onTopics(topics);
+      },
+      onResync: () => resyncs.push(projectId),
+    });
+    return { received, resyncs, unsubscribe };
+  };
+  return { sockets, scheduler, subscribe };
+};
+
+const CHANGED_PROPOSALS = JSON.stringify({ type: "changed", topics: ["proposals"] });
 
 const dropAndRetry = (
   { sockets, scheduler }: Pick<ReturnType<typeof subscribed>, "sockets" | "scheduler">,
@@ -266,5 +298,159 @@ describe("l'app web garde la WebSocket d'un projet vivante par un ping", () => {
     subscription.scheduler.runLast();
 
     expect(subscription.sockets.opened[1]?.sent).toEqual(["ping"]);
+  });
+});
+
+describe("les abonnements à un même projet partagent une seule WebSocket", () => {
+  it("deux abonnements au même projet n'ouvrent qu'une WebSocket", () => {
+    const { sockets, subscribe } = makeAdapter();
+
+    subscribe(PROJECT_ID);
+    subscribe(PROJECT_ID);
+
+    expect(sockets.opened.map(({ url }) => url)).toEqual([
+      `wss://api.dezyn.dev/v1/projects/${PROJECT_ID}/events`,
+    ]);
+  });
+
+  it("un signal reçu est remis à chaque abonnement du projet", () => {
+    const { sockets, subscribe } = makeAdapter();
+    const first = subscribe(PROJECT_ID);
+    const second = subscribe(PROJECT_ID);
+
+    sockets.receiveOn(0, CHANGED_PROPOSALS);
+
+    expect([first.received, second.received]).toEqual([[["proposals"]], [["proposals"]]]);
+  });
+
+  it("deux projets ouvrent deux WebSockets, et chaque signal reste à son projet", () => {
+    const { sockets, subscribe } = makeAdapter();
+    const project = subscribe(PROJECT_ID);
+    const other = subscribe(OTHER_PROJECT_ID);
+
+    sockets.receiveOn(1, CHANGED_PROPOSALS);
+
+    expect(sockets.opened.map(({ url }) => url)).toEqual([
+      `wss://api.dezyn.dev/v1/projects/${PROJECT_ID}/events`,
+      `wss://api.dezyn.dev/v1/projects/${OTHER_PROJECT_ID}/events`,
+    ]);
+    expect([project.received, other.received]).toEqual([[], [["proposals"]]]);
+  });
+
+  it("se désabonner du premier garde la WebSocket pour le second", () => {
+    const { sockets, subscribe } = makeAdapter();
+    const first = subscribe(PROJECT_ID);
+    const second = subscribe(PROJECT_ID);
+    sockets.open(0);
+
+    first.unsubscribe();
+    sockets.receiveOn(0, CHANGED_PROPOSALS);
+
+    expect(sockets.opened.map(({ state }) => state.closed)).toEqual([false]);
+    expect([first.received, second.received]).toEqual([[], [["proposals"]]]);
+  });
+
+  it("se désabonner une seconde fois ne retire pas la WebSocket rouverte par d'autres abonnements", () => {
+    const { sockets, subscribe } = makeAdapter();
+    const gone = subscribe(PROJECT_ID);
+    gone.unsubscribe();
+    subscribe(PROJECT_ID);
+
+    gone.unsubscribe();
+    subscribe(PROJECT_ID);
+
+    expect(sockets.opened.map(({ state }) => state.closed)).toEqual([true, false]);
+  });
+
+  it("se désabonner du dernier ferme la WebSocket, sans la rouvrir", () => {
+    const { sockets, scheduler, subscribe } = makeAdapter();
+    const first = subscribe(PROJECT_ID);
+    const second = subscribe(PROJECT_ID);
+    sockets.open(0);
+
+    first.unsubscribe();
+    second.unsubscribe();
+
+    expect(sockets.opened.map(({ state }) => state.closed)).toEqual([true]);
+    expect(scheduler.pending()).toEqual([]);
+  });
+
+  it("se désabonner du dernier pendant l'attente annule la reconnexion", () => {
+    const { sockets, scheduler, subscribe } = makeAdapter();
+    const first = subscribe(PROJECT_ID);
+    const second = subscribe(PROJECT_ID);
+    sockets.drop(0);
+
+    first.unsubscribe();
+    second.unsubscribe();
+    scheduler.runLast();
+
+    expect(scheduler.pending()).toEqual([]);
+    expect(sockets.opened).toHaveLength(1);
+  });
+
+  it("un abonnement après le départ du dernier rouvre une WebSocket", () => {
+    const { sockets, subscribe } = makeAdapter();
+    subscribe(PROJECT_ID).unsubscribe();
+
+    const again = subscribe(PROJECT_ID);
+    sockets.receiveOn(1, CHANGED_PROPOSALS);
+
+    expect(sockets.opened.map(({ state }) => state.closed)).toEqual([true, false]);
+    expect(again.received).toEqual([["proposals"]]);
+  });
+
+  it("une coupure ne planifie qu'une reconnexion, et la réouverture rattrape chaque abonnement", () => {
+    const { sockets, scheduler, subscribe } = makeAdapter();
+    const first = subscribe(PROJECT_ID);
+    const second = subscribe(PROJECT_ID);
+    sockets.open(0);
+
+    sockets.drop(0);
+    expect(scheduler.pending().map(({ delayMs }) => delayMs)).toEqual([1000]);
+    scheduler.runLast();
+    sockets.open(1);
+
+    expect(sockets.opened).toHaveLength(2);
+    expect([first.resyncs, second.resyncs]).toEqual([[PROJECT_ID], [PROJECT_ID]]);
+  });
+
+  it("un abonnement ajouté à la WebSocket déjà ouverte reçoit les signaux, sans rattrapage", () => {
+    const { sockets, subscribe } = makeAdapter();
+    subscribe(PROJECT_ID);
+    sockets.open(0);
+
+    const late = subscribe(PROJECT_ID);
+    sockets.receiveOn(0, CHANGED_PROPOSALS);
+
+    expect(sockets.opened).toHaveLength(1);
+    expect(late.resyncs).toEqual([]);
+    expect(late.received).toEqual([["proposals"]]);
+  });
+
+  it("un abonnement ajouté pendant la reconnexion est rattrapé à la réouverture", () => {
+    const { sockets, scheduler, subscribe } = makeAdapter();
+    subscribe(PROJECT_ID);
+    sockets.drop(0);
+
+    const late = subscribe(PROJECT_ID);
+    scheduler.runLast();
+    sockets.open(1);
+
+    expect(sockets.opened).toHaveLength(2);
+    expect(late.resyncs).toEqual([PROJECT_ID]);
+  });
+
+  it("un abonnement qui lève une erreur n'empêche pas les autres de recevoir le signal", () => {
+    const { sockets, subscribe } = makeAdapter();
+    subscribe(PROJECT_ID, {
+      onTopics: () => {
+        throw new Error("refetch impossible");
+      },
+    });
+    const second = subscribe(PROJECT_ID);
+
+    expect(() => sockets.receiveOn(0, CHANGED_PROPOSALS)).toThrow("refetch impossible");
+    expect(second.received).toEqual([["proposals"]]);
   });
 });
