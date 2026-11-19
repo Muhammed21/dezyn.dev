@@ -101,17 +101,10 @@ export const postgresProposalStore = (
 ): ProposalStore => ({
   pendingNamesOf: postgresProposalReplacer(tx).pendingNamesOf,
   pendingOf: async (projectId, names) => {
-    await [...new Set(names)]
-      .toSorted()
-      .reduce<Promise<unknown>>(
-        (locked, name) =>
-          locked.then(() =>
-            tx.execute(
-              sql`select pg_advisory_xact_lock(hashtextextended(${`${projectId}:${name}`}, 0))`,
-            ),
-          ),
-        Promise.resolve(),
-      );
+    const keys = [...new Set(names)].toSorted().map((name) => `${projectId}:${name}`);
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(locked.key, 0)) from unnest(${sql.param(keys)}::text[]) with ordinality as locked(key, position) order by locked.position`,
+    );
     const rows = await tx
       .select({ proposal })
       .from(proposal)
@@ -135,6 +128,9 @@ export const postgresProposalStore = (
         .where(and(eq(proposalBatch.projectId, projectId), eq(proposal.status, "proposed")))
     ).map(({ payload }) => TokenDefinitionInput.parse(payload)),
   replace: async (proposalIds) => {
+    if (proposalIds.length === 0) {
+      return;
+    }
     const before = await tx
       .select()
       .from(proposal)

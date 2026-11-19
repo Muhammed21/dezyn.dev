@@ -7,6 +7,7 @@ import { makeClientIp } from "#testing/authorization-flow.ts";
 import {
   makeHistory,
   makeIdempotent,
+  makeProjectAccess,
   makeProjects,
   makeSpaces,
   makeProposals,
@@ -68,6 +69,7 @@ const withIdentityApp = (run: (identityApp: IdentityApp) => Promise<void>) =>
         tokens: makeTokens(),
         proposals: makeProposals(),
         idempotent: makeIdempotent(),
+        projectAccess: makeProjectAccess(),
       });
       await run({ app, records, postJson: postJsonFrom(app, makeClientIp()) });
     } finally {

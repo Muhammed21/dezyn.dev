@@ -4,6 +4,7 @@ import type { Auth } from "#modules/identity/application/auth.ts";
 import type { ProjectUseCases } from "#modules/project/application/project-use-cases.ts";
 import type { ProposalUseCases } from "#modules/proposal/application/proposal-use-cases.ts";
 import type { SpaceUseCases } from "#modules/space/application/spaces.ts";
+import type { ProjectAccess } from "#modules/space/contracts/membership.ts";
 import type { TokenUseCases } from "#modules/token/application/token-use-cases.ts";
 import type { Database } from "#platform/database.ts";
 import type { Idempotent } from "#platform/idempotency.ts";
@@ -77,6 +78,8 @@ export const makeIdempotent =
   (): Idempotent =>
   async ({ run }) => ({ kind: "executed", response: (await run()).response });
 
+export const makeProjectAccess = (): ProjectAccess => async () => undefined;
+
 export const makeApp = ({
   db = makeDatabase(),
   auth = makeAuth(),
@@ -94,6 +97,7 @@ export const makeApp = ({
     tokens: makeTokens(),
     proposals: makeProposals(),
     idempotent: makeIdempotent(),
+    projectAccess: makeProjectAccess(),
   });
   return { app, records };
 };

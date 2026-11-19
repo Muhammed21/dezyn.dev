@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import type { TokenValue } from "../domain/proposal.ts";
 import type { AliasSources } from "./alias-sources.ts";
 import { aliasPreviewOf, type AliasValues } from "./alias.ts";
+import { type ModeChange, type ModeRow, modeRows } from "./mode-rows.ts";
 import type { Preview, SamplePreview } from "./preview.ts";
 
 const CHECKERBOARD = {
@@ -138,21 +139,79 @@ const PreviewFigure = ({
   );
 };
 
-export const BeforeAfter = ({
+const ValueBeforeAfter = ({
   validated,
   proposed,
   aliases,
+  children,
 }: {
   readonly validated: TokenValue | undefined;
-  readonly proposed: TokenValue;
+  readonly proposed: TokenValue | undefined;
   readonly aliases: AliasSources;
+  readonly children?: ReactNode;
 }) => (
   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
     {validated === undefined ? null : (
       <PreviewFigure label="Avant" column={1} token={validated} aliases={aliases.before} />
     )}
-    <PreviewFigure label="Après" column={2} token={proposed} aliases={aliases.after}>
-      {validated === undefined ? <p style={{ margin: 0 }}>Nouveau token</p> : null}
-    </PreviewFigure>
+    {proposed === undefined ? null : (
+      <PreviewFigure label="Après" column={2} token={proposed} aliases={aliases.after}>
+        {children}
+      </PreviewFigure>
+    )}
   </div>
 );
+
+const NEW_TOKEN = <p style={{ margin: 0 }}>Nouveau token</p>;
+
+const CHANGE_LABELS: Readonly<Record<ModeChange, string | undefined>> = {
+  changed: undefined,
+  unchanged: "Inchangé",
+  added: "Nouveau mode",
+  removed: "Mode retiré",
+};
+
+const ModesBeforeAfter = ({
+  rows,
+  creation,
+  aliases,
+}: {
+  readonly rows: readonly ModeRow[];
+  readonly creation: boolean;
+  readonly aliases: AliasSources;
+}) => (
+  <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+    {creation ? NEW_TOKEN : null}
+    {rows.map(({ mode, validated, proposed, change }) => (
+      <div key={mode} role="group" aria-label={mode}>
+        <p style={{ margin: 0 }}>{mode}</p>
+        {CHANGE_LABELS[change] === undefined ? null : (
+          <p style={{ margin: 0 }}>{CHANGE_LABELS[change]}</p>
+        )}
+        <ValueBeforeAfter validated={validated} proposed={proposed} aliases={aliases} />
+      </div>
+    ))}
+  </div>
+);
+
+export const BeforeAfter = ({
+  validated,
+  proposed,
+  aliases,
+  projectModes,
+}: {
+  readonly validated: TokenValue | undefined;
+  readonly proposed: TokenValue;
+  readonly aliases: AliasSources;
+  readonly projectModes: readonly string[];
+}) => {
+  const rows = modeRows({ validated, proposed, projectModes });
+  if (rows !== undefined) {
+    return <ModesBeforeAfter rows={rows} creation={validated === undefined} aliases={aliases} />;
+  }
+  return (
+    <ValueBeforeAfter validated={validated} proposed={proposed} aliases={aliases}>
+      {validated === undefined ? NEW_TOKEN : null}
+    </ValueBeforeAfter>
+  );
+};

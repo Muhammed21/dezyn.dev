@@ -90,16 +90,17 @@ export const startIdentityApp = async ({
     }
   };
   try {
-    const { spaces, projects, history, tokens, proposals, idempotent } = composeModules({
-      db,
-      mailer,
-      webUrl: WEB_URL,
-      log,
-      wrapHistoryWriter,
-      clock,
-      signals,
-      channel,
-    });
+    const { spaces, projects, history, tokens, proposals, idempotent, projectAccess } =
+      composeModules({
+        db,
+        mailer,
+        webUrl: WEB_URL,
+        log,
+        wrapHistoryWriter,
+        clock,
+        signals,
+        channel,
+      });
     const auth = await createIdentityAuth({
       webUrl: WEB_URL,
       db,
@@ -123,6 +124,7 @@ export const startIdentityApp = async ({
         tokens,
         proposals,
         idempotent,
+        projectAccess,
       }),
       db,
       migratorUrl: database.migratorUrl,

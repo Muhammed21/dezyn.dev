@@ -110,5 +110,6 @@ export const composeModules = ({
     tokens,
     proposals,
     idempotent: idempotent({ store: postgresIdempotencyStore(db) }),
+    projectAccess: access,
   };
 };

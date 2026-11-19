@@ -8,6 +8,7 @@ Chaque page de `docs/`, une ligne chacune : titre, [mode](README.md#carte), stat
 
 ## Charte
 
+- [API REST](API.md) — _reference_ — L'API REST de dezyn est servie sous `/v1`. Ses schémas partagés avec les clients vivent dans `packages/contracts` (ADR 0023, 0044).
 - [Plan d'optimisation de l'architecture](ARCHITECTURE-OPTIMIZATION-PLAN.md) — _reference_ — Démarré le 2026-10-20, avec le skill `architecture-optimization`.
 - [Architecture](ARCHITECTURE.md) — _reference_ — Une seule app Hono sert l'API HTTP, le MCP en Streamable HTTP et le serveur OAuth des apps d'IA (ADR 0007, 0008).
 - [Performance](PERFORMANCE.md) — _reference_ — Outil de mesure : les logs `request` de l'API (`durationMs`, `src/platform/request-context.ts`), capturés pendant un import réel.
@@ -65,6 +66,7 @@ Chaque page de `docs/`, une ligne chacune : titre, [mode](README.md#carte), stat
 - [0044 — L'app web appelle `/v1` avec le cookie de session, contrôlé par l'origine, et partage les contrats de l'API](adr/0044-l-app-web-appelle-v1-avec-le-cookie-de-session-controle-par-l-origine-et-partage-les-contrats-de-l-api.md) — _explanation · Accepté_ — Comment l'app web s'authentifie-t-elle sur `/v1` sans s'exposer au CSRF, d'où tient-elle ses contrats et ses droits, et quelle architecture suit-elle ?
 - [0045 — L'app web est servie sur `app.dezyn.dev`, et ses previews sous `dezyn.dev` par un Worker routeur](adr/0045-l-app-web-est-servie-sur-app-dezyn-dev-et-ses-previews-sous-dezyn-dev-par-un-worker-routeur.md) — _explanation · Proposé_ — Sur quel hôte servir l'app web, et comment une preview de l'app web parle-t-elle à l'API de preview de sa PR ?
 - [0046 — L'app web suit un projet par un signal WebSocket, servi par un Durable Object par projet dans un Worker `dezyn-realtime`](adr/0046-l-app-web-suit-un-projet-par-un-signal-websocket-d-un-durable-object-par-projet-dans-un-worker-dezyn-realtime.md) — _explanation · Accepté_ — Comment l'app web apprend-elle qu'un projet a changé, par quel transport, et où vit l'état des connexions sans casser les previews de l'API ?
+- [0048 — `history_maintainer` purge aussi les clés d'idempotence de plus de 24 heures](adr/0048-history-maintainer-purge-aussi-les-cles-d-idempotence-de-plus-de-24-heures.md) — _explanation · Accepté_ — Quel rôle supprime les clés d'idempotence de plus de 24 heures, et avec quels droits ?
 - [Décisions d'architecture](adr/README.md) — _explanation_ — Format et circuit : voir `.claude/rules/adr-et-spikes.md`.
 
 ## Spikes — recherche bornée

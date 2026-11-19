@@ -5,6 +5,7 @@ import { createPostgresDatabase } from "#db";
 import {
   makeHistory,
   makeIdempotent,
+  makeProjectAccess,
   makeProjects,
   makeSpaces,
   makeProposals,
@@ -44,6 +45,7 @@ const withIdentityApp = (run: (app: ReturnType<typeof createApp>) => Promise<voi
           tokens: makeTokens(),
           proposals: makeProposals(),
           idempotent: makeIdempotent(),
+          projectAccess: makeProjectAccess(),
         }),
       );
     } finally {
