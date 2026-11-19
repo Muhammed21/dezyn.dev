@@ -3,13 +3,17 @@ import { createMiddleware } from "hono/factory";
 import type { Database } from "./database.ts";
 import type { AppEnv } from "./http.ts";
 
-const AUTHENTICATION_PATH = "/auth/";
-
 const milliseconds = (duration: number) => Math.round(duration * 10) / 10;
 
-export const serverTiming = (db: Database) =>
+export const serverTiming = ({
+  db,
+  untimedPaths,
+}: {
+  readonly db: Database;
+  readonly untimedPaths: readonly string[];
+}) =>
   createMiddleware<AppEnv>(async (c, next) => {
-    if (c.req.path.startsWith(AUTHENTICATION_PATH)) {
+    if (untimedPaths.some((path) => c.req.path.startsWith(path))) {
       await next();
       return;
     }

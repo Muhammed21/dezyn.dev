@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { type App, BASE_URL, withIdentityApp } from "#testing/authorization-flow.ts";
+import {
+  type App,
+  BASE_URL,
+  formFields,
+  makeBrowser,
+  makeClientIp,
+  withIdentityApp,
+} from "#testing/authorization-flow.ts";
 import { seedProject } from "#testing/project-fixtures.ts";
 import { countRoundTrips } from "#testing/round-trips.ts";
 import { addToken } from "#testing/token-fixtures.ts";
@@ -93,6 +100,27 @@ describe("chaque réponse de l'API porte Server-Timing", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ email: "inconnu@exemple.fr", password: "mot-de-passe-faux" }),
       });
+
+      expect(response.headers.get("server-timing")).toBeNull();
+    }));
+
+  it("la page de connexion n'annonce pas les requêtes SQL de la connexion qu'elle fait en interne", () =>
+    withIdentityApp(async (app) => {
+      const browser = makeBrowser(app, makeClientIp());
+      const loginPage = await browser.get("/login");
+
+      const response = await browser.postForm("/login", {
+        ...formFields(await loginPage.text()),
+        email: "inconnu@exemple.fr",
+        password: "mot-de-passe-faux",
+      });
+
+      expect(response.headers.get("server-timing")).toBeNull();
+    }));
+
+  it("la page de consentement n'annonce pas de requêtes SQL", () =>
+    withIdentityApp(async (app) => {
+      const response = await makeBrowser(app, makeClientIp()).get("/consent");
 
       expect(response.headers.get("server-timing")).toBeNull();
     }));
