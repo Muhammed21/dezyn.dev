@@ -7,6 +7,7 @@ export default defineConfig({
   test: {
     name: "browser",
     include: ["src/**/*.test.tsx"],
+    exclude: ["src/**/*.visual.test.tsx"],
     browser: {
       enabled: true,
       provider: playwright(),

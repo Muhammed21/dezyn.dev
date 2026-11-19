@@ -3,6 +3,7 @@ import { historyPurge } from "#modules/history/history-module.ts";
 import { storageMeterOn } from "#modules/project/project-module.ts";
 import { readPurgeConfig } from "#platform/api-config.ts";
 import { createJsonLineSink } from "#platform/json-line-sink.ts";
+import { purgeExpiredIdempotencyKeys } from "#platform/postgres-idempotency.ts";
 import { createSmtpMailer } from "#platform/smtp-mailer.ts";
 
 const config = readPurgeConfig(process.env);
@@ -23,7 +24,8 @@ const mailer = createSmtpMailer({ ...config.value.smtp, log });
 const db = createPostgresDatabase({ url: config.value.databaseUrl, log });
 try {
   const purged = await historyPurge({ db, meterOn: storageMeterOn, mailer, log })();
-  console.log(JSON.stringify(purged, null, 2));
+  const purgedKeys = await purgeExpiredIdempotencyKeys(db);
+  console.log(JSON.stringify({ purged, purgedKeys }, null, 2));
 } finally {
   await db.close();
 }

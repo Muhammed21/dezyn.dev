@@ -55,3 +55,16 @@ Les trois rôles sont créés en SQL par le propriétaire de la base, sans super
 `pnpm prod:db [branche]` crée en SQL ceux des rôles `migrator`, `app` et `history_maintainer` qui manquent sur la branche Neon (`production` par défaut), sans toucher aux rôles existants ni à leurs mots de passe, puis migre ; il ne seede jamais. Il refuse un rôle privilégié (voir `pnpm roles:replace`) et un rôle manquant sur une base déjà migrée, dont les droits ne reviendraient pas. Sur `production`, un `migrator` qu'il vient de créer est posé dans `DATABASE_URL_MIGRATOR`, et un `app` qu'il vient de créer dans Hyperdrive.
 
 Le Worker vérifie la version du schéma à la première requête de chaque isolat, et répond 503 tant qu'elle est en retard ; le serveur Node la vérifie au démarrage. Les releases (`v*.*.*`, `.github/workflows/release.yml`) publient des notes, sans déployer.
+
+## Idempotence des outils MCP
+
+Les outils d'écriture du MCP (`write_tokens`, `open_proposal_batch`, `close_proposal_batch`, `declare_figma_states`) acceptent un argument optionnel `idempotencyKey`. Relancé avec la même clé et les mêmes arguments, un outil rejoue son premier résultat sans rien réécrire, et l'historique reçoit une entrée `replayed`.
+
+Cette protection ne vaut que pour les IA qui suivent la description de l'outil. Aucun client ne relance un appel à leur place avec les mêmes arguments :
+
+- **La spécification MCP** (révision 2025-11-25) demande d'annuler un appel sans réponse, pas de le relancer. Sa reprise de flux (`Last-Event-ID`) ne renvoie pas la requête.
+- **Le SDK TypeScript officiel** annule l'appel au bout de 60 s et lève une erreur. Il ne renvoie le même message qu'après un refus 401 ou 403, que le serveur n'a pas exécuté.
+- **Claude Code** ne relance un appel d'outil qu'après un 401 ou un 403.
+- **Cursor** marque l'appel en échec ; la relance est manuelle.
+
+Une relance vient donc du modèle. Elle forme un nouvel appel, dont rien ne garantit les arguments ni la clé.

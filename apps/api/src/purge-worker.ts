@@ -4,6 +4,7 @@ import { storageMeterOn } from "#modules/project/project-module.ts";
 import { readPurgeWorkerConfig } from "#platform/api-config.ts";
 import { createJsonLineSink } from "#platform/json-line-sink.ts";
 import { errorDetails, type LogSink } from "#platform/logging.ts";
+import { purgeExpiredIdempotencyKeys } from "#platform/postgres-idempotency.ts";
 import type { Fetch } from "#platform/resend-mailer.ts";
 import { workerMailerOf } from "#platform/worker-mailer.ts";
 import { assertSchemaVersion, LATEST_MIGRATION } from "@repo/db";
@@ -13,6 +14,22 @@ type ExecutionContext = {
 };
 
 type ScheduledController = { readonly cron: string; readonly scheduledTime: number };
+
+type Failure = { readonly error: unknown };
+
+const loggingFailure = async (
+  log: LogSink,
+  msg: string,
+  purge: () => Promise<void>,
+): Promise<readonly Failure[]> => {
+  try {
+    await purge();
+    return [];
+  } catch (error) {
+    log({ level: "error", msg, ...errorDetails(error) });
+    return [{ error }];
+  }
+};
 
 export const createPurgeWorker = ({
   log,
@@ -41,13 +58,23 @@ export const createPurgeWorker = ({
     }
     const db = createPostgresDatabase({ url: config.value.databaseUrl, log });
     try {
-      const purged = await historyPurge({
-        db,
-        meterOn: storageMeterOn,
-        mailer: workerMailerOf({ ...config.value, fetch, log }),
-        log,
-      })();
-      log({ level: "info", msg: "history_purge_pass", purgedSpaces: purged.length });
+      const historyFailures = await loggingFailure(log, "history purge failed", async () => {
+        const purged = await historyPurge({
+          db,
+          meterOn: storageMeterOn,
+          mailer: workerMailerOf({ ...config.value, fetch, log }),
+          log,
+        })();
+        log({ level: "info", msg: "history_purge_pass", purgedSpaces: purged.length });
+      });
+      const keyFailures = await loggingFailure(log, "idempotency purge failed", async () => {
+        const purgedKeys = await purgeExpiredIdempotencyKeys(db);
+        log({ level: "info", msg: "idempotency_purge_pass", purgedKeys });
+      });
+      const [first] = [...historyFailures, ...keyFailures];
+      if (first !== undefined) {
+        throw first.error;
+      }
     } finally {
       ctx.waitUntil(db.close());
     }
