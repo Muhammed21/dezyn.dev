@@ -1,1 +1,1 @@
-export const LATEST_MIGRATION = { tag: "0016_history_maintainer_schema_version", when: 1794332213268 };
+export const LATEST_MIGRATION = { tag: "0018_idempotency_key_release", when: 1795047818442 };

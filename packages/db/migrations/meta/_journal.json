@@ -120,6 +120,20 @@
       "when": 1794332213268,
       "tag": "0016_history_maintainer_schema_version",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1795043606480,
+      "tag": "0017_idempotency_key",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1795047818442,
+      "tag": "0018_idempotency_key_release",
+      "breakpoints": true
     }
   ]
 }

@@ -6,6 +6,7 @@ import type { ProposalUseCases } from "#modules/proposal/application/proposal-us
 import type { SpaceUseCases } from "#modules/space/application/spaces.ts";
 import type { TokenUseCases } from "#modules/token/application/token-use-cases.ts";
 import type { Database } from "#platform/database.ts";
+import type { Idempotent } from "#platform/idempotency.ts";
 import type { LogRecord } from "#platform/logging.ts";
 import { err, ok } from "@repo/result";
 
@@ -72,6 +73,10 @@ export const makeProposals = (): ProposalUseCases => ({
   pendingProposalsOf: () => Promise.resolve([]),
 });
 
+export const makeIdempotent =
+  (): Idempotent =>
+  async ({ run }) => ({ kind: "executed", response: (await run()).response });
+
 export const makeApp = ({
   db = makeDatabase(),
   auth = makeAuth(),
@@ -88,6 +93,7 @@ export const makeApp = ({
     history: makeHistory(),
     tokens: makeTokens(),
     proposals: makeProposals(),
+    idempotent: makeIdempotent(),
   });
   return { app, records };
 };

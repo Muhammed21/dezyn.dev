@@ -27,3 +27,4 @@ export {
   tokenValueReference,
 } from "./token.ts";
 export { proposal, proposalBatch } from "./proposal.ts";
+export { idempotencyKey } from "./idempotency.ts";

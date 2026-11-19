@@ -5,6 +5,7 @@ import { createPostgresDatabase } from "#db";
 import {
   makeAuth,
   makeHistory,
+  makeIdempotent,
   makeProjects,
   makeSpaces,
   makeProposals,
@@ -31,6 +32,7 @@ describe("GET /health", () => {
       history: makeHistory(),
       tokens: makeTokens(),
       proposals: makeProposals(),
+      idempotent: makeIdempotent(),
     });
 
     const response = await app.request("/health");
@@ -50,6 +52,7 @@ describe("GET /health", () => {
       history: makeHistory(),
       tokens: makeTokens(),
       proposals: makeProposals(),
+      idempotent: makeIdempotent(),
     });
     const startedAt = performance.now();
 
@@ -72,6 +75,7 @@ describe("GET /health", () => {
       history: makeHistory(),
       tokens: makeTokens(),
       proposals: makeProposals(),
+      idempotent: makeIdempotent(),
     });
 
     const response = await app.request("/health");

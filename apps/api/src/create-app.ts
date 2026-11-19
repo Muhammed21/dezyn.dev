@@ -31,6 +31,7 @@ import { tokensRoutes } from "#modules/token/presentation/tokens-routes.ts";
 import { type AuthenticatedEnv, requireAccessToken } from "#platform/access-token.ts";
 import type { Database } from "#platform/database.ts";
 import type { AppEnv } from "#platform/http.ts";
+import type { Idempotent } from "#platform/idempotency.ts";
 import { errorDetails, type LogSink } from "#platform/logging.ts";
 import { mcpEndpoint } from "#platform/mcp.ts";
 import { type MemberEnv, requireMember, requireWebOrigin } from "#platform/member-identity.ts";
@@ -54,6 +55,7 @@ export const createApp = ({
   history,
   tokens,
   proposals,
+  idempotent,
 }: {
   readonly webUrl: string;
   readonly db: Database;
@@ -64,6 +66,7 @@ export const createApp = ({
   readonly history: HistoryUseCases;
   readonly tokens: TokenUseCases;
   readonly proposals: ProposalUseCases;
+  readonly idempotent: Idempotent;
 }) => {
   const app = new Hono<AppEnv>();
 
@@ -126,6 +129,7 @@ export const createApp = ({
   mcp.post(
     "/",
     mcpEndpoint({
+      idempotent,
       registerTools: (server, call) => {
         registerWhoami(server, call);
         registerSpaceTools(server, call);
