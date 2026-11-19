@@ -94,6 +94,7 @@ const appRouter = ({
       proposalBatchRoute({
         parent: root,
         readBatch: proposals.readBatch,
+        readTokens: tokens.readTokens,
         reviewProposal: proposals.reviewProposal,
         validateBatch: proposals.validateBatch,
         onReviewed: refreshProjectTokens(queryClient),

@@ -14,6 +14,7 @@ review:critical:
           - packages/lint/**
           - .github/workflows/**
           - .github/scripts/**
+          - packages/bench-report/**
           - .github/actions/**
 
 review:standard:

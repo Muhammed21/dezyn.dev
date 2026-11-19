@@ -1,7 +1,7 @@
 name: perf-pr
 
 # Runs the micro-benches on each PR that touches benched code, then posts a sticky comment
-# diffing median/p99 against the baseline from perf-main.yml. Informative only — never gates merge.
+# diffing median/p99 and SQL queries against the baseline from perf-main.yml. Informative only.
 
 on:
   pull_request:
@@ -10,8 +10,7 @@ on:
       - "packages/**/src/**"
       - "**/bench/**"
       - "**/vitest.bench.config.ts"
-      - ".github/scripts/bench-collect.sh"
-      - ".github/scripts/perf-compare.mjs"
+      - "packages/bench-report/**"
       - ".github/workflows/perf-pr.yml"
 
 concurrency:
@@ -61,7 +60,7 @@ jobs:
           PG_PASSWORD_APP: ci_app
           PG_PASSWORD_HISTORY_MAINTAINER: ci_history_maintainer
       - run: pnpm bench
-      - run: .github/scripts/bench-collect.sh bench-results.json
+      - run: node packages/bench-report/scripts/collect.ts bench-results.json
       - name: Upload PR bench artifact
         uses: actions/upload-artifact@v6
         with:
@@ -109,7 +108,7 @@ jobs:
           fi
       - name: Build markdown diff
         run: |
-          node .github/scripts/perf-compare.mjs ./pr/bench-results.json ./baseline/bench-results.json > diff.md || true
+          node packages/bench-report/scripts/compare.ts ./pr/bench-results.json ./baseline/bench-results.json > diff.md || true
           cat diff.md
       - name: Post sticky PR comment
         uses: marocchino/sticky-pull-request-comment@v3

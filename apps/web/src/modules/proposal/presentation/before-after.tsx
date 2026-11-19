@@ -1,9 +1,10 @@
 import type { ReactNode } from "react";
 
 import type { TokenValue } from "../domain/proposal.ts";
+import type { AliasSources } from "./alias-sources.ts";
+import { aliasPreviewOf, type AliasValues } from "./alias.ts";
 import { type ModeChange, type ModeRow, modeRows } from "./mode-rows.ts";
 import type { Preview, SamplePreview } from "./preview.ts";
-import { previewOf } from "./token-preview.ts";
 
 const CHECKERBOARD = {
   backgroundImage: "repeating-conic-gradient(#c8c8c8 0% 25%, #ffffff 0% 50%)",
@@ -99,17 +100,28 @@ const PreviewFigure = ({
   label,
   column,
   token,
+  aliases,
   children,
 }: {
   readonly label: string;
   readonly column: number;
   readonly token: TokenValue;
+  readonly aliases: AliasValues;
   readonly children?: ReactNode;
 }) => {
-  const preview = previewOf({ type: token.$type, value: token.$value });
+  const { preview, references } = aliasPreviewOf({
+    type: token.$type,
+    value: token.$value,
+    values: aliases,
+  });
+  const designated = references.join(", ");
   return (
     <figure
-      aria-label={`${label} : ${preview.text}`}
+      aria-label={
+        references.length === 0
+          ? `${label} : ${preview.text}`
+          : `${label} : ${preview.text}, alias de ${designated}`
+      }
       style={{
         margin: 0,
         display: "flex",
@@ -120,6 +132,7 @@ const PreviewFigure = ({
     >
       <figcaption>{label}</figcaption>
       {children}
+      {references.length === 0 ? null : <p style={{ margin: 0 }}>Alias de {designated}</p>}
       <Drawing preview={preview} />
       <code style={{ overflowWrap: "anywhere" }}>{preview.text}</code>
     </figure>
@@ -129,16 +142,20 @@ const PreviewFigure = ({
 const ValueBeforeAfter = ({
   validated,
   proposed,
+  aliases,
   children,
 }: {
   readonly validated: TokenValue | undefined;
   readonly proposed: TokenValue | undefined;
+  readonly aliases: AliasSources;
   readonly children?: ReactNode;
 }) => (
   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
-    {validated === undefined ? null : <PreviewFigure label="Avant" column={1} token={validated} />}
+    {validated === undefined ? null : (
+      <PreviewFigure label="Avant" column={1} token={validated} aliases={aliases.before} />
+    )}
     {proposed === undefined ? null : (
-      <PreviewFigure label="Après" column={2} token={proposed}>
+      <PreviewFigure label="Après" column={2} token={proposed} aliases={aliases.after}>
         {children}
       </PreviewFigure>
     )}
@@ -157,9 +174,11 @@ const CHANGE_LABELS: Readonly<Record<ModeChange, string | undefined>> = {
 const ModesBeforeAfter = ({
   rows,
   creation,
+  aliases,
 }: {
   readonly rows: readonly ModeRow[];
   readonly creation: boolean;
+  readonly aliases: AliasSources;
 }) => (
   <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
     {creation ? NEW_TOKEN : null}
@@ -169,7 +188,7 @@ const ModesBeforeAfter = ({
         {CHANGE_LABELS[change] === undefined ? null : (
           <p style={{ margin: 0 }}>{CHANGE_LABELS[change]}</p>
         )}
-        <ValueBeforeAfter validated={validated} proposed={proposed} />
+        <ValueBeforeAfter validated={validated} proposed={proposed} aliases={aliases} />
       </div>
     ))}
   </div>
@@ -178,16 +197,18 @@ const ModesBeforeAfter = ({
 export const BeforeAfter = ({
   validated,
   proposed,
+  aliases,
 }: {
   readonly validated: TokenValue | undefined;
   readonly proposed: TokenValue;
+  readonly aliases: AliasSources;
 }) => {
   const rows = modeRows({ validated, proposed });
   if (rows !== undefined) {
-    return <ModesBeforeAfter rows={rows} creation={validated === undefined} />;
+    return <ModesBeforeAfter rows={rows} creation={validated === undefined} aliases={aliases} />;
   }
   return (
-    <ValueBeforeAfter validated={validated} proposed={proposed}>
+    <ValueBeforeAfter validated={validated} proposed={proposed} aliases={aliases}>
       {validated === undefined ? NEW_TOKEN : null}
     </ValueBeforeAfter>
   );
