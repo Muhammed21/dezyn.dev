@@ -55,7 +55,30 @@ type Review = {
   readonly onReviewed?: (project: { readonly projectId: string }) => Promise<unknown>;
   readonly listBatches?: ListBatches;
   readonly events?: ReturnType<typeof makeProjectEvents>;
+  readonly readTokens?: ReadTokens;
+  readonly queryClient?: QueryClient;
 };
+
+type ValidatedToken = {
+  readonly name: string;
+  readonly value:
+    | { readonly kind: "single"; readonly value: unknown }
+    | { readonly kind: "by_mode"; readonly values: Readonly<Record<string, unknown>> };
+};
+
+type ReadTokens = (project: {
+  readonly projectId: string;
+}) => Promise<Result<{ readonly tokens: readonly ValidatedToken[] }, unknown>>;
+
+const makeValidatedToken = (name: string, value: unknown): ValidatedToken => ({
+  name,
+  value: { kind: "single", value },
+});
+
+const validatedTokens =
+  (...tokens: readonly ValidatedToken[]): ReadTokens =>
+  () =>
+    Promise.resolve(ok({ tokens }));
 
 const makeProposal = (overrides: Partial<Proposal> = {}): Proposal => ({
   id: "2d8f3c1e-7b3d-4e8a-9f10-2c5d6e7f8a9b",
@@ -90,6 +113,8 @@ const renderBatch = async (
     onReviewed = () => Promise.resolve(),
     listBatches,
     events = makeProjectEvents(),
+    readTokens = validatedTokens(),
+    queryClient = new QueryClient(),
   }: Review = {},
 ) => {
   const ProjectProposals =
@@ -115,6 +140,7 @@ const renderBatch = async (
       proposalBatchRoute({
         parent: root,
         readBatch,
+        readTokens,
         reviewProposal,
         validateBatch,
         onReviewed,
@@ -127,7 +153,7 @@ const renderBatch = async (
   return {
     history,
     screen: await render(
-      <QueryClientProvider client={new QueryClient()}>
+      <QueryClientProvider client={queryClient}>
         <RouterProvider router={router} />
       </QueryClientProvider>,
     ),
@@ -663,26 +689,318 @@ describe("aperçu avant/après d'une ombre, d'une police et d'un dégradé", () 
     );
     expect(proposalItems(screen).getByText(SAMPLE_TEXT).elements()).toHaveLength(0);
   });
+});
 
-  it("montre en texte brut une ombre dont un champ est un alias, sans texte d'exemple", async () => {
-    const value = makeShadowLayer({ color: "{couleur.ombre}" });
-    const text = JSON.stringify(value);
+const PROPOSED_BLUE_ID = "5a8f3c1e-7b3d-4e8a-9f10-2c5d6e7f8a9b";
+
+const makeAliasUpdate = (alias: string) =>
+  makeUpdate({ proposed: { $type: "color", $value: `{${alias}}` } });
+
+describe("aperçu d'un alias résolu", () => {
+  it("montre le nom du token validé désigné et l'aperçu de sa valeur", async () => {
+    const { screen } = await renderBatch(
+      reading(makeBatch({ proposals: [makeAliasUpdate("couleur.bleu.500")] })),
+      { readTokens: validatedTokens(makeValidatedToken("couleur.bleu.500", NIGHT_BLUE)) },
+    );
+
+    const name = "Après : #1a3366, alias de couleur.bleu.500";
+    await expect.element(preview(screen, name)).toBeVisible();
+    await expect
+      .element(preview(screen, name).getByText("Alias de couleur.bleu.500"))
+      .toBeVisible();
+    await expect.element(preview(screen, name).getByText("#1a3366", { exact: true })).toBeVisible();
+    expect(drawn(screen, name, "backgroundColor")).toContain("rgb(26, 51, 102)");
+  });
+
+  it("résout un alias vers un token proposé dans le même lot par sa valeur proposée, l'avant gardant la valeur validée", async () => {
+    const { screen } = await renderBatch(
+      reading(
+        makeBatch({
+          proposals: [
+            makeUpdate({
+              validated: { $type: "color", $value: "{couleur.bleu.500}" },
+              proposed: { $type: "color", $value: "{couleur.bleu.500}" },
+            }),
+            makeProposal({
+              id: PROPOSED_BLUE_ID,
+              name: "couleur.bleu.500",
+              kind: "update",
+              validated: { $type: "color", $value: PRIMARY_BLUE },
+              proposed: { $type: "color", $value: NIGHT_BLUE },
+            }),
+          ],
+        }),
+      ),
+      { readTokens: validatedTokens(makeValidatedToken("couleur.bleu.500", PRIMARY_BLUE)) },
+    );
+
+    await expect
+      .element(preview(screen, "Avant : #1a66e6, alias de couleur.bleu.500"))
+      .toBeVisible();
+    await expect
+      .element(preview(screen, "Après : #1a3366, alias de couleur.bleu.500"))
+      .toBeVisible();
+  });
+
+  it.each(["rejected", "replaced", "validated"] as const)(
+    "ne résout pas un alias par une proposition du lot au statut %s",
+    async (status) => {
+      const { screen } = await renderBatch(
+        reading(
+          makeBatch({
+            proposals: [
+              makeAliasUpdate("couleur.bleu.500"),
+              makeProposal({
+                id: PROPOSED_BLUE_ID,
+                name: "couleur.bleu.500",
+                status,
+                proposed: { $type: "color", $value: NIGHT_BLUE },
+              }),
+            ],
+          }),
+        ),
+        { readTokens: validatedTokens(makeValidatedToken("couleur.bleu.500", PRIMARY_BLUE)) },
+      );
+
+      await expect
+        .element(preview(screen, "Après : #1a66e6, alias de couleur.bleu.500"))
+        .toBeVisible();
+    },
+  );
+
+  it("suit une chaîne d'alias jusqu'à une valeur, en nommant le token désigné", async () => {
+    const { screen } = await renderBatch(
+      reading(makeBatch({ proposals: [makeAliasUpdate("couleur.action")] })),
+      {
+        readTokens: validatedTokens(
+          makeValidatedToken("couleur.action", "{couleur.marque}"),
+          makeValidatedToken("couleur.marque", "{couleur.bleu.500}"),
+          makeValidatedToken("couleur.bleu.500", NIGHT_BLUE),
+        ),
+      },
+    );
+
+    await expect.element(preview(screen, "Après : #1a3366, alias de couleur.action")).toBeVisible();
+  });
+
+  it.each([
+    ["une cible absente", [makeValidatedToken("couleur.autre", NIGHT_BLUE)]],
+    [
+      "un cycle",
+      [
+        makeValidatedToken("couleur.bleu.500", "{couleur.marque}"),
+        makeValidatedToken("couleur.marque", "{couleur.bleu.500}"),
+      ],
+    ],
+    [
+      "une cible à modes",
+      [
+        {
+          name: "couleur.bleu.500",
+          value: { kind: "by_mode", values: { clair: PRIMARY_BLUE, sombre: NIGHT_BLUE } },
+        } satisfies ValidatedToken,
+      ],
+    ],
+  ])("montre %s avec son nom et la mention Valeur inconnue", async (_case, tokens) => {
+    const { screen } = await renderBatch(
+      reading(makeBatch({ proposals: [makeAliasUpdate("couleur.bleu.500")] })),
+      { readTokens: validatedTokens(...tokens) },
+    );
+
+    const name = "Après : Valeur inconnue, alias de couleur.bleu.500";
+    await expect.element(preview(screen, name)).toBeVisible();
+    await expect
+      .element(preview(screen, name).getByText("Alias de couleur.bleu.500"))
+      .toBeVisible();
+    await expect
+      .element(preview(screen, name).getByText("Valeur inconnue", { exact: true }))
+      .toBeVisible();
+    expect(drawn(screen, name, "backgroundColor")).toBe("");
+  });
+
+  it("résout les alias des champs d'une ombre et nomme chaque token désigné", async () => {
     const { screen } = await renderBatch(
       reading(
         makeBatch({
           proposals: [
             makeUpdate({
               validated: { $type: "shadow", $value: makeShadowLayer() },
-              proposed: { $type: "shadow", $value: value },
+              proposed: {
+                $type: "shadow",
+                $value: makeShadowLayer({ color: "{couleur.ombre}", blur: "{flou.moyen}" }),
+              },
+            }),
+          ],
+        }),
+      ),
+      {
+        readTokens: validatedTokens(
+          makeValidatedToken("couleur.ombre", { colorSpace: "srgb", components: [0, 0, 0] }),
+          makeValidatedToken("flou.moyen", { value: 12, unit: "px" }),
+        ),
+      },
+    );
+
+    const name = "Après : 0px 4px 12px 0px #000000, alias de couleur.ombre, flou.moyen";
+    await expect.element(preview(screen, name)).toBeVisible();
+    await expect
+      .element(preview(screen, name).getByText("Alias de couleur.ombre, flou.moyen"))
+      .toBeVisible();
+    expect(drawn(screen, name, "boxShadow")).toContain("rgb(0, 0, 0) 0px 4px 12px 0px");
+    await expect.element(preview(screen, "Avant : 0px 4px 8px 0px #00000040")).toBeVisible();
+  });
+
+  it("montre Valeur inconnue pour une ombre dont un champ désigne un token absent, sans texte d'exemple", async () => {
+    const { screen } = await renderBatch(
+      reading(
+        makeBatch({
+          proposals: [
+            makeUpdate({
+              validated: { $type: "shadow", $value: makeShadowLayer() },
+              proposed: { $type: "shadow", $value: makeShadowLayer({ color: "{couleur.ombre}" }) },
             }),
           ],
         }),
       ),
     );
 
-    await expect.element(preview(screen, `Après : ${text}`).getByText(text)).toBeVisible();
-    await expect.element(preview(screen, "Avant : 0px 4px 8px 0px #00000040")).toBeVisible();
+    await expect
+      .element(preview(screen, "Après : Valeur inconnue, alias de couleur.ombre"))
+      .toBeVisible();
     expect(proposalItems(screen).getByText(SAMPLE_TEXT).elements()).toHaveLength(0);
+  });
+
+  it("n'annonce aucun alias pour une valeur sans référence", async () => {
+    const { screen } = await renderBatch(reading(makeBatch({ proposals: [makeUpdate()] })));
+
+    await expect
+      .element(proposalItems(screen).getByRole("figure", { name: "Après : #1a3366", exact: true }))
+      .toBeVisible();
+    expect(
+      proposalItems(screen)
+        .getByText(/Alias de/)
+        .elements(),
+    ).toHaveLength(0);
+  });
+
+  it("lit les tokens validés du projet du lot", async () => {
+    const asked: string[] = [];
+    const { screen } = await renderBatch(
+      reading(makeBatch({ proposals: [makeAliasUpdate("couleur.bleu.500")] })),
+      {
+        readTokens: ({ projectId }) => {
+          asked.push(projectId);
+          return validatedTokens(makeValidatedToken("couleur.bleu.500", NIGHT_BLUE))({
+            projectId,
+          });
+        },
+      },
+    );
+
+    await expect
+      .element(preview(screen, "Après : #1a3366, alias de couleur.bleu.500"))
+      .toBeVisible();
+    expect(asked).toEqual([PROJECT_ID]);
+  });
+
+  it("montre Valeur inconnue quand les tokens du projet sont illisibles", async () => {
+    const { screen } = await renderBatch(
+      reading(makeBatch({ proposals: [makeAliasUpdate("couleur.bleu.500")] })),
+      { readTokens: () => Promise.resolve(err("unavailable")) },
+    );
+
+    await expect
+      .element(preview(screen, "Après : Valeur inconnue, alias de couleur.bleu.500"))
+      .toBeVisible();
+  });
+
+  it("résout avec les tokens déjà lus par la page des tokens du projet, sous la même clé", async () => {
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(
+      ["tokens", PROJECT_ID],
+      ok({ tokens: [makeValidatedToken("couleur.bleu.500", NIGHT_BLUE)] }),
+    );
+    const { screen } = await renderBatch(
+      reading(makeBatch({ proposals: [makeAliasUpdate("couleur.bleu.500")] })),
+      { queryClient, readTokens: () => new Promise(() => {}) },
+    );
+
+    await expect
+      .element(preview(screen, "Après : #1a3366, alias de couleur.bleu.500"))
+      .toBeVisible();
+  });
+
+  it("ne prend pour alias qu'une valeur entière entre accolades", async () => {
+    const { screen } = await renderBatch(
+      reading(
+        makeBatch({
+          proposals: [
+            makeUpdate({
+              validated: { $type: "fontFamily", $value: "Mono {marque}" },
+              proposed: { $type: "fontFamily", $value: "{marque} Sans" },
+            }),
+          ],
+        }),
+      ),
+      { readTokens: validatedTokens(makeValidatedToken("marque", "Inter")) },
+    );
+
+    await expect
+      .element(
+        proposalItems(screen).getByRole("figure", { name: "Avant : Mono {marque}", exact: true }),
+      )
+      .toBeVisible();
+    await expect
+      .element(
+        proposalItems(screen).getByRole("figure", { name: "Après : {marque} Sans", exact: true }),
+      )
+      .toBeVisible();
+  });
+
+  it("garde en texte brut une valeur dont un champ est nul", async () => {
+    const value = makeShadowLayer({ color: null });
+    const text = JSON.stringify(value);
+    const { screen } = await renderBatch(
+      reading(
+        makeBatch({
+          proposals: [makeUpdate({ proposed: { $type: "shadow", $value: value } })],
+        }),
+      ),
+    );
+
+    await expect
+      .element(proposalItems(screen).getByRole("figure", { name: `Après : ${text}`, exact: true }))
+      .toBeVisible();
+  });
+
+  it("un signal tokens du projet relit les tokens validés et met l'alias à jour, sans relire le lot", async () => {
+    const events = makeProjectEvents();
+    const state = { color: PRIMARY_BLUE };
+    const reads: string[] = [];
+    const { screen } = await renderBatch(
+      ({ batchId }) => {
+        reads.push(batchId);
+        return reading(makeBatch({ proposals: [makeAliasUpdate("couleur.bleu.500")] }))({
+          batchId,
+        });
+      },
+      {
+        events,
+        readTokens: ({ projectId }) =>
+          validatedTokens(makeValidatedToken("couleur.bleu.500", state.color))({ projectId }),
+      },
+    );
+    await expect
+      .element(preview(screen, "Après : #1a66e6, alias de couleur.bleu.500"))
+      .toBeVisible();
+
+    state.color = NIGHT_BLUE;
+    events.emit(PROJECT_ID, ["tokens"]);
+
+    await expect
+      .element(preview(screen, "Après : #1a3366, alias de couleur.bleu.500"))
+      .toBeVisible();
+    expect(reads).toEqual([BATCH_ID]);
   });
 });
 
@@ -1195,11 +1513,11 @@ describe("page d'un lot en temps réel (ADR 0046)", () => {
     await expect.element(proposalItems(screen).nth(1)).toHaveTextContent("couleur.bleu.500");
   });
 
-  it("s'abonne au projet du lot, et quitter la page ferme l'abonnement", async () => {
+  it("suit le projet du lot pour ses propositions et ses tokens, et quitter la page ferme les abonnements", async () => {
     const events = makeProjectEvents();
     const { history, screen } = await renderBatch(reading(makeBatch()), { events });
     await expect.element(proposalItems(screen).nth(0)).toBeVisible();
-    expect(events.subscribedProjects()).toEqual([PROJECT_ID]);
+    expect(events.subscribedProjects()).toEqual([PROJECT_ID, PROJECT_ID]);
 
     history.push("/connexion");
 
