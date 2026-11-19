@@ -20,6 +20,7 @@ import type {
 } from "../domain/proposal.ts";
 import { type AliasSources, type ReadTokens, useAliasSources } from "./alias-sources.ts";
 import { BeforeAfter } from "./before-after.tsx";
+import { useProjectModes } from "./project-modes.ts";
 import { useProposalSignals } from "./proposal-signals.ts";
 
 type ReadBatch = (batch: { readonly batchId: string }) => Promise<Result<Batch, ProposalFailure>>;
@@ -201,6 +202,7 @@ const ProposalItem = ({
   rejection,
   review: { reviewProposal, onReviewed },
   aliases,
+  projectModes,
 }: {
   readonly proposal: Proposal;
   readonly batchId: string;
@@ -208,6 +210,7 @@ const ProposalItem = ({
   readonly rejection: Rejection | undefined;
   readonly review: Review;
   readonly aliases: AliasSources;
+  readonly projectModes: readonly string[];
 }) => {
   const queryClient = useQueryClient();
   const { data, isPending, mutate } = useMutation({
@@ -228,7 +231,12 @@ const ProposalItem = ({
       <p>{proposal.name}</p>
       <p>{KIND_LABELS[proposal.kind]}</p>
       <p>{STATUS_LABELS[proposal.status]}</p>
-      <BeforeAfter validated={proposal.validated} proposed={proposal.proposed} aliases={aliases} />
+      <BeforeAfter
+        validated={proposal.validated}
+        proposed={proposal.proposed}
+        aliases={aliases}
+        projectModes={projectModes}
+      />
       {proposal.duplicates.length === 0 ? null : (
         <p>Même valeur que {proposal.duplicates.join(", ")}</p>
       )}
@@ -281,6 +289,10 @@ const ProposalBatch = ({
     readTokens,
     subscribe,
   });
+  const projectModes = useProjectModes({
+    projectId: data?.ok === true ? data.value.projectId : undefined,
+    readTokens,
+  });
   if (data === undefined) {
     return <p>Chargement du lot…</p>;
   }
@@ -319,6 +331,7 @@ const ProposalBatch = ({
             rejection={rejectionOf(proposal)}
             review={review}
             aliases={aliases}
+            projectModes={projectModes}
           />
         ))}
       </ul>
