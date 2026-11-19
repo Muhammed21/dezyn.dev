@@ -15,7 +15,7 @@ Plusieurs suites d'intégration (worktrees, agents) tournent en même temps sur 
 
 - Un test qui écrit, prend un verrou ou coupe une connexion le fait dans sa base jetable (`createThrowawayDatabase`), jamais dans la base de `DATABASE_URL`, que toutes les suites partagent.
 - Les pools des tests gardent les délais de la production (`statement_timeout` 2 s, `lock_timeout` 1 s). Un test dont les lignes dépassent celles de la production (corps limité à 1 Mo) passe `statementTimeoutMs` à `createPostgresDatabase` et dit pourquoi, comme `history-purge.integration.test.ts`.
-- `DROP DATABASE` attend un checkpoint de tout le cluster, donc les écritures des autres suites. Un test qui attend un délai fixe du serveur crée et supprime sa base hors du test, comme les tests 408 de `start-api.integration.test.ts`.
+- `DROP DATABASE` attend un checkpoint de tout le cluster, donc les écritures des autres suites. Un test qui attend un délai fixe du serveur crée et supprime sa base hors du test, comme les tests 408 de `start-api.integration.test.ts`. Le hook qui la supprime a le même délai qu'un test, 30 s (`hookTimeout` de `vitest.integration.config.ts`) : avec les 10 s par défaut de Vitest, le checkpoint ferait échouer le fichier après ses tests.
 
 ## Tests de contrat des ports
 
