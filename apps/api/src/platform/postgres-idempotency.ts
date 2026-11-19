@@ -11,9 +11,15 @@ const COMPLETED = "completed";
 
 const ABANDONED_RESERVATION_SECONDS = 5 * 60;
 
+const KEY_LIFETIME_HOURS = 24;
+
 const { idempotencyKey } = schema;
 
+const expired = sql`${idempotencyKey.createdAt} < now() - make_interval(hours => ${KEY_LIFETIME_HOURS})`;
+
 const abandoned = sql`${idempotencyKey.response} is null and ${idempotencyKey.createdAt} < now() - make_interval(secs => ${ABANDONED_RESERVATION_SECONDS})`;
+
+const takenOver = sql`(${abandoned}) or ${expired}`;
 
 const ofClaim = ({ userId, scope, key }: IdempotencyClaim) =>
   and(
@@ -46,9 +52,11 @@ export const postgresIdempotencyStore = (db: PostgresDatabase): IdempotencyStore
           schema.idempotencyKey.key,
         ],
         set: {
-          id: sql`case when ${abandoned} then excluded.id else ${idempotencyKey.id} end`,
-          fingerprint: sql`case when ${abandoned} then excluded.fingerprint else ${idempotencyKey.fingerprint} end`,
-          createdAt: sql`case when ${abandoned} then excluded.created_at else ${idempotencyKey.createdAt} end`,
+          id: sql`case when ${takenOver} then excluded.id else ${idempotencyKey.id} end`,
+          fingerprint: sql`case when ${takenOver} then excluded.fingerprint else ${idempotencyKey.fingerprint} end`,
+          state: sql`case when ${takenOver} then excluded.state else ${idempotencyKey.state} end`,
+          response: sql`case when ${takenOver} then excluded.response else ${idempotencyKey.response} end`,
+          createdAt: sql`case when ${takenOver} then excluded.created_at else ${idempotencyKey.createdAt} end`,
         },
       })
       .returning({
@@ -71,3 +79,8 @@ export const postgresIdempotencyStore = (db: PostgresDatabase): IdempotencyStore
     await db.orm.delete(schema.idempotencyKey).where(ofClaim(claim));
   },
 });
+
+export const purgeExpiredIdempotencyKeys = async (db: PostgresDatabase): Promise<number> => {
+  const { rowCount } = await db.orm.delete(schema.idempotencyKey).where(expired);
+  return rowCount ?? 0;
+};
