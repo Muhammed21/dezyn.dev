@@ -1,4 +1,5 @@
 import { bench, describe } from "vitest";
+import { getCurrentSuite } from "vitest/suite";
 
 import {
   BASE_URL,
@@ -6,6 +7,12 @@ import {
   type IdentityApp,
   startIdentityApp,
 } from "#testing/authorization-flow.ts";
+import {
+  benchGroupOf,
+  type SqlQueries,
+  sqlQueriesOf,
+  writeBenchSqlQueries,
+} from "#testing/bench-sql-queries.ts";
 import { seedProject } from "#testing/project-fixtures.ts";
 import { addToken, makeColorToken } from "#testing/token-fixtures.ts";
 
@@ -60,7 +67,7 @@ const callTool = async (
   if (response.status !== 200 || body.result === undefined || body.result.isError === true) {
     throw new Error(`${name} a échoué : ${JSON.stringify(body)}`);
   }
-  return body.result.structuredContent;
+  return { content: body.result.structuredContent, response };
 };
 
 const validateBatch = async ({ opened, accessToken }: OpenProject, batchId: string) => {
@@ -72,21 +79,30 @@ const validateBatch = async ({ opened, accessToken }: OpenProject, batchId: stri
   if (response.status !== 200) {
     throw new Error(`La validation du lot a échoué : ${await response.text()}`);
   }
+  return response;
 };
 
-const projectBench = (
-  name: string,
-  run: (project: OpenProject, round: number) => Promise<void>,
-) => {
-  const fixture: { project?: OpenProject; round: number } = { round: 0 };
+const projectBench = ({
+  name,
+  run,
+}: {
+  readonly name: string;
+  readonly run: (project: OpenProject, round: number) => Promise<readonly Response[]>;
+}) => {
+  const { file, suite } = getCurrentSuite();
+  if (file === undefined || suite === undefined) {
+    throw new Error("Un bench de projet se déclare dans un describe");
+  }
+  const group = benchGroupOf({ file, suite });
+  const fixture: { project?: OpenProject; round: number; sqlQueries?: SqlQueries } = { round: 0 };
   bench(
     name,
-    () => {
+    async () => {
       fixture.round += 1;
       if (fixture.project === undefined) {
         throw new Error("Le projet du bench n'est pas ouvert");
       }
-      return run(fixture.project, fixture.round);
+      fixture.sqlQueries = sqlQueriesOf(await run(fixture.project, fixture.round));
     },
     {
       setup: async (_task, mode) => {
@@ -96,6 +112,14 @@ const projectBench = (
       },
       teardown: async (_task, mode) => {
         if (mode === "run") {
+          if (fixture.sqlQueries !== undefined) {
+            writeBenchSqlQueries({
+              dir: process.cwd(),
+              group,
+              name,
+              sqlQueries: fixture.sqlQueries,
+            });
+          }
           await fixture.project?.opened.close();
         }
       },
@@ -104,23 +128,34 @@ const projectBench = (
 };
 
 describe(`/v1/mcp sur un projet de ${TOKEN_COUNT} tokens`, () => {
-  projectBench("read_tokens", (project) =>
-    callTool(project, { name: "read_tokens", args: { projectId: project.projectId } }),
-  );
+  projectBench({
+    name: "read_tokens",
+    run: async (project) => {
+      const { response } = await callTool(project, {
+        name: "read_tokens",
+        args: { projectId: project.projectId },
+      });
+      return [response];
+    },
+  });
 
-  projectBench("write_tokens, une proposition par token", (project, round) =>
-    callTool(project, {
-      name: "write_tokens",
-      args: { projectId: project.projectId, tokens: makePaletteTokens(round * TOKEN_COUNT) },
-    }),
-  );
+  projectBench({
+    name: "write_tokens, une proposition par token",
+    run: async (project, round) => {
+      const { response } = await callTool(project, {
+        name: "write_tokens",
+        args: { projectId: project.projectId, tokens: makePaletteTokens(round * TOKEN_COUNT) },
+      });
+      return [response];
+    },
+  });
 });
 
 describe(`/v1/proposal-batches/:id/validate sur un projet de ${TOKEN_COUNT} tokens`, () => {
-  projectBench(
-    `write_tokens, close_proposal_batch, puis validate de ${TOKEN_COUNT} créations`,
-    async (project, round) => {
-      const { batch } = await callTool(project, {
+  projectBench({
+    name: `write_tokens, close_proposal_batch, puis validate de ${TOKEN_COUNT} créations`,
+    run: async (project, round) => {
+      const written = await callTool(project, {
         name: "write_tokens",
         args: {
           projectId: project.projectId,
@@ -129,11 +164,12 @@ describe(`/v1/proposal-batches/:id/validate sur un projet de ${TOKEN_COUNT} toke
           ),
         },
       });
-      await callTool(project, {
+      const closed = await callTool(project, {
         name: "close_proposal_batch",
         args: { projectId: project.projectId },
       });
-      await validateBatch(project, batch.id);
+      const validated = await validateBatch(project, written.content.batch.id);
+      return [written.response, closed.response, validated];
     },
-  );
+  });
 });
