@@ -6,6 +6,7 @@ import type { LogRecord } from "#platform/logging.ts";
 import { makeClientIp } from "#testing/authorization-flow.ts";
 import {
   makeHistory,
+  makeIdempotent,
   makeProjects,
   makeSpaces,
   makeProposals,
@@ -66,6 +67,7 @@ const withIdentityApp = (run: (identityApp: IdentityApp) => Promise<void>) =>
         history: makeHistory(),
         tokens: makeTokens(),
         proposals: makeProposals(),
+        idempotent: makeIdempotent(),
       });
       await run({ app, records, postJson: postJsonFrom(app, makeClientIp()) });
     } finally {

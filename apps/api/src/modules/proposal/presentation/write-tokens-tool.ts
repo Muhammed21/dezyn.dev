@@ -1,9 +1,10 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 
 import { TokenDefinitionInput } from "#modules/token/contracts/token-definition.ts";
 import { issuesOfCheck } from "#modules/token/contracts/token-issues.ts";
-import type { McpCall } from "#platform/mcp.ts";
+import { IdempotencyKeyArgument, type McpCall } from "#platform/mcp.ts";
 import {
   RECORD_FAILURE_TEXT,
   type RecordFailure,
@@ -63,52 +64,63 @@ export const registerWriteTokens =
     writeTokens,
     recordProjectCall,
   }: Pick<ProposalUseCases, "writeTokens"> & { readonly recordProjectCall: RecordProjectCall }) =>
-  (server: McpServer, { identity, correlationId }: McpCall) => {
+  (server: McpServer, { identity, correlationId, idempotent }: McpCall) => {
+    const write = async ({
+      projectId,
+      tokens,
+    }: {
+      readonly projectId: string;
+      readonly tokens?: readonly unknown[];
+    }): Promise<CallToolResult> => {
+      const written = await recordProjectCall({
+        tool: "write_tokens",
+        projectId,
+        userId: identity.userId,
+        clientId: identity.clientId,
+        correlationId,
+        input: { tokens },
+        run: async (
+          project,
+        ): Promise<Result<WrittenWithDuplicates, InvalidTokens | UncheckedTokens>> => {
+          const parsed = TokensInput.safeParse(tokens);
+          if (!parsed.success) {
+            return err({
+              code: "invalid_tokens",
+              issues: parsed.error.issues.map(
+                ({ path, message }) => `${pathOf(path)} : ${message}`,
+              ),
+            });
+          }
+          return writeTokens({
+            projectId,
+            spaceId: project.spaceId,
+            userId: identity.userId,
+            clientId: identity.clientId,
+            tokens: parsed.data,
+          });
+        },
+      });
+      if (!written.ok) {
+        return { content: [{ type: "text", text: errorTextOf(written.error) }], isError: true };
+      }
+      const output = writtenOutputOf(written.value);
+      return {
+        content: [{ type: "text", text: JSON.stringify(output) }],
+        structuredContent: output,
+      };
+    };
     server.registerTool(
       "write_tokens",
       {
         description:
           "Propose la création ou la modification de tokens DTCG dans un projet : chaque token devient une proposition Proposée, rangée dans le lot ouvert de l'IA, à relire par un éditeur. Un token identique à sa valeur validée ou en attente revient dans unchanged ; une nouvelle valeur remplace la proposition en attente sur le même nom et revient dans replaced. Chaque nom n'apparaît qu'une fois par appel. $extensions garde, sous une clé en notation de domaine inversé (com.figma), les données d'un autre outil que dezyn n'interprète pas : une valeur de design n'y va jamais. Chaque proposition porte duplicates, les noms des tokens validés ou en attente de même type et de même valeur. Réutilise un token existant par alias ({nom.du.token}) plutôt que de recopier sa valeur ; ne crée un nouveau token que si aucun token ne porte déjà cette valeur.",
-        inputSchema: { projectId: Uuid, tokens: z.array(z.unknown()).optional() },
+        inputSchema: {
+          projectId: Uuid,
+          tokens: z.array(z.unknown()).optional(),
+          idempotencyKey: IdempotencyKeyArgument,
+        },
         outputSchema: WrittenTokensOutput,
       },
-      async ({ projectId, tokens }) => {
-        const written = await recordProjectCall({
-          tool: "write_tokens",
-          projectId,
-          userId: identity.userId,
-          clientId: identity.clientId,
-          correlationId,
-          input: { tokens },
-          run: async (
-            project,
-          ): Promise<Result<WrittenWithDuplicates, InvalidTokens | UncheckedTokens>> => {
-            const parsed = TokensInput.safeParse(tokens);
-            if (!parsed.success) {
-              return err({
-                code: "invalid_tokens",
-                issues: parsed.error.issues.map(
-                  ({ path, message }) => `${pathOf(path)} : ${message}`,
-                ),
-              });
-            }
-            return writeTokens({
-              projectId,
-              spaceId: project.spaceId,
-              userId: identity.userId,
-              clientId: identity.clientId,
-              tokens: parsed.data,
-            });
-          },
-        });
-        if (!written.ok) {
-          return { content: [{ type: "text", text: errorTextOf(written.error) }], isError: true };
-        }
-        const output = writtenOutputOf(written.value);
-        return {
-          content: [{ type: "text", text: JSON.stringify(output) }],
-          structuredContent: output,
-        };
-      },
+      async (args) => idempotent({ tool: "write_tokens", args, run: () => write(args) }),
     );
   };

@@ -90,7 +90,7 @@ export const startIdentityApp = async ({
     }
   };
   try {
-    const { spaces, projects, history, tokens, proposals } = composeModules({
+    const { spaces, projects, history, tokens, proposals, idempotent } = composeModules({
       db,
       mailer,
       webUrl: WEB_URL,
@@ -122,6 +122,7 @@ export const startIdentityApp = async ({
         history,
         tokens,
         proposals,
+        idempotent,
       }),
       db,
       migratorUrl: database.migratorUrl,

@@ -24,8 +24,10 @@ import {
   validatedTokenWriterOn,
 } from "#modules/token/token-module.ts";
 import type { Clock } from "#platform/clock.ts";
+import { idempotent } from "#platform/idempotency.ts";
 import type { LogSink } from "#platform/logging.ts";
 import type { Mailer } from "#platform/mailer.ts";
+import { postgresIdempotencyStore } from "#platform/postgres-idempotency.ts";
 
 export const composeModules = ({
   db,
@@ -101,5 +103,12 @@ export const composeModules = ({
     signals: projectSignals,
     clock,
   });
-  return { spaces, projects, history, tokens, proposals };
+  return {
+    spaces,
+    projects,
+    history,
+    tokens,
+    proposals,
+    idempotent: idempotent({ store: postgresIdempotencyStore(db), now: clock }),
+  };
 };
