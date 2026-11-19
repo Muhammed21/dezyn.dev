@@ -8,6 +8,7 @@
     "build": "vite build",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:visual": "vitest run --config vitest.visual.config.ts",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "check-types": "tsc --noEmit",
     "mutation": "stryker run",
@@ -23,6 +24,7 @@
     "zod": "4.6.7"
   },
   "devDependencies": {
+    "@fontsource-variable/inter": "5.3.0",
     "@repo/api": "workspace:*",
     "@repo/typescript-config": "workspace:*",
     "@stryker-mutator/core": "10.0.0",

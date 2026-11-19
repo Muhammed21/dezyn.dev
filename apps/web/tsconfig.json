@@ -12,6 +12,7 @@
     "vitest.config.ts",
     "vitest.browser.config.ts",
     "vitest.integration.config.ts",
-    "vitest.mutation.config.ts"
+    "vitest.mutation.config.ts",
+    "vitest.visual.config.ts"
   ]
 }
