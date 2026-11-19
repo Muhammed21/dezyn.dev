@@ -299,8 +299,13 @@ type DrawnProperty =
   | "fontWeight"
   | "fontSize";
 
-const drawn = (screen: Screen, name: string, property: DrawnProperty) => {
-  const drawing = preview(screen, name).element().querySelector('[aria-hidden="true"]');
+type Figure = ReturnType<typeof preview>;
+
+const drawn = (screen: Screen, name: string, property: DrawnProperty) =>
+  drawnIn(preview(screen, name), property);
+
+const drawnIn = (figure: Figure, property: DrawnProperty) => {
+  const drawing = figure.element().querySelector('[aria-hidden="true"]');
   return drawing === null
     ? ""
     : [drawing, ...drawing.querySelectorAll("*")]
@@ -684,6 +689,220 @@ describe("aperçu avant/après d'une ombre, d'une police et d'un dégradé", () 
     await expect.element(preview(screen, "Avant : 0px 4px 8px 0px #00000040")).toBeVisible();
     expect(proposalItems(screen).getByText(SAMPLE_TEXT).elements()).toHaveLength(0);
   });
+});
+
+const modeRow = (screen: Screen, mode: string) =>
+  proposalItems(screen).nth(0).getByRole("group", { name: mode });
+
+const modePreview = (screen: Screen, mode: string, name: string) =>
+  modeRow(screen, mode).getByRole("figure", { name });
+
+const makeModalColor = (modes: Readonly<Record<string, unknown>>) => ({ $type: "color", modes });
+
+describe("aperçu avant/après d'un token à modes", () => {
+  it("montre un avant/après par mode, nommé, et marque Inchangé le mode dont la valeur ne bouge pas", async () => {
+    const { screen } = await renderBatch(
+      reading(
+        makeBatch({
+          proposals: [
+            makeUpdate({
+              validated: makeModalColor({ clair: PRIMARY_BLUE, sombre: PRIMARY_BLUE }),
+              proposed: makeModalColor({ clair: { ...PRIMARY_BLUE }, sombre: NIGHT_BLUE }),
+            }),
+          ],
+        }),
+      ),
+    );
+
+    await expect
+      .element(modeRow(screen, "clair").getByText("clair", { exact: true }))
+      .toBeVisible();
+    await expect.element(modePreview(screen, "clair", "Avant : #1a66e6")).toBeVisible();
+    await expect.element(modePreview(screen, "clair", "Après : #1a66e6")).toBeVisible();
+    await expect.element(modeRow(screen, "clair").getByText("Inchangé")).toBeVisible();
+    await expect
+      .element(modeRow(screen, "sombre").getByText("sombre", { exact: true }))
+      .toBeVisible();
+    await expect.element(modePreview(screen, "sombre", "Avant : #1a66e6")).toBeVisible();
+    await expect
+      .element(modePreview(screen, "sombre", "Après : #1a3366").getByText("#1a3366"))
+      .toBeVisible();
+    expect(modeRow(screen, "sombre").getByText("Inchangé").elements()).toHaveLength(0);
+    expect(drawnIn(modePreview(screen, "clair", "Après : #1a66e6"), "backgroundColor")).toContain(
+      "rgb(26, 102, 230)",
+    );
+    expect(drawnIn(modePreview(screen, "sombre", "Avant : #1a66e6"), "backgroundColor")).toContain(
+      "rgb(26, 102, 230)",
+    );
+    expect(drawnIn(modePreview(screen, "sombre", "Après : #1a3366"), "backgroundColor")).toContain(
+      "rgb(26, 51, 102)",
+    );
+    expect(proposalItems(screen).getByText("Nouveau token").elements()).toHaveLength(0);
+  });
+
+  it("ne montre que l'aperçu Après de chaque mode d'une création, marquée une fois Nouveau token", async () => {
+    const { screen } = await renderBatch(
+      reading(
+        makeBatch({
+          proposals: [
+            makeProposal({
+              kind: "create",
+              validated: undefined,
+              proposed: makeModalColor({ clair: PRIMARY_BLUE, sombre: NIGHT_BLUE }),
+            }),
+          ],
+        }),
+      ),
+    );
+
+    await expect.element(modePreview(screen, "clair", "Après : #1a66e6")).toBeVisible();
+    await expect.element(modePreview(screen, "sombre", "Après : #1a3366")).toBeVisible();
+    await expect.element(proposalItems(screen).getByText("Nouveau token")).toBeVisible();
+    expect(
+      proposalItems(screen)
+        .getByRole("figure", { name: /^Avant/ })
+        .elements(),
+    ).toHaveLength(0);
+    expect(proposalItems(screen).getByText("Inchangé").elements()).toHaveLength(0);
+    expect(proposalItems(screen).getByText("Nouveau mode").elements()).toHaveLength(0);
+  });
+
+  it("ne montre que l'aperçu Après d'un mode absent de l'avant, marqué Nouveau mode", async () => {
+    const { screen } = await renderBatch(
+      reading(
+        makeBatch({
+          proposals: [
+            makeUpdate({
+              validated: makeModalColor({ clair: PRIMARY_BLUE }),
+              proposed: makeModalColor({ clair: { ...PRIMARY_BLUE }, sombre: NIGHT_BLUE }),
+            }),
+          ],
+        }),
+      ),
+    );
+
+    await expect.element(modePreview(screen, "sombre", "Après : #1a3366")).toBeVisible();
+    await expect.element(modeRow(screen, "sombre").getByText("Nouveau mode")).toBeVisible();
+    expect(
+      modeRow(screen, "sombre")
+        .getByRole("figure", { name: /^Avant/ })
+        .elements(),
+    ).toHaveLength(0);
+    await expect.element(modePreview(screen, "clair", "Avant : #1a66e6")).toBeVisible();
+    expect(modeRow(screen, "clair").getByText("Nouveau mode").elements()).toHaveLength(0);
+    expect(proposalItems(screen).getByText("Nouveau token").elements()).toHaveLength(0);
+    expect(proposalItems(screen).getByText("Mode retiré").elements()).toHaveLength(0);
+  });
+
+  it("montre l'aperçu Avant seul d'un mode absent de l'après, marqué Mode retiré", async () => {
+    const { screen } = await renderBatch(
+      reading(
+        makeBatch({
+          proposals: [
+            makeUpdate({
+              validated: makeModalColor({ clair: PRIMARY_BLUE, sombre: NIGHT_BLUE }),
+              proposed: makeModalColor({ clair: { ...PRIMARY_BLUE } }),
+            }),
+          ],
+        }),
+      ),
+    );
+
+    await expect.element(modePreview(screen, "sombre", "Avant : #1a3366")).toBeVisible();
+    expect(drawnIn(modePreview(screen, "sombre", "Avant : #1a3366"), "backgroundColor")).toContain(
+      "rgb(26, 51, 102)",
+    );
+    await expect.element(modeRow(screen, "sombre").getByText("Mode retiré")).toBeVisible();
+    expect(
+      modeRow(screen, "sombre")
+        .getByRole("figure", { name: /^Après/ })
+        .elements(),
+    ).toHaveLength(0);
+    expect(modeRow(screen, "sombre").getByText("Inchangé").elements()).toHaveLength(0);
+    await expect.element(modePreview(screen, "clair", "Après : #1a66e6")).toBeVisible();
+    expect(modeRow(screen, "clair").getByText("Mode retiré").elements()).toHaveLength(0);
+    expect(proposalItems(screen).getByText("Nouveau mode").elements()).toHaveLength(0);
+  });
+
+  it("montre la valeur simple d'avant comme aperçu Avant de chaque mode", async () => {
+    const { screen } = await renderBatch(
+      reading(
+        makeBatch({
+          proposals: [
+            makeUpdate({
+              validated: { $type: "color", $value: PRIMARY_BLUE },
+              proposed: makeModalColor({ clair: { ...PRIMARY_BLUE }, sombre: NIGHT_BLUE }),
+            }),
+          ],
+        }),
+      ),
+    );
+
+    await expect.element(modePreview(screen, "clair", "Avant : #1a66e6")).toBeVisible();
+    await expect.element(modeRow(screen, "clair").getByText("Inchangé")).toBeVisible();
+    await expect.element(modePreview(screen, "sombre", "Avant : #1a66e6")).toBeVisible();
+    expect(drawnIn(modePreview(screen, "sombre", "Avant : #1a66e6"), "backgroundColor")).toContain(
+      "rgb(26, 102, 230)",
+    );
+    await expect.element(modePreview(screen, "sombre", "Après : #1a3366")).toBeVisible();
+    expect(modeRow(screen, "sombre").getByText("Inchangé").elements()).toHaveLength(0);
+    expect(proposalItems(screen).getByText("Nouveau mode").elements()).toHaveLength(0);
+    expect(proposalItems(screen).getByText("Nouveau token").elements()).toHaveLength(0);
+  });
+
+  it("montre la valeur simple proposée comme aperçu Après de chaque mode d'avant", async () => {
+    const { screen } = await renderBatch(
+      reading(
+        makeBatch({
+          proposals: [
+            makeUpdate({
+              validated: makeModalColor({ clair: PRIMARY_BLUE, sombre: NIGHT_BLUE }),
+              proposed: { $type: "color", $value: { ...PRIMARY_BLUE } },
+            }),
+          ],
+        }),
+      ),
+    );
+
+    await expect.element(modePreview(screen, "clair", "Avant : #1a66e6")).toBeVisible();
+    await expect.element(modePreview(screen, "clair", "Après : #1a66e6")).toBeVisible();
+    await expect.element(modeRow(screen, "clair").getByText("Inchangé")).toBeVisible();
+    await expect.element(modePreview(screen, "sombre", "Avant : #1a3366")).toBeVisible();
+    await expect.element(modePreview(screen, "sombre", "Après : #1a66e6")).toBeVisible();
+    expect(drawnIn(modePreview(screen, "sombre", "Après : #1a66e6"), "backgroundColor")).toContain(
+      "rgb(26, 102, 230)",
+    );
+    expect(modeRow(screen, "sombre").getByText("Inchangé").elements()).toHaveLength(0);
+    expect(proposalItems(screen).getByText("Mode retiré").elements()).toHaveLength(0);
+    expect(proposalItems(screen).getByText("Nouveau mode").elements()).toHaveLength(0);
+    expect(proposalItems(screen).getByRole("figure", { name: /: $/ }).elements()).toHaveLength(0);
+  });
+
+  it.each([
+    ["absents", null],
+    ["en liste", [PRIMARY_BLUE]],
+  ])(
+    "ne nomme aucun mode quand les modes sont %s, et la proposition reste rejetable",
+    async (_case, modes) => {
+      const sent: Decision[] = [];
+      const { screen } = await renderBatch(
+        reading(makeBatch({ proposals: [makeUpdate({ proposed: { $type: "color", modes } })] })),
+        {
+          reviewProposal: (review) => {
+            sent.push(review.decision);
+            return reviewedAs("rejected")(review);
+          },
+        },
+      );
+
+      await expect
+        .element(proposalItems(screen).getByRole("figure", { name: /^Après/ }))
+        .toBeVisible();
+      expect(proposalItems(screen).getByRole("group").elements()).toHaveLength(0);
+      await proposalItems(screen).nth(0).getByRole("button", { name: "Rejeter" }).click();
+      await expect.poll(() => sent).toEqual(["reject"]);
+    },
+  );
 });
 
 describe("relecture d'une proposition depuis la page du lot (ADR 0012 §1, ADR 0044 §6)", () => {

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import type { TokenValue } from "../domain/proposal.ts";
+import { type ModeChange, type ModeRow, modeRows } from "./mode-rows.ts";
 import type { Preview, SamplePreview } from "./preview.ts";
 import { previewOf } from "./token-preview.ts";
 
@@ -125,17 +126,69 @@ const PreviewFigure = ({
   );
 };
 
+const ValueBeforeAfter = ({
+  validated,
+  proposed,
+  children,
+}: {
+  readonly validated: TokenValue | undefined;
+  readonly proposed: TokenValue | undefined;
+  readonly children?: ReactNode;
+}) => (
+  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+    {validated === undefined ? null : <PreviewFigure label="Avant" column={1} token={validated} />}
+    {proposed === undefined ? null : (
+      <PreviewFigure label="Après" column={2} token={proposed}>
+        {children}
+      </PreviewFigure>
+    )}
+  </div>
+);
+
+const NEW_TOKEN = <p style={{ margin: 0 }}>Nouveau token</p>;
+
+const CHANGE_LABELS: Readonly<Record<ModeChange, string | undefined>> = {
+  changed: undefined,
+  unchanged: "Inchangé",
+  added: "Nouveau mode",
+  removed: "Mode retiré",
+};
+
+const ModesBeforeAfter = ({
+  rows,
+  creation,
+}: {
+  readonly rows: readonly ModeRow[];
+  readonly creation: boolean;
+}) => (
+  <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+    {creation ? NEW_TOKEN : null}
+    {rows.map(({ mode, validated, proposed, change }) => (
+      <div key={mode} role="group" aria-label={mode}>
+        <p style={{ margin: 0 }}>{mode}</p>
+        {CHANGE_LABELS[change] === undefined ? null : (
+          <p style={{ margin: 0 }}>{CHANGE_LABELS[change]}</p>
+        )}
+        <ValueBeforeAfter validated={validated} proposed={proposed} />
+      </div>
+    ))}
+  </div>
+);
+
 export const BeforeAfter = ({
   validated,
   proposed,
 }: {
   readonly validated: TokenValue | undefined;
   readonly proposed: TokenValue;
-}) => (
-  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
-    {validated === undefined ? null : <PreviewFigure label="Avant" column={1} token={validated} />}
-    <PreviewFigure label="Après" column={2} token={proposed}>
-      {validated === undefined ? <p style={{ margin: 0 }}>Nouveau token</p> : null}
-    </PreviewFigure>
-  </div>
-);
+}) => {
+  const rows = modeRows({ validated, proposed });
+  if (rows !== undefined) {
+    return <ModesBeforeAfter rows={rows} creation={validated === undefined} />;
+  }
+  return (
+    <ValueBeforeAfter validated={validated} proposed={proposed}>
+      {validated === undefined ? NEW_TOKEN : null}
+    </ValueBeforeAfter>
+  );
+};
