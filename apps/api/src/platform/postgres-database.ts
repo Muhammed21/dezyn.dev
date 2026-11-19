@@ -66,14 +66,16 @@ export type PostgresTransaction = Parameters<Parameters<NodePgDatabase["transact
 export const createPostgresDatabase = ({
   url,
   log = () => undefined,
+  statementTimeoutMs = STATEMENT_TIMEOUT_MS,
 }: {
   readonly url: string;
   readonly log?: LogSink;
+  readonly statementTimeoutMs?: number;
 }): PostgresDatabase => {
   const pool = new Pool({
     connectionString: url,
     connectionTimeoutMillis: CONNECTION_TIMEOUT_MS,
-    statement_timeout: STATEMENT_TIMEOUT_MS,
+    statement_timeout: statementTimeoutMs,
     lock_timeout: LOCK_TIMEOUT_MS,
     idle_in_transaction_session_timeout: IDLE_IN_TRANSACTION_TIMEOUT_MS,
   });

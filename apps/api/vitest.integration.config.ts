@@ -11,5 +11,6 @@ export default defineConfig({
     env: existsSync(ROOT_ENV) ? parseEnv(readFileSync(ROOT_ENV, "utf8")) : {},
     fileParallelism: false,
     testTimeout: 30_000,
+    hookTimeout: 30_000,
   },
 });

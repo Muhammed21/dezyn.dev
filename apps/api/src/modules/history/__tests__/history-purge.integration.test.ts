@@ -36,11 +36,23 @@ type Databases = {
   readonly migratorUrl: string;
 };
 
+// Une requête qui écrit ou lit des entrées de BIG_PAYLOAD octets (26 à 78 Mo) prend 0,2 à 0,6 s
+// sur un PostgreSQL au repos, et dépasse les 2 s de la production (corps limité à 1 Mo) quand
+// plusieurs suites partagent le PostgreSQL. 15 s reste sous le délai du test : une requête bloquée
+// échoue encore en 57014 en nommant la requête.
+const STATEMENT_TIMEOUT_FOR_BIG_PAYLOADS_MS = 15_000;
+
 const withDatabases = (run: (databases: Databases) => Promise<void>) =>
   withThrowawayDatabase(async ({ migratorUrl, appUrl, maintainerUrl }) => {
     await migrate({ connectionString: migratorUrl });
-    const app = createPostgresDatabase({ url: appUrl });
-    const maintainer = createPostgresDatabase({ url: maintainerUrl });
+    const app = createPostgresDatabase({
+      url: appUrl,
+      statementTimeoutMs: STATEMENT_TIMEOUT_FOR_BIG_PAYLOADS_MS,
+    });
+    const maintainer = createPostgresDatabase({
+      url: maintainerUrl,
+      statementTimeoutMs: STATEMENT_TIMEOUT_FOR_BIG_PAYLOADS_MS,
+    });
     try {
       await run({ app, maintainer, migratorUrl });
     } finally {

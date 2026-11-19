@@ -5,17 +5,23 @@ import { afterAll, describe, expect, it } from "vitest";
 
 import { createPostgresDatabase } from "#db";
 import type { LogRecord } from "#platform/logging.ts";
+import { createThrowawayDatabase } from "@repo/db/testing";
 
 const QUERY_CANCELED = "57014";
 const LOCK_NOT_AVAILABLE = "55P03";
 
+const database = await createThrowawayDatabase();
+
 const logged: LogRecord[] = [];
 const db = createPostgresDatabase({
-  url: process.env.DATABASE_URL ?? "",
+  url: database.appUrl,
   log: (record) => logged.push(record),
 });
 
-afterAll(() => db.close());
+afterAll(async () => {
+  await db.close();
+  await database.drop();
+});
 
 const elapsedSince = (startedAt: number) => performance.now() - startedAt;
 
@@ -27,6 +33,17 @@ describe("une connexion bloquée se libère seule", () => {
       cause: { code: QUERY_CANCELED },
     });
     expect(elapsedSince(startedAt)).toBeLessThan(2_900);
+  });
+
+  it("une base ouverte avec un autre délai par requête l'applique à chaque connexion", async () => {
+    const patient = createPostgresDatabase({ url: database.appUrl, statementTimeoutMs: 15_000 });
+
+    const { rows } = await patient.orm.execute<{ statement_timeout: string }>(
+      sql`SHOW statement_timeout`,
+    );
+
+    expect(rows).toEqual([{ statement_timeout: "15s" }]);
+    await patient.close();
   });
 
   it("une requête qui attend un verrou plus d'1 s abandonne", async () => {
@@ -60,7 +77,7 @@ describe("une connexion bloquée se libère seule", () => {
   it("une connexion au repos coupée par PostgreSQL est journalisée", async () => {
     const restarted: LogRecord[] = [];
     const idle = createPostgresDatabase({
-      url: process.env.DATABASE_URL ?? "",
+      url: database.appUrl,
       log: (record) => restarted.push(record),
     });
     const {

@@ -3,11 +3,19 @@
 ## Test Strategy
 
 - Unitaires (`pnpm test`) : domaine et contrats, sans base. 442 tests.
-- Intégration (`pnpm test:integration`) : l'app entière en mémoire (`app.request()`), sur une vraie PostgreSQL, un fichier par comportement d'ADR. 510 tests.
+- Intégration (`pnpm test:integration`) : l'app entière en mémoire (`app.request()`), sur une vraie PostgreSQL, un fichier par comportement d'ADR. 959 tests.
 - Visuels (`pnpm --filter @repo/web test:visual`) : `*.visual.test.tsx` de l'app web, comparés à une référence de `__tests__/__references__/` ; le Chromium tourne dans l'image Docker de Playwright, Docker est donc requis (ADR 0047). `--update` régénère les références.
 - Mutation (`pnpm --filter @repo/api mutation`, Stryker en place, en local seulement) : mesure la force des tests ; seuils 90 / 100 %, sans blocage. `--mutate <fichiers>` restreint le run aux fichiers touchés.
 - Bench (`pnpm bench`) : `apps/api/bench/*.bench.ts`, sur une vraie PostgreSQL ; voir [PERFORMANCE.md](PERFORMANCE.md).
 - Vert = les deux suites en CI (`ci.yml`).
+
+## PostgreSQL partagé
+
+Plusieurs suites d'intégration (worktrees, agents) tournent en même temps sur le même PostgreSQL local, à trois conditions :
+
+- Un test qui écrit, prend un verrou ou coupe une connexion le fait dans sa base jetable (`createThrowawayDatabase`), jamais dans la base de `DATABASE_URL`, que toutes les suites partagent.
+- Les pools des tests gardent les délais de la production (`statement_timeout` 2 s, `lock_timeout` 1 s). Un test dont les lignes dépassent celles de la production (corps limité à 1 Mo) passe `statementTimeoutMs` à `createPostgresDatabase` et dit pourquoi, comme `history-purge.integration.test.ts`.
+- `DROP DATABASE` attend un checkpoint de tout le cluster, donc les écritures des autres suites. Un test qui attend un délai fixe du serveur crée et supprime sa base hors du test, comme les tests 408 de `start-api.integration.test.ts`. Le hook qui la supprime a le même délai qu'un test, 30 s (`hookTimeout` de `vitest.integration.config.ts`) : avec les 10 s par défaut de Vitest, le checkpoint ferait échouer le fichier après ses tests.
 
 ## Tests de contrat des ports
 
