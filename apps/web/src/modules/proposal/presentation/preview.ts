@@ -28,6 +28,18 @@ export type SamplePreview = {
   };
 };
 
+export type BarPreview = {
+  readonly shape: "bar";
+  readonly text: string;
+  readonly style: { readonly width: string };
+};
+
 export type TextPreview = { readonly shape: "text"; readonly text: string };
 
-export type Preview = SwatchPreview | ShadowPreview | BandPreview | SamplePreview | TextPreview;
+export type Preview =
+  | SwatchPreview
+  | BarPreview
+  | ShadowPreview
+  | BandPreview
+  | SamplePreview
+  | TextPreview;
