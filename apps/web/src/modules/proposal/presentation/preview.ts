@@ -4,6 +4,30 @@ export type SwatchPreview = {
   readonly style: { readonly backgroundColor: string };
 };
 
+export type ShadowPreview = {
+  readonly shape: "shadow";
+  readonly text: string;
+  readonly style: { readonly boxShadow: string };
+};
+
+export type BandPreview = {
+  readonly shape: "band";
+  readonly text: string;
+  readonly style: { readonly backgroundImage: string };
+};
+
+export type SamplePreview = {
+  readonly shape: "sample";
+  readonly text: string;
+  readonly style: {
+    readonly fontFamily?: string;
+    readonly fontSize?: string;
+    readonly fontWeight?: number;
+    readonly lineHeight?: number;
+    readonly letterSpacing?: string;
+  };
+};
+
 export type TextPreview = { readonly shape: "text"; readonly text: string };
 
-export type Preview = SwatchPreview | TextPreview;
+export type Preview = SwatchPreview | ShadowPreview | BandPreview | SamplePreview | TextPreview;
