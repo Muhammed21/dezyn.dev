@@ -4,6 +4,8 @@ import { and, eq, isNull } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 
 import type { PostgresDatabase } from "#db";
+import type { HistoryWriter } from "#modules/history/contracts/history-writer.ts";
+import { fingerprintOf } from "#platform/idempotency.ts";
 import {
   type App,
   BASE_URL,
@@ -19,6 +21,17 @@ import { schema } from "@repo/db";
 
 const IDEMPOTENCY_KEY_DESCRIPTION =
   "Choisis une clé nouvelle par écriture voulue ; réutilise la même seulement pour relancer un appel resté sans réponse.";
+
+const KEY_REUSED =
+  "idempotency_key_reused : cette clé d'idempotence a déjà servi avec d'autres arguments ; choisis une clé nouvelle pour une autre écriture.";
+
+const IN_PROGRESS =
+  "idempotency_in_progress : un appel avec cette clé d'idempotence est encore en cours ; réessaie dans un instant.";
+
+const INVALID_KEY =
+  "invalid_idempotency_key : idempotencyKey compte de 1 à 255 caractères ASCII imprimables.";
+
+const refusal = (text: string) => ({ content: [{ type: "text", text }], isError: true });
 
 const NIGHT_BLUE = { colorSpace: "srgb", components: [0.1, 0.2, 0.4] };
 
@@ -45,6 +58,46 @@ const batchOf = async (
   return response.json();
 };
 
+const batchesOf = async (
+  app: App,
+  { accessToken, projectId }: { accessToken: string; projectId: string },
+) => {
+  const response = await app.request(`${BASE_URL}/v1/projects/${projectId}/proposal-batches`, {
+    headers: { authorization: `Bearer ${accessToken}` },
+  });
+  const { batches } = await response.json();
+  return batches;
+};
+
+const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000);
+
+const seedIdempotencyKey = (
+  db: PostgresDatabase,
+  {
+    userId,
+    key,
+    fingerprint,
+    response = null,
+    createdAt,
+  }: {
+    readonly userId: string;
+    readonly key: string;
+    readonly fingerprint: string;
+    readonly response?: string | null;
+    readonly createdAt: Date;
+  },
+) =>
+  db.orm.insert(schema.idempotencyKey).values({
+    id: randomUUID(),
+    userId,
+    scope: "mcp:write_tokens",
+    key,
+    fingerprint,
+    state: response === null ? "in_progress" : "completed",
+    response,
+    createdAt,
+  });
+
 const writeEntriesOf = async (
   app: App,
   { accessToken, projectId }: { accessToken: string; projectId: string },
@@ -52,6 +105,31 @@ const writeEntriesOf = async (
   (await historyOf(app, { accessToken, projectId })).filter(
     ({ action }: { action: string }) => action === "mcp.write_tokens",
   );
+
+const makeLatch = () => {
+  const latch = { resolve: () => {} };
+  const promise = new Promise<void>((resolve) => {
+    latch.resolve = resolve;
+  });
+  return { promise, resolve: () => latch.resolve() };
+};
+
+const makeHistoryGate = () => {
+  const reached = makeLatch();
+  const released = makeLatch();
+  const gate = { pending: true };
+  const wrapHistoryWriter = (writer: HistoryWriter): HistoryWriter => ({
+    append: async (entries) => {
+      if (gate.pending && entries.some(({ action }) => action.startsWith("mcp."))) {
+        gate.pending = false;
+        reached.resolve();
+        await released.promise;
+      }
+      return writer.append(entries);
+    },
+  });
+  return { reached: reached.promise, release: released.resolve, wrapHistoryWriter };
+};
 
 const closeMembership = (
   db: PostgresDatabase,
@@ -317,25 +395,6 @@ describe("write_tokens relancé avec la même clé d'idempotence rejoue son prem
       expect(retriedBord).toEqual(firstBord);
     }));
 
-  it("ne rejoue pas la même clé portée par d'autres arguments", () =>
-    withIdentityApp(async (app, db) => {
-      const { accessToken, projectId } = await seedProject(app, db);
-      const idempotencyKey = randomUUID();
-      await writeTokens(app, {
-        accessToken,
-        args: { projectId, tokens: [makeColorToken({ name: "couleur.fond" })], idempotencyKey },
-      });
-
-      const other = await writeTokens(app, {
-        accessToken,
-        args: { projectId, tokens: [makeColorToken({ name: "couleur.bord" })], idempotencyKey },
-      });
-
-      expect(other.structuredContent.proposals.map(({ name }: { name: string }) => name)).toEqual([
-        "couleur.bord",
-      ]);
-    }));
-
   it("ne rejoue pas pour un autre membre le résultat obtenu avec la même clé", () =>
     withIdentityApp(async (app, db) => {
       const ada = await seedProjectAsEditor(app, db);
@@ -376,4 +435,249 @@ describe("write_tokens relancé avec la même clé d'idempotence rejoue son prem
       });
       expect(tool.inputSchema.required).not.toContain("idempotencyKey");
     }));
+});
+
+describe("une clé d'idempotence mal employée est refusée sans rien écrire", () => {
+  it("refuse la même clé portée par d'autres arguments, sans écrire la seconde proposition", () =>
+    withIdentityApp(async (app, db) => {
+      const { accessToken, projectId } = await seedProject(app, db);
+      const idempotencyKey = randomUUID();
+      const fond = [makeColorToken({ name: "couleur.fond" })];
+      const bord = [makeColorToken({ name: "couleur.bord" })];
+      const first = await writeTokens(app, {
+        accessToken,
+        args: { projectId, tokens: fond, idempotencyKey },
+      });
+
+      const other = await writeTokens(app, {
+        accessToken,
+        args: { projectId, tokens: bord, idempotencyKey },
+      });
+
+      expect(other).toEqual(refusal(KEY_REUSED));
+      const batch = await batchOf(app, {
+        accessToken,
+        batchId: first.structuredContent.batch.id,
+      });
+      expect(batch.proposals.map(({ name }: { name: string }) => name)).toEqual(["couleur.fond"]);
+      const entries = await writeEntriesOf(app, { accessToken, projectId });
+      expect(entries.map(({ after }: { after: unknown }) => after)).toEqual([
+        { outcome: "error", input: { tokens: bord } },
+        { outcome: "success", input: { tokens: fond } },
+      ]);
+    }));
+
+  it("refuse la même clé quand une liste des arguments devient un objet aux mêmes indices", () =>
+    withIdentityApp(async (app, db) => {
+      const { accessToken, projectId } = await seedProject(app, db);
+      const idempotencyKey = randomUUID();
+      await writeTokens(app, {
+        accessToken,
+        args: {
+          projectId,
+          tokens: [makeColorToken({ $extensions: { "com.figma": { modes: ["clair"] } } })],
+          idempotencyKey,
+        },
+      });
+
+      const other = await writeTokens(app, {
+        accessToken,
+        args: {
+          projectId,
+          tokens: [makeColorToken({ $extensions: { "com.figma": { modes: { 0: "clair" } } } })],
+          idempotencyKey,
+        },
+      });
+
+      expect(other).toEqual(refusal(KEY_REUSED));
+    }));
+
+  it("refuse un appel qui arrive pendant le premier avec la même clé, puis rejoue le premier", () => {
+    const gate = makeHistoryGate();
+    return withIdentityApp(
+      async (app, db) => {
+        const { accessToken, projectId } = await seedProject(app, db);
+        const args = {
+          projectId,
+          tokens: [makeColorToken({ name: "couleur.fond" })],
+          idempotencyKey: randomUUID(),
+        };
+        const pending = writeTokens(app, { accessToken, args });
+        await gate.reached;
+
+        const concurrent = await writeTokens(app, { accessToken, args });
+        gate.release();
+        const first = await pending;
+        const retried = await writeTokens(app, { accessToken, args });
+
+        expect(concurrent).toEqual(refusal(IN_PROGRESS));
+        expect(retried).toEqual(first);
+        const batch = await batchOf(app, {
+          accessToken,
+          batchId: first.structuredContent.batch.id,
+        });
+        expect(batch.proposals).toHaveLength(1);
+        const entries = await writeEntriesOf(app, { accessToken, projectId });
+        expect(entries.map(({ after }: { after: { outcome: string } }) => after.outcome)).toEqual([
+          "replayed",
+          "error",
+          "success",
+        ]);
+      },
+      { wrapHistoryWriter: gate.wrapHistoryWriter },
+    );
+  });
+
+  it.each([
+    ["vide", ""],
+    ["de 256 caractères", "a".repeat(256)],
+    ["hors ASCII", "clé"],
+    ["avec un retour à la ligne", "ligne\nsuivante"],
+    ["avec un caractère de contrôle sous l'espace", "unité\u001f"],
+    ["avec le caractère DEL", "effacer\u007f"],
+  ])("refuse une clé %s sans ouvrir de lot, et journalise l'appel en échec", (_, idempotencyKey) =>
+    withIdentityApp(async (app, db) => {
+      const { accessToken, projectId } = await seedProject(app, db);
+      const tokens = [makeColorToken()];
+      const args = { projectId, tokens, idempotencyKey };
+
+      const refused = await writeTokens(app, { accessToken, args });
+
+      expect(refused).toEqual(refusal(INVALID_KEY));
+      expect(await batchesOf(app, { accessToken, projectId })).toEqual([]);
+      const entries = await writeEntriesOf(app, { accessToken, projectId });
+      expect(entries.map(({ after }: { after: unknown }) => after)).toEqual([
+        { outcome: "error", input: { tokens } },
+      ]);
+    }),
+  );
+
+  it("répond qu'un projet hors d'accès est introuvable avant de juger la clé", () =>
+    withIdentityApp(async (app, db) => {
+      const { accessToken } = await seedProject(app, db);
+      const args = { projectId: randomUUID(), tokens: [makeColorToken()], idempotencyKey: "" };
+
+      const refused = await writeTokens(app, { accessToken, args });
+
+      expect(refused).toEqual(refusal("Projet introuvable"));
+    }));
+
+  it("reprend une réservation restée en cours au-delà de la durée maximale d'un appel", () =>
+    withIdentityApp(async (app, db) => {
+      const { accessToken, projectId, userId } = await seedProject(app, db);
+      const args = { projectId, tokens: [makeColorToken()], idempotencyKey: randomUUID() };
+      await seedIdempotencyKey(db, {
+        userId,
+        key: args.idempotencyKey,
+        fingerprint: "appel abandonné",
+        createdAt: minutesAgo(6),
+      });
+
+      const retried = await writeTokens(app, { accessToken, args });
+      const replayed = await writeTokens(app, { accessToken, args });
+
+      expect(retried.structuredContent.proposals).toHaveLength(1);
+      expect(replayed).toEqual(retried);
+    }));
+
+  it("refuse un appel qui arrive pendant la reprise d'une réservation abandonnée", () => {
+    const gate = makeHistoryGate();
+    return withIdentityApp(
+      async (app, db) => {
+        const { accessToken, projectId, userId } = await seedProject(app, db);
+        const args = { projectId, tokens: [makeColorToken()], idempotencyKey: randomUUID() };
+        await seedIdempotencyKey(db, {
+          userId,
+          key: args.idempotencyKey,
+          fingerprint: "appel abandonné",
+          createdAt: minutesAgo(6),
+        });
+        const pending = writeTokens(app, { accessToken, args });
+        await gate.reached;
+
+        const concurrent = await writeTokens(app, { accessToken, args });
+        gate.release();
+        const takenOver = await pending;
+
+        expect(concurrent).toEqual(refusal(IN_PROGRESS));
+        expect(takenOver.structuredContent.proposals).toHaveLength(1);
+      },
+      { wrapHistoryWriter: gate.wrapHistoryWriter },
+    );
+  });
+
+  it("date une réservation à l'heure de la base, même si l'horloge de l'app retarde", () => {
+    const gate = makeHistoryGate();
+    return withIdentityApp(
+      async (app, db) => {
+        const { accessToken, projectId } = await seedProject(app, db);
+        const args = { projectId, tokens: [makeColorToken()], idempotencyKey: randomUUID() };
+        const pending = writeTokens(app, { accessToken, args });
+        await gate.reached;
+
+        const concurrent = await writeTokens(app, { accessToken, args });
+        gate.release();
+        const first = await pending;
+
+        expect(concurrent).toEqual(refusal(IN_PROGRESS));
+        expect(first.structuredContent.proposals).toHaveLength(1);
+      },
+      { wrapHistoryWriter: gate.wrapHistoryWriter, clock: () => minutesAgo(60) },
+    );
+  });
+
+  it("refuse encore une réservation en cours plus jeune que la durée maximale d'un appel", () =>
+    withIdentityApp(async (app, db) => {
+      const { accessToken, projectId, userId } = await seedProject(app, db);
+      const args = { projectId, tokens: [makeColorToken()], idempotencyKey: randomUUID() };
+      const { idempotencyKey, ...fingerprinted } = args;
+      await seedIdempotencyKey(db, {
+        userId,
+        key: idempotencyKey,
+        fingerprint: fingerprintOf(fingerprinted),
+        createdAt: minutesAgo(4),
+      });
+
+      const refused = await writeTokens(app, { accessToken, args });
+
+      expect(refused).toEqual(refusal(IN_PROGRESS));
+      expect(await batchesOf(app, { accessToken, projectId })).toEqual([]);
+    }));
+
+  it("rejoue une réponse mémorisée même au-delà de la durée maximale d'un appel", () =>
+    withIdentityApp(async (app, db) => {
+      const { accessToken, projectId, userId } = await seedProject(app, db);
+      const args = { projectId, tokens: [makeColorToken()], idempotencyKey: randomUUID() };
+      const { idempotencyKey, ...fingerprinted } = args;
+      const memorized = refusal("première réponse");
+      await seedIdempotencyKey(db, {
+        userId,
+        key: idempotencyKey,
+        fingerprint: fingerprintOf(fingerprinted),
+        response: JSON.stringify(memorized),
+        createdAt: minutesAgo(6),
+      });
+
+      const replayed = await writeTokens(app, { accessToken, args });
+
+      expect(replayed).toEqual(memorized);
+      expect(await batchesOf(app, { accessToken, projectId })).toEqual([]);
+    }));
+
+  it.each([
+    ["de 255 caractères", "a".repeat(255)],
+    ["d'un caractère", "k"],
+    ["aux bornes de l'ASCII imprimable", " ~"],
+  ])("accepte une clé %s et rejoue son premier appel", (_, idempotencyKey) =>
+    withIdentityApp(async (app, db) => {
+      const { accessToken, projectId } = await seedProject(app, db);
+      const args = { projectId, tokens: [makeColorToken()], idempotencyKey };
+      const first = await writeTokens(app, { accessToken, args });
+
+      const retried = await writeTokens(app, { accessToken, args });
+
+      expect(first.structuredContent.proposals).toHaveLength(1);
+      expect(retried).toEqual(first);
+    }),
+  );
 });

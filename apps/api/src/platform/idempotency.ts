@@ -12,20 +12,25 @@ export type StoredIdempotencyKey =
   | { readonly state: "completed"; readonly fingerprint: string; readonly response: string };
 
 export type Reservation =
-  | { readonly kind: "reserved" }
-  | { readonly kind: "taken"; readonly stored: StoredIdempotencyKey | undefined };
+  | { readonly reserved: true }
+  | { readonly reserved: false; readonly stored: StoredIdempotencyKey };
 
 export interface IdempotencyStore {
-  reserve(claim: IdempotencyClaim & { readonly createdAt: Date }): Promise<Reservation>;
+  reserve(claim: IdempotencyClaim): Promise<Reservation>;
   complete(claim: IdempotencyClaim, response: string): Promise<void>;
   release(claim: IdempotencyClaim): Promise<void>;
 }
 
 export type Execution<R> = { readonly response: R; readonly memorable: boolean };
 
+export type IdempotencyRefusal =
+  | "invalid_idempotency_key"
+  | "idempotency_in_progress"
+  | "idempotency_key_reused";
+
 export type IdempotentOutcome<R> =
-  | { readonly kind: "executed"; readonly response: R }
-  | { readonly kind: "replayed"; readonly response: R };
+  | { readonly response: R }
+  | { readonly refusal: IdempotencyRefusal };
 
 export type Idempotent = <R>(request: {
   readonly claim: IdempotencyClaim;
@@ -52,8 +57,20 @@ export const fingerprintOf = (value: Readonly<Record<string, unknown>>): string 
     .update(JSON.stringify(canonical(value)))
     .digest("hex");
 
-const replayable = (stored: StoredIdempotencyKey | undefined, fingerprint: string) =>
-  stored?.state === "completed" && stored.fingerprint === fingerprint ? stored.response : undefined;
+const IDEMPOTENCY_KEY = /^[\x20-\x7E]{1,255}$/;
+
+const verdictOf = (
+  stored: StoredIdempotencyKey,
+  fingerprint: string,
+): { readonly refusal: IdempotencyRefusal } | { readonly response: string } => {
+  if (stored.fingerprint !== fingerprint) {
+    return { refusal: "idempotency_key_reused" };
+  }
+  if (stored.state === "in_progress") {
+    return { refusal: "idempotency_in_progress" };
+  }
+  return { response: stored.response };
+};
 
 const executeReserved = async <R>(
   store: IdempotencyStore,
@@ -68,22 +85,25 @@ const executeReserved = async <R>(
 };
 
 export const idempotent =
-  ({ store, now }: { readonly store: IdempotencyStore; readonly now: () => Date }): Idempotent =>
+  ({ store }: { readonly store: IdempotencyStore }): Idempotent =>
   async ({ claim, parse, run, replay }) => {
-    const reservation = await store.reserve({ ...claim, createdAt: now() });
-    if (reservation.kind === "reserved") {
+    if (!IDEMPOTENCY_KEY.test(claim.key)) {
+      return { refusal: "invalid_idempotency_key" };
+    }
+    const reservation = await store.reserve(claim);
+    if (reservation.reserved) {
       const { response, memorable } = await executeReserved(store, { claim, run });
       if (memorable) {
         await store.complete(claim, JSON.stringify(response));
       } else {
         await store.release(claim);
       }
-      return { kind: "executed", response };
+      return { response };
     }
-    const replayed = replayable(reservation.stored, claim.fingerprint);
-    if (replayed !== undefined) {
-      const stored: unknown = JSON.parse(replayed);
-      return { kind: "replayed", response: await replay(parse(stored)) };
+    const verdict = verdictOf(reservation.stored, claim.fingerprint);
+    if ("refusal" in verdict) {
+      return verdict;
     }
-    return { kind: "executed", response: (await run()).response };
+    const stored: unknown = JSON.parse(verdict.response);
+    return { response: await replay(parse(stored)) };
   };

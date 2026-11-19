@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 import { schema } from "@repo/db";
 
@@ -9,6 +9,12 @@ import type { PostgresDatabase } from "./postgres-database.ts";
 
 const COMPLETED = "completed";
 
+const ABANDONED_RESERVATION_SECONDS = 5 * 60;
+
+const { idempotencyKey } = schema;
+
+const abandoned = sql`${idempotencyKey.response} is null and ${idempotencyKey.createdAt} < now() - make_interval(secs => ${ABANDONED_RESERVATION_SECONDS})`;
+
 const ofClaim = ({ userId, scope, key }: IdempotencyClaim) =>
   and(
     eq(schema.idempotencyKey.userId, userId),
@@ -16,34 +22,44 @@ const ofClaim = ({ userId, scope, key }: IdempotencyClaim) =>
     eq(schema.idempotencyKey.key, key),
   );
 
-const storedOf = (row: {
-  readonly state: string;
+const storedOf = ({
+  fingerprint,
+  response,
+}: {
   readonly fingerprint: string;
   readonly response: string | null;
 }): StoredIdempotencyKey =>
-  row.state === COMPLETED && row.response !== null
-    ? { state: COMPLETED, fingerprint: row.fingerprint, response: row.response }
-    : { state: "in_progress", fingerprint: row.fingerprint };
+  response === null
+    ? { state: "in_progress", fingerprint }
+    : { state: COMPLETED, fingerprint, response };
 
 export const postgresIdempotencyStore = (db: PostgresDatabase): IdempotencyStore => ({
-  reserve: async ({ createdAt, ...claim }) => {
-    const reserved = await db.orm
-      .insert(schema.idempotencyKey)
-      .values({ id: randomUUID(), ...claim, state: "in_progress", response: null, createdAt })
-      .onConflictDoNothing()
-      .returning({ id: schema.idempotencyKey.id });
-    if (reserved.length > 0) {
-      return { kind: "reserved" };
-    }
+  reserve: async (claim) => {
+    const id = randomUUID();
     const [row] = await db.orm
-      .select({
-        state: schema.idempotencyKey.state,
+      .insert(schema.idempotencyKey)
+      .values({ id, ...claim, state: "in_progress", response: null, createdAt: sql`now()` })
+      .onConflictDoUpdate({
+        target: [
+          schema.idempotencyKey.userId,
+          schema.idempotencyKey.scope,
+          schema.idempotencyKey.key,
+        ],
+        set: {
+          id: sql`case when ${abandoned} then excluded.id else ${idempotencyKey.id} end`,
+          fingerprint: sql`case when ${abandoned} then excluded.fingerprint else ${idempotencyKey.fingerprint} end`,
+          createdAt: sql`case when ${abandoned} then excluded.created_at else ${idempotencyKey.createdAt} end`,
+        },
+      })
+      .returning({
+        id: schema.idempotencyKey.id,
         fingerprint: schema.idempotencyKey.fingerprint,
         response: schema.idempotencyKey.response,
-      })
-      .from(schema.idempotencyKey)
-      .where(ofClaim(claim));
-    return { kind: "taken", stored: row === undefined ? undefined : storedOf(row) };
+      });
+    if (row === undefined || row.id === id) {
+      return { reserved: true };
+    }
+    return { reserved: false, stored: storedOf(row) };
   },
   complete: async (claim, response) => {
     await db.orm

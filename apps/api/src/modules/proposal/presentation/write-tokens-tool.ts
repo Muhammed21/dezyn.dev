@@ -4,8 +4,8 @@ import { z } from "zod";
 
 import { TokenDefinitionInput } from "#modules/token/contracts/token-definition.ts";
 import { issuesOfCheck } from "#modules/token/contracts/token-issues.ts";
-import type { Execution } from "#platform/idempotency.ts";
-import { IdempotencyKeyArgument, type McpCall } from "#platform/mcp.ts";
+import type { Execution, IdempotencyRefusal } from "#platform/idempotency.ts";
+import { IDEMPOTENCY_REFUSAL_TEXT, IdempotencyKeyArgument, type McpCall } from "#platform/mcp.ts";
 import {
   isServerFailure,
   RECORD_FAILURE_TEXT,
@@ -21,7 +21,12 @@ import { WrittenTokensOutput } from "../contracts/proposal.ts";
 
 type InvalidTokens = { readonly code: "invalid_tokens"; readonly issues: readonly string[] };
 
-type WriteFailure = RecordFailure | InvalidTokens | UncheckedTokens;
+type WriteFailure = RecordFailure | IdempotencyRefusal | InvalidTokens | UncheckedTokens;
+
+const FAILURE_TEXT: Readonly<Record<RecordFailure | IdempotencyRefusal, string>> = {
+  ...RECORD_FAILURE_TEXT,
+  ...IDEMPOTENCY_REFUSAL_TEXT,
+};
 
 const MAX_TOKENS_PER_CALL = 500;
 
@@ -46,7 +51,7 @@ const issuesOf = (failure: InvalidTokens | UncheckedTokens): readonly string[] =
       );
 
 const errorTextOf = (failure: WriteFailure): string =>
-  typeof failure === "string" ? RECORD_FAILURE_TEXT[failure] : issuesOf(failure).join("\n");
+  typeof failure === "string" ? FAILURE_TEXT[failure] : issuesOf(failure).join("\n");
 
 const errorOf = (failure: WriteFailure): CallToolResult => ({
   content: [{ type: "text", text: errorTextOf(failure) }],
@@ -135,6 +140,21 @@ export const registerWriteTokens =
       });
       return replayed.ok ? replayed.value : errorOf(replayed.error);
     };
+    const refuse = async (
+      { projectId, tokens }: { readonly projectId: string; readonly tokens?: readonly unknown[] },
+      refusal: IdempotencyRefusal,
+    ): Promise<CallToolResult> => {
+      const refused = await recordProjectCall({
+        tool: "write_tokens",
+        projectId,
+        userId: identity.userId,
+        clientId: identity.clientId,
+        correlationId,
+        input: { tokens },
+        run: async (): Promise<Result<never, IdempotencyRefusal>> => err(refusal),
+      });
+      return refused.ok ? refused.value : errorOf(refused.error);
+    };
     server.registerTool(
       "write_tokens",
       {
@@ -153,6 +173,7 @@ export const registerWriteTokens =
           args,
           run: () => write(args),
           replay: (stored) => replay(args, stored),
+          refuse: (refusal) => refuse(args, refusal),
         }),
     );
   };
