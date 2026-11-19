@@ -198,6 +198,16 @@ describe("aperçu d'une ombre", () => {
     });
   });
 
+  it("accepte un flou nul", () => {
+    expect(
+      previewOf({ type: "shadow", value: makeShadowLayer({ blur: { value: 0, unit: "px" } }) }),
+    ).toEqual({
+      shape: "shadow",
+      text: "0px 4px 0px 0px #00000040",
+      style: { boxShadow: "0px 4px 0px 0px #00000040" },
+    });
+  });
+
   it("dessine une ombre à une seule couche donnée en liste", () => {
     expect(previewOf({ type: "shadow", value: [makeShadowLayer()] })).toEqual({
       shape: "shadow",
@@ -217,6 +227,7 @@ describe("aperçu d'une ombre", () => {
       [makeShadowLayer(), makeShadowLayer({ offsetY: "{espace.petit}" })],
     ],
     ["une couleur mal formée", makeShadowLayer({ color: makeColor({ components: [2, 0, 0] }) })],
+    ["un flou négatif", makeShadowLayer({ blur: { value: -2, unit: "px" } })],
     ["une unité inconnue", makeShadowLayer({ blur: { value: 8, unit: "em" } })],
     ["une longueur sans nombre", makeShadowLayer({ offsetY: { value: "4", unit: "px" } })],
     ["un champ absent", makeShadowLayer({ spread: undefined })],
@@ -466,6 +477,25 @@ describe("aperçu d'une typographie", () => {
     });
   });
 
+  it("accepte une taille nulle", () => {
+    expect(
+      previewOf({
+        type: "typography",
+        value: makeTypography({ fontSize: { value: 0, unit: "px" } }),
+      }),
+    ).toEqual({
+      shape: "sample",
+      text: "Inter · 0px · 600 · interligne 1.5 · espacement 0px",
+      style: {
+        fontFamily: '"Inter"',
+        fontSize: "0px",
+        fontWeight: 600,
+        lineHeight: 1.5,
+        letterSpacing: "0px",
+      },
+    });
+  });
+
   it("accepte des polices de repli, une graisse en mot-clé et des longueurs en rem", () => {
     expect(
       previewOf({
@@ -500,6 +530,7 @@ describe("aperçu d'une typographie", () => {
     ["une police vide", makeTypography({ fontFamily: "" })],
     ["une graisse hors bornes", makeTypography({ fontWeight: 0 })],
     ["une taille sans unité", makeTypography({ fontSize: 16 })],
+    ["une taille négative", makeTypography({ fontSize: { value: -2, unit: "px" } })],
     ["un interlignage en texte", makeTypography({ lineHeight: "1.5" })],
     ["un champ absent", makeTypography({ letterSpacing: undefined })],
     ["un alias", "{typo.corps}"],

@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { SrgbHex } from "./color-preview.ts";
-import { Length } from "./length.ts";
+import { Length, PositiveLength } from "./length.ts";
 import type { ShadowPreview } from "./preview.ts";
 
 const ShadowLayer = z
@@ -9,7 +9,7 @@ const ShadowLayer = z
     color: SrgbHex,
     offsetX: Length,
     offsetY: Length,
-    blur: Length,
+    blur: PositiveLength,
     spread: Length,
     inset: z.boolean().optional(),
   })

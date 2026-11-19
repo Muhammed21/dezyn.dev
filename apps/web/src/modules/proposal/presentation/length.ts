@@ -5,3 +5,7 @@ export const LengthValue = z.object({ value: z.number(), unit: z.enum(["px", "re
 export const lengthText = ({ value, unit }: z.infer<typeof LengthValue>) => `${value}${unit}`;
 
 export const Length = LengthValue.transform(lengthText);
+
+export const PositiveLength = LengthValue.extend({ value: z.number().min(0) }).transform(
+  lengthText,
+);
