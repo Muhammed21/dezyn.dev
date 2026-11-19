@@ -7,7 +7,7 @@ import { z } from "zod";
 import type { AccessTokenIdentity } from "@repo/auth-verifier";
 
 import type { AuthenticatedEnv } from "./access-token.ts";
-import { fingerprintOf, type Idempotent } from "./idempotency.ts";
+import { type Execution, fingerprintOf, type Idempotent } from "./idempotency.ts";
 
 export const IdempotencyKeyArgument = z
   .string()
@@ -19,7 +19,8 @@ export const IdempotencyKeyArgument = z
 export type IdempotentToolCall = (call: {
   readonly tool: string;
   readonly args: { readonly idempotencyKey?: string } & Readonly<Record<string, unknown>>;
-  readonly run: () => Promise<CallToolResult>;
+  readonly run: () => Promise<Execution<CallToolResult>>;
+  readonly replay: (stored: CallToolResult) => Promise<CallToolResult>;
 }) => Promise<CallToolResult>;
 
 export type McpCall = {
@@ -32,9 +33,9 @@ export type McpTools = (server: McpServer, call: McpCall) => void;
 
 const idempotentToolCall =
   (idempotent: Idempotent, userId: string): IdempotentToolCall =>
-  async ({ tool, args: { idempotencyKey, ...args }, run }) => {
+  async ({ tool, args: { idempotencyKey, ...args }, run, replay }) => {
     if (idempotencyKey === undefined) {
-      return run();
+      return (await run()).response;
     }
     const { response } = await idempotent({
       claim: {
@@ -45,6 +46,7 @@ const idempotentToolCall =
       },
       parse: (stored) => CallToolResultSchema.parse(stored),
       run,
+      replay,
     });
     return response;
   };

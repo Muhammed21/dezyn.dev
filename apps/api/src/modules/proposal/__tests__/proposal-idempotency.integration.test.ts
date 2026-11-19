@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
 
+import { and, eq, isNull } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 
+import type { PostgresDatabase } from "#db";
 import {
   type App,
   BASE_URL,
@@ -51,6 +53,21 @@ const writeEntriesOf = async (
     ({ action }: { action: string }) => action === "mcp.write_tokens",
   );
 
+const closeMembership = (
+  db: PostgresDatabase,
+  { spaceId, userId }: { readonly spaceId: string; readonly userId: string },
+) =>
+  db.orm
+    .update(schema.spaceMember)
+    .set({ closedAt: new Date(), closedReason: "removed" })
+    .where(
+      and(
+        eq(schema.spaceMember.spaceId, spaceId),
+        eq(schema.spaceMember.userId, userId),
+        isNull(schema.spaceMember.closedAt),
+      ),
+    );
+
 describe("write_tokens relancé avec la même clé d'idempotence rejoue son premier résultat", () => {
   it("rend les mêmes propositions, le même lot et les mêmes identifiants que le premier appel", () =>
     withIdentityApp(async (app, db) => {
@@ -68,16 +85,13 @@ describe("write_tokens relancé avec la même clé d'idempotence rejoue son prem
       expect(retried).toEqual(first);
     }));
 
-  it("ne crée aucune proposition, n'ajoute aucune entrée d'historique et n'envoie aucun signal", () => {
+  it("ne crée aucune proposition et ne signale que l'entrée d'historique du rejeu", () => {
     const recorder = makeAllSignalsRecorder();
     return withIdentityApp(
       async (app, db) => {
         const { accessToken, projectId } = await seedProject(app, db);
-        const args = {
-          projectId,
-          tokens: [makeColorToken({ name: "couleur.fond" })],
-          idempotencyKey: randomUUID(),
-        };
+        const tokens = [makeColorToken({ name: "couleur.fond" })];
+        const args = { projectId, tokens, idempotencyKey: randomUUID() };
         const first = await writeTokens(app, { accessToken, args });
         const signalsAfterFirst = recorder.received.length;
         const scheduledAfterFirst = recorder.scheduled.length;
@@ -89,13 +103,125 @@ describe("write_tokens relancé avec la même clé d'idempotence rejoue son prem
           batchId: first.structuredContent.batch.id,
         });
         expect(batch.proposals).toHaveLength(1);
-        expect(await writeEntriesOf(app, { accessToken, projectId })).toHaveLength(1);
-        expect(recorder.since(signalsAfterFirst)).toEqual([]);
+        expect(recorder.since(signalsAfterFirst)).toEqual([{ projectId, topics: ["history"] }]);
         expect(recorder.scheduled).toHaveLength(scheduledAfterFirst);
       },
       { signals: recorder.signals },
     );
   });
+
+  it("laisse dans l'historique une entrée marquée comme rejeu", () =>
+    withIdentityApp(async (app, db) => {
+      const { accessToken, projectId } = await seedProject(app, db);
+      const tokens = [makeColorToken({ name: "couleur.fond" })];
+      const args = { projectId, tokens, idempotencyKey: randomUUID() };
+      await writeTokens(app, { accessToken, args });
+
+      await writeTokens(app, { accessToken, args });
+
+      const entries = await writeEntriesOf(app, { accessToken, projectId });
+      expect(entries.map(({ after }: { after: unknown }) => after)).toEqual([
+        { outcome: "replayed", input: { tokens } },
+        { outcome: "success", input: { tokens } },
+      ]);
+    }));
+
+  it("refuse le rejeu à un membre retiré de l'espace depuis son premier appel", () =>
+    withIdentityApp(async (app, db) => {
+      const { accessToken, projectId, spaceId, userId } = await seedProjectAsEditor(app, db);
+      const args = {
+        projectId,
+        tokens: [makeColorToken({ name: "couleur.fond" })],
+        idempotencyKey: randomUUID(),
+      };
+      await writeTokens(app, { accessToken, args });
+      await closeMembership(db, { spaceId, userId });
+
+      const retried = await writeTokens(app, { accessToken, args });
+
+      expect(retried).toMatchObject({
+        isError: true,
+        content: [{ type: "text", text: "Projet introuvable" }],
+      });
+    }));
+
+  it("rejoue un refus des tokens, qui n'est pas une erreur serveur", () =>
+    withIdentityApp(async (app, db) => {
+      const { accessToken, projectId } = await seedProject(app, db);
+      const tokens = [{ name: "couleur.fond", $type: "color" }];
+      const args = { projectId, tokens, idempotencyKey: randomUUID() };
+      const first = await writeTokens(app, { accessToken, args });
+
+      const retried = await writeTokens(app, { accessToken, args });
+
+      expect(first.isError).toBe(true);
+      expect(retried).toEqual(first);
+      const entries = await writeEntriesOf(app, { accessToken, projectId });
+      expect(entries.map(({ after }: { after: unknown }) => after)).toEqual([
+        { outcome: "replayed", input: { tokens } },
+        { outcome: "error", input: { tokens } },
+      ]);
+    }));
+
+  it("ne mémorise pas un historique indisponible : la relance s'exécute, puis se rejoue", () => {
+    const history = { failures: 1 };
+    return withIdentityApp(
+      async (app, db) => {
+        const { accessToken, projectId } = await seedProject(app, db);
+        const tokens = [makeColorToken({ name: "couleur.fond" })];
+        const args = { projectId, tokens, idempotencyKey: randomUUID() };
+        const first = await writeTokens(app, { accessToken, args });
+
+        const retried = await writeTokens(app, { accessToken, args });
+        const replayed = await writeTokens(app, { accessToken, args });
+
+        expect(first.content).toEqual([{ type: "text", text: "Historique indisponible" }]);
+        expect(retried.structuredContent.unchanged).toEqual(["couleur.fond"]);
+        expect(replayed).toEqual(retried);
+        const entries = await writeEntriesOf(app, { accessToken, projectId });
+        expect(entries.map(({ after }: { after: unknown }) => after)).toEqual([
+          { outcome: "replayed", input: { tokens } },
+          { outcome: "success", input: { tokens } },
+        ]);
+      },
+      {
+        wrapHistoryWriter: (writer) => ({
+          append: (entries) => {
+            if (history.failures > 0 && entries.some(({ action }) => action.startsWith("mcp."))) {
+              history.failures -= 1;
+              return Promise.reject(new Error("historique indisponible"));
+            }
+            return writer.append(entries);
+          },
+        }),
+      },
+    );
+  });
+
+  it("libère la clé d'un appel qui lève une exception : la relance s'exécute, puis se rejoue", () =>
+    withIdentityApp(async (app, db) => {
+      const { accessToken, projectId } = await seedProject(app, db);
+      const args = {
+        projectId,
+        tokens: [makeColorToken({ name: "couleur.fond" })],
+        idempotencyKey: randomUUID(),
+      };
+      const first = await db.orm.transaction(async (tx) => {
+        await tx
+          .select()
+          .from(schema.project)
+          .where(eq(schema.project.id, projectId))
+          .for("update");
+        return writeTokens(app, { accessToken, args });
+      });
+
+      const retried = await writeTokens(app, { accessToken, args });
+      const replayed = await writeTokens(app, { accessToken, args });
+
+      expect(first.isError).toBe(true);
+      expect(retried.structuredContent.proposals).toHaveLength(1);
+      expect(replayed).toEqual(retried);
+    }));
 
   it("ne réécrit pas une proposition remplacée entre-temps par un autre appel", () =>
     withIdentityApp(async (app, db) => {

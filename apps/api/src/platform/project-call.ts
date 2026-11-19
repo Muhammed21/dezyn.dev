@@ -7,6 +7,8 @@ export const RECORD_FAILURE_TEXT: Readonly<Record<RecordFailure, string>> = {
   history_unavailable: "Historique indisponible",
 };
 
+export const isServerFailure = (failure: unknown): boolean => failure === "history_unavailable";
+
 export type RecordProjectCall = <T, E>(call: {
   readonly tool: string;
   readonly projectId: string;
@@ -14,5 +16,6 @@ export type RecordProjectCall = <T, E>(call: {
   readonly clientId: string;
   readonly correlationId: string;
   readonly input: Readonly<Record<string, unknown>>;
+  readonly replayed?: boolean;
   readonly run: (project: { readonly spaceId: string }) => Promise<Result<T, E>>;
 }) => Promise<Result<T, E | RecordFailure>>;

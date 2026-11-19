@@ -71,7 +71,7 @@ export const makeProposals = (): ProposalUseCases => ({
 
 export const makeIdempotent =
   (): Idempotent =>
-  async ({ run }) => ({ kind: "executed", response: await run() });
+  async ({ run }) => ({ kind: "executed", response: (await run()).response });
 
 export const makeApp = ({
   db = makeDatabase(),

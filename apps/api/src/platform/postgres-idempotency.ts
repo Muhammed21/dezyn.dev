@@ -51,4 +51,7 @@ export const postgresIdempotencyStore = (db: PostgresDatabase): IdempotencyStore
       .set({ state: COMPLETED, response })
       .where(ofClaim(claim));
   },
+  release: async (claim) => {
+    await db.orm.delete(schema.idempotencyKey).where(ofClaim(claim));
+  },
 });

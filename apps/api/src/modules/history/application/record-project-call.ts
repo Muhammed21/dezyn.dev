@@ -5,6 +5,13 @@ import { err, type Result } from "@repo/result";
 
 import type { HistoryWriter } from "../domain/history-writer.ts";
 
+const outcomeOf = ({ ok, replayed }: { readonly ok: boolean; readonly replayed: boolean }) => {
+  if (replayed) {
+    return "replayed";
+  }
+  return ok ? "success" : "error";
+};
+
 export const recordProjectCall =
   ({
     access,
@@ -24,6 +31,7 @@ export const recordProjectCall =
     clientId,
     correlationId,
     input,
+    replayed = false,
     run,
   }: {
     readonly tool: string;
@@ -32,6 +40,7 @@ export const recordProjectCall =
     readonly clientId: string;
     readonly correlationId: string;
     readonly input: Readonly<Record<string, unknown>>;
+    readonly replayed?: boolean;
     readonly run: (project: ProjectInSpace) => Promise<Result<T, E>>;
   }): Promise<Result<T, E | RecordFailure>> => {
     const project = await access({ projectId, userId, action: "space.read" });
@@ -48,7 +57,7 @@ export const recordProjectCall =
           userId,
           clientId,
           before: null,
-          after: { outcome: outcome.ok ? "success" : "error", input },
+          after: { outcome: outcomeOf({ ok: outcome.ok, replayed }), input },
           correlationId,
           occurredAt: now(),
         },

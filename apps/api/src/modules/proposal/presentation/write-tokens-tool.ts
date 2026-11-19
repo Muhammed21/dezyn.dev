@@ -4,14 +4,16 @@ import { z } from "zod";
 
 import { TokenDefinitionInput } from "#modules/token/contracts/token-definition.ts";
 import { issuesOfCheck } from "#modules/token/contracts/token-issues.ts";
+import type { Execution } from "#platform/idempotency.ts";
 import { IdempotencyKeyArgument, type McpCall } from "#platform/mcp.ts";
 import {
+  isServerFailure,
   RECORD_FAILURE_TEXT,
   type RecordFailure,
   type RecordProjectCall,
 } from "#platform/project-call.ts";
 import { Uuid } from "@repo/contracts";
-import { err, type Result } from "@repo/result";
+import { err, ok, type Result } from "@repo/result";
 
 import type { ProposalUseCases } from "../application/proposal-use-cases.ts";
 import type { UncheckedTokens, WrittenWithDuplicates } from "../application/write-tokens.ts";
@@ -46,6 +48,11 @@ const issuesOf = (failure: InvalidTokens | UncheckedTokens): readonly string[] =
 const errorTextOf = (failure: WriteFailure): string =>
   typeof failure === "string" ? RECORD_FAILURE_TEXT[failure] : issuesOf(failure).join("\n");
 
+const errorOf = (failure: WriteFailure): CallToolResult => ({
+  content: [{ type: "text", text: errorTextOf(failure) }],
+  isError: true,
+});
+
 const writtenOutputOf = ({ batch, proposals, unchanged, replaced }: WrittenWithDuplicates) => ({
   batch: batch === null ? null : { id: batch.id, state: batch.state },
   proposals: proposals.map(({ id, name, kind, status, duplicates }) => ({
@@ -71,7 +78,7 @@ export const registerWriteTokens =
     }: {
       readonly projectId: string;
       readonly tokens?: readonly unknown[];
-    }): Promise<CallToolResult> => {
+    }): Promise<Execution<CallToolResult>> => {
       const written = await recordProjectCall({
         tool: "write_tokens",
         projectId,
@@ -101,13 +108,32 @@ export const registerWriteTokens =
         },
       });
       if (!written.ok) {
-        return { content: [{ type: "text", text: errorTextOf(written.error) }], isError: true };
+        return { response: errorOf(written.error), memorable: !isServerFailure(written.error) };
       }
       const output = writtenOutputOf(written.value);
       return {
-        content: [{ type: "text", text: JSON.stringify(output) }],
-        structuredContent: output,
+        response: {
+          content: [{ type: "text", text: JSON.stringify(output) }],
+          structuredContent: output,
+        },
+        memorable: true,
       };
+    };
+    const replay = async (
+      { projectId, tokens }: { readonly projectId: string; readonly tokens?: readonly unknown[] },
+      stored: CallToolResult,
+    ): Promise<CallToolResult> => {
+      const replayed = await recordProjectCall({
+        tool: "write_tokens",
+        projectId,
+        userId: identity.userId,
+        clientId: identity.clientId,
+        correlationId,
+        input: { tokens },
+        replayed: true,
+        run: async (): Promise<Result<CallToolResult, never>> => ok(stored),
+      });
+      return replayed.ok ? replayed.value : errorOf(replayed.error);
     };
     server.registerTool(
       "write_tokens",
@@ -121,6 +147,12 @@ export const registerWriteTokens =
         },
         outputSchema: WrittenTokensOutput,
       },
-      async (args) => idempotent({ tool: "write_tokens", args, run: () => write(args) }),
+      async (args) =>
+        idempotent({
+          tool: "write_tokens",
+          args,
+          run: () => write(args),
+          replay: (stored) => replay(args, stored),
+        }),
     );
   };
