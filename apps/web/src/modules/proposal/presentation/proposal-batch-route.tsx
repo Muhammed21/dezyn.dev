@@ -18,6 +18,7 @@ import type {
   ReviewFailure,
   ValidatedBatch,
 } from "../domain/proposal.ts";
+import { type AliasSources, type ReadTokens, useAliasSources } from "./alias-sources.ts";
 import { BeforeAfter } from "./before-after.tsx";
 import { useProposalSignals } from "./proposal-signals.ts";
 
@@ -199,12 +200,14 @@ const ProposalItem = ({
   projectId,
   rejection,
   review: { reviewProposal, onReviewed },
+  aliases,
 }: {
   readonly proposal: Proposal;
   readonly batchId: string;
   readonly projectId: string;
   readonly rejection: Rejection | undefined;
   readonly review: Review;
+  readonly aliases: AliasSources;
 }) => {
   const queryClient = useQueryClient();
   const { data, isPending, mutate } = useMutation({
@@ -225,7 +228,7 @@ const ProposalItem = ({
       <p>{proposal.name}</p>
       <p>{KIND_LABELS[proposal.kind]}</p>
       <p>{STATUS_LABELS[proposal.status]}</p>
-      <BeforeAfter validated={proposal.validated} proposed={proposal.proposed} />
+      <BeforeAfter validated={proposal.validated} proposed={proposal.proposed} aliases={aliases} />
       {proposal.duplicates.length === 0 ? null : (
         <p>Même valeur que {proposal.duplicates.join(", ")}</p>
       )}
@@ -253,11 +256,13 @@ const ProposalItem = ({
 const ProposalBatch = ({
   batchId,
   readBatch,
+  readTokens,
   review,
   subscribe,
 }: {
   readonly batchId: string;
   readonly readBatch: ReadBatch;
+  readonly readTokens: ReadTokens;
   readonly review: Review;
   readonly subscribe: SubscribeToProject;
 }) => {
@@ -270,6 +275,11 @@ const ProposalBatch = ({
     subscribe,
     projectId: data?.ok === true ? data.value.projectId : undefined,
     refresh: { scope: "proposal-batch", id: batchId },
+  });
+  const aliases = useAliasSources({
+    batch: data?.ok === true ? data.value : undefined,
+    readTokens,
+    subscribe,
   });
   if (data === undefined) {
     return <p>Chargement du lot…</p>;
@@ -308,6 +318,7 @@ const ProposalBatch = ({
             projectId={projectId}
             rejection={rejectionOf(proposal)}
             review={review}
+            aliases={aliases}
           />
         ))}
       </ul>
@@ -319,6 +330,7 @@ const ProposalBatch = ({
 export const proposalBatchRoute = ({
   parent,
   readBatch,
+  readTokens,
   reviewProposal,
   validateBatch,
   onReviewed,
@@ -326,6 +338,7 @@ export const proposalBatchRoute = ({
 }: {
   readonly parent: AnyRootRoute;
   readonly readBatch: ReadBatch;
+  readonly readTokens: ReadTokens;
   readonly reviewProposal: ReviewProposal;
   readonly validateBatch: ValidateBatch;
   readonly onReviewed: OnReviewed;
@@ -340,6 +353,7 @@ export const proposalBatchRoute = ({
         <ProposalBatch
           batchId={batchId}
           readBatch={readBatch}
+          readTokens={readTokens}
           review={{ reviewProposal, validateBatch, onReviewed }}
           subscribe={subscribe}
         />

@@ -31,6 +31,15 @@ export type Batch = {
   readonly proposals: readonly Proposal[];
 };
 
+export type ValidatedToken = {
+  readonly name: string;
+  readonly value:
+    | { readonly kind: "single"; readonly value: unknown }
+    | { readonly kind: "by_mode"; readonly values: Readonly<Record<string, unknown>> };
+};
+
+export type ValidatedTokens = { readonly tokens: readonly ValidatedToken[] };
+
 export type ProposalFailure = "unauthenticated" | "not_found" | "unavailable" | "invalid_response";
 
 export type Decision = "validate" | "reject";
