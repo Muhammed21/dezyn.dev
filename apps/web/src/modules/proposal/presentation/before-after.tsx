@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 import type { TokenValue } from "../domain/proposal.ts";
-import type { Preview } from "./preview.ts";
+import type { Preview, SamplePreview } from "./preview.ts";
 import { previewOf } from "./token-preview.ts";
 
 const CHECKERBOARD = {
@@ -26,8 +26,57 @@ const Swatch = ({ style }: { readonly style: { readonly backgroundColor: string 
   </span>
 );
 
-const Drawing = ({ preview }: { readonly preview: Preview }) =>
-  preview.shape === "swatch" ? <Swatch style={preview.style} /> : null;
+const ShadowCard = ({ style }: { readonly style: { readonly boxShadow: string } }) => (
+  <span
+    aria-hidden="true"
+    style={{
+      ...style,
+      display: "block",
+      width: "4rem",
+      height: "2.5rem",
+      margin: "0.75rem",
+      borderRadius: "0.375rem",
+      backgroundColor: "#ffffff",
+    }}
+  />
+);
+
+const Band = ({ style }: { readonly style: { readonly backgroundImage: string } }) => (
+  <span
+    aria-hidden="true"
+    style={{
+      ...CHECKERBOARD,
+      display: "block",
+      height: "1.5rem",
+      borderRadius: "0.375rem",
+      border: "1px solid #c8c8c8",
+      overflow: "hidden",
+    }}
+  >
+    <span style={{ ...style, display: "block", width: "100%", height: "100%" }} />
+  </span>
+);
+
+const Sample = ({ style }: { readonly style: SamplePreview["style"] }) => (
+  <span aria-hidden="true" style={{ ...style, display: "block", overflowWrap: "anywhere" }}>
+    Portez ce vieux whisky au juge blond qui fume
+  </span>
+);
+
+const Drawing = ({ preview }: { readonly preview: Preview }) => {
+  switch (preview.shape) {
+    case "swatch":
+      return <Swatch style={preview.style} />;
+    case "shadow":
+      return <ShadowCard style={preview.style} />;
+    case "band":
+      return <Band style={preview.style} />;
+    case "sample":
+      return <Sample style={preview.style} />;
+    default:
+      return null;
+  }
+};
 
 const PreviewFigure = ({
   label,
