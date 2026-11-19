@@ -16,6 +16,13 @@ export { ProjectsOutput } from "./project/projects.ts";
 export { DeclaredFigmaStatesOutput, TokenOutput, TokensOutput } from "./token/tokens.ts";
 export { HistoryOutput } from "./history/history.ts";
 export {
+  IDEMPOTENCY_KEY_HEADER,
+  IDEMPOTENCY_REPLAYED_HEADER,
+  IdempotencyInProgressProblem,
+  IdempotencyKeyReusedProblem,
+  InvalidIdempotencyKeyProblem,
+} from "./idempotency/idempotency.ts";
+export {
   AlreadyReviewedProblem,
   BATCH_STATES,
   BatchOpenProblem,
