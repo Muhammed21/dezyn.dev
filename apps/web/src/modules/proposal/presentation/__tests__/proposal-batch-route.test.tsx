@@ -291,6 +291,23 @@ const readingInTurn = (...batches: readonly Batch[]) => {
 const preview = (screen: Screen, name: string) =>
   proposalItems(screen).nth(0).getByRole("figure", { name });
 
+type DrawnProperty =
+  | "backgroundColor"
+  | "backgroundImage"
+  | "boxShadow"
+  | "fontFamily"
+  | "fontWeight"
+  | "fontSize";
+
+const drawn = (screen: Screen, name: string, property: DrawnProperty) => {
+  const drawing = preview(screen, name).element().querySelector('[aria-hidden="true"]');
+  return drawing === null
+    ? ""
+    : [drawing, ...drawing.querySelectorAll("*")]
+        .map((element) => getComputedStyle(element)[property])
+        .join(" | ");
+};
+
 const makeUpdate = (overrides: Partial<Proposal> = {}) =>
   makeProposal({
     kind: "update",
@@ -311,6 +328,8 @@ describe("aperçu avant/après d'une proposition", () => {
     await expect.element(after).toBeVisible();
     await expect.element(after.getByText("Après", { exact: true })).toBeVisible();
     await expect.element(after.getByText("#1a3366", { exact: true })).toBeVisible();
+    expect(drawn(screen, "Avant : #1a66e6", "backgroundColor")).toContain("rgb(26, 102, 230)");
+    expect(drawn(screen, "Après : #1a3366", "backgroundColor")).toContain("rgb(26, 51, 102)");
     expect(proposalItems(screen).getByText("Nouveau token").elements()).toHaveLength(0);
     expect(proposalItems(screen).getByRole("img").elements()).toHaveLength(0);
   });
@@ -459,6 +478,16 @@ describe("aperçu avant/après d'une ombre, d'une police et d'un dégradé", () 
       "0px 4px 8px 0px #00000040",
       "0px 4px 8px 0px #00000040, inset 0px 1px 2px 0px #1a66e6",
     );
+    expect(drawn(screen, "Avant : 0px 4px 8px 0px #00000040", "boxShadow")).toContain(
+      "rgba(0, 0, 0, 0.25) 0px 4px 8px 0px",
+    );
+    expect(
+      drawn(
+        screen,
+        "Après : 0px 4px 8px 0px #00000040, inset 0px 1px 2px 0px #1a66e6",
+        "boxShadow",
+      ),
+    ).toContain("rgba(0, 0, 0, 0.25) 0px 4px 8px 0px, rgb(26, 102, 230) 0px 1px 2px 0px inset");
     expect(proposalItems(screen).getByText(SAMPLE_TEXT).elements()).toHaveLength(0);
   });
 
@@ -488,21 +517,36 @@ describe("aperçu avant/après d'une ombre, d'une police et d'un dégradé", () 
     await expectBeforeAfter(screen, before, after);
     await expect.element(preview(screen, `Avant : ${before}`).getByText(SAMPLE_TEXT)).toBeVisible();
     await expect.element(preview(screen, `Après : ${after}`).getByText(SAMPLE_TEXT)).toBeVisible();
+    expect(drawn(screen, `Avant : ${before}`, "fontFamily")).toContain("Inter");
+    expect(drawn(screen, `Après : ${after}`, "fontFamily")).toContain("Georgia, serif");
+    expect(drawn(screen, `Après : ${after}`, "fontSize")).toContain("20px");
+    expect(drawn(screen, `Après : ${after}`, "fontWeight")).toContain("700");
   });
 
   it.each([
-    [
-      "une famille de police",
-      "fontFamily",
-      "Inter",
-      ["Georgia", "serif"],
-      "Inter",
-      "Georgia, serif",
-    ],
-    ["une graisse", "fontWeight", 400, "semi-bold", "400", "semi-bold"],
-  ])(
-    "montre %s validée et proposée sur un texte d'exemple",
-    async (_case, $type, validated, proposed, before, after) => {
+    {
+      $type: "fontFamily",
+      validated: "Inter",
+      proposed: ["Georgia", "serif"],
+      before: "Inter",
+      after: "Georgia, serif",
+      property: "fontFamily",
+      drawnBefore: "Inter",
+      drawnAfter: "Georgia, serif",
+    },
+    {
+      $type: "fontWeight",
+      validated: 300,
+      proposed: "semi-bold",
+      before: "300",
+      after: "semi-bold",
+      property: "fontWeight",
+      drawnBefore: "300",
+      drawnAfter: "600",
+    },
+  ] as const)(
+    "montre la valeur $type validée et proposée sur un texte d'exemple",
+    async ({ $type, validated, proposed, before, after, property, drawnBefore, drawnAfter }) => {
       const { screen } = await renderBatch(
         reading(
           makeBatch({
@@ -523,6 +567,8 @@ describe("aperçu avant/après d'une ombre, d'une police et d'un dégradé", () 
       await expect
         .element(preview(screen, `Après : ${after}`).getByText(SAMPLE_TEXT))
         .toBeVisible();
+      expect(drawn(screen, `Avant : ${before}`, property)).toContain(drawnBefore);
+      expect(drawn(screen, `Après : ${after}`, property)).toContain(drawnAfter);
     },
   );
 
@@ -547,6 +593,12 @@ describe("aperçu avant/après d'une ombre, d'une police et d'un dégradé", () 
     );
 
     await expectBeforeAfter(screen, "#1a66e6 0%, #1a3366 100%", "#1a3366 50%");
+    expect(drawn(screen, "Avant : #1a66e6 0%, #1a3366 100%", "backgroundImage")).toContain(
+      "linear-gradient(to right, rgb(26, 102, 230) 0%, rgb(26, 51, 102) 100%)",
+    );
+    expect(drawn(screen, "Après : #1a3366 50%", "backgroundImage")).toContain(
+      "linear-gradient(to right, rgb(26, 51, 102) 50%, rgb(26, 51, 102) 50%)",
+    );
     expect(proposalItems(screen).getByText(SAMPLE_TEXT).elements()).toHaveLength(0);
   });
 

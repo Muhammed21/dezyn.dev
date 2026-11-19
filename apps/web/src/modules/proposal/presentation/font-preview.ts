@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { Length } from "./length.ts";
+import { Length, PositiveLength } from "./length.ts";
 import type { SamplePreview } from "./preview.ts";
 
 const GENERIC_FAMILIES: ReadonlySet<string> = new Set([
@@ -68,7 +68,7 @@ const FontWeight = z.union([
 
 const Typography = z.object({
   fontFamily: FontFamily,
-  fontSize: Length,
+  fontSize: PositiveLength,
   fontWeight: FontWeight,
   lineHeight: z.number(),
   letterSpacing: Length,

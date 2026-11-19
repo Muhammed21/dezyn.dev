@@ -1,5 +1,11 @@
 import { z } from "zod";
 
-export const Length = z
-  .object({ value: z.number(), unit: z.enum(["px", "rem"]) })
-  .transform(({ value, unit }) => `${value}${unit}`);
+export const LengthValue = z.object({ value: z.number(), unit: z.enum(["px", "rem"]) });
+
+export const lengthText = ({ value, unit }: z.infer<typeof LengthValue>) => `${value}${unit}`;
+
+export const Length = LengthValue.transform(lengthText);
+
+export const PositiveLength = LengthValue.extend({ value: z.number().min(0) }).transform(
+  lengthText,
+);
