@@ -12,8 +12,7 @@ on:
       - "packages/**/src/**"
       - "**/bench/**"
       - "**/vitest.bench.config.ts"
-      - ".github/scripts/bench-collect.sh"
-      - ".github/scripts/perf-compare.mjs"
+      - "packages/bench-report/**"
       - ".github/workflows/perf-main.yml"
   workflow_dispatch:
 
@@ -62,7 +61,7 @@ jobs:
           PG_PASSWORD_APP: ci_app
           PG_PASSWORD_HISTORY_MAINTAINER: ci_history_maintainer
       - run: pnpm bench
-      - run: .github/scripts/bench-collect.sh bench-results.json
+      - run: node packages/bench-report/scripts/collect.ts bench-results.json
       - name: Upload bench baseline
         uses: actions/upload-artifact@v6
         with:
