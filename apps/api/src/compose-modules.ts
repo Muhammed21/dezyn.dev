@@ -109,6 +109,6 @@ export const composeModules = ({
     history,
     tokens,
     proposals,
-    idempotent: idempotent({ store: postgresIdempotencyStore(db), now: clock }),
+    idempotent: idempotent({ store: postgresIdempotencyStore(db) }),
   };
 };

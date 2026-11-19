@@ -9,6 +9,12 @@ import type { PostgresDatabase } from "./postgres-database.ts";
 
 const COMPLETED = "completed";
 
+const ABANDONED_RESERVATION_SECONDS = 5 * 60;
+
+const { idempotencyKey } = schema;
+
+const abandoned = sql`${idempotencyKey.response} is null and ${idempotencyKey.createdAt} < now() - make_interval(secs => ${ABANDONED_RESERVATION_SECONDS})`;
+
 const ofClaim = ({ userId, scope, key }: IdempotencyClaim) =>
   and(
     eq(schema.idempotencyKey.userId, userId),
@@ -28,18 +34,22 @@ const storedOf = ({
     : { state: COMPLETED, fingerprint, response };
 
 export const postgresIdempotencyStore = (db: PostgresDatabase): IdempotencyStore => ({
-  reserve: async ({ createdAt, ...claim }) => {
+  reserve: async (claim) => {
     const id = randomUUID();
     const [row] = await db.orm
       .insert(schema.idempotencyKey)
-      .values({ id, ...claim, state: "in_progress", response: null, createdAt })
+      .values({ id, ...claim, state: "in_progress", response: null, createdAt: sql`now()` })
       .onConflictDoUpdate({
         target: [
           schema.idempotencyKey.userId,
           schema.idempotencyKey.scope,
           schema.idempotencyKey.key,
         ],
-        set: { key: sql`excluded.key` },
+        set: {
+          id: sql`case when ${abandoned} then excluded.id else ${idempotencyKey.id} end`,
+          fingerprint: sql`case when ${abandoned} then excluded.fingerprint else ${idempotencyKey.fingerprint} end`,
+          createdAt: sql`case when ${abandoned} then excluded.created_at else ${idempotencyKey.createdAt} end`,
+        },
       })
       .returning({
         id: schema.idempotencyKey.id,

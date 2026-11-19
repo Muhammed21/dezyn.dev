@@ -16,7 +16,7 @@ export type Reservation =
   | { readonly reserved: false; readonly stored: StoredIdempotencyKey };
 
 export interface IdempotencyStore {
-  reserve(claim: IdempotencyClaim & { readonly createdAt: Date }): Promise<Reservation>;
+  reserve(claim: IdempotencyClaim): Promise<Reservation>;
   complete(claim: IdempotencyClaim, response: string): Promise<void>;
   release(claim: IdempotencyClaim): Promise<void>;
 }
@@ -85,12 +85,12 @@ const executeReserved = async <R>(
 };
 
 export const idempotent =
-  ({ store, now }: { readonly store: IdempotencyStore; readonly now: () => Date }): Idempotent =>
+  ({ store }: { readonly store: IdempotencyStore }): Idempotent =>
   async ({ claim, parse, run, replay }) => {
     if (!IDEMPOTENCY_KEY.test(claim.key)) {
       return { refusal: "invalid_idempotency_key" };
     }
-    const reservation = await store.reserve({ ...claim, createdAt: now() });
+    const reservation = await store.reserve(claim);
     if (reservation.reserved) {
       const { response, memorable } = await executeReserved(store, { claim, run });
       if (memorable) {
