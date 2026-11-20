@@ -73,6 +73,60 @@ describe("rejectedStatements", () => {
     expect(rejectedStatements(sql)).toEqual([]);
   });
 
+  it("garde une fonction plpgsql entière, sans la couper sur les points-virgules de son corps", () => {
+    const sql = `CREATE FUNCTION fill() RETURNS trigger\nLANGUAGE plpgsql AS $$\nBEGIN\n  NEW.size := 1;\n  RETURN NEW;\nEND;\n$$;`;
+
+    expect(rejectedStatements(sql)).toEqual([
+      "CREATE FUNCTION fill() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN NEW.size := 1; RETURN NEW; END; $$",
+    ]);
+  });
+
+  it("reprend le découpage après la fin d'un corps $$", () => {
+    const sql = `CREATE FUNCTION one() RETURNS integer LANGUAGE sql AS $$ SELECT 1; $$; DROP TABLE "token";`;
+
+    expect(rejectedStatements(sql)).toEqual([
+      "CREATE FUNCTION one() RETURNS integer LANGUAGE sql AS $$ SELECT 1; $$",
+      `DROP TABLE "token"`,
+    ]);
+  });
+
+  it("garde les guillemets et les tirets d'un corps $$ comme du texte", () => {
+    const sql = `CREATE FUNCTION label() RETURNS text LANGUAGE sql AS $$ SELECT 'l''app -- ; "x' $$;`;
+
+    expect(rejectedStatements(sql)).toEqual([
+      `CREATE FUNCTION label() RETURNS text LANGUAGE sql AS $$ SELECT 'l''app -- ; "x' $$`,
+    ]);
+  });
+
+  it("ne prend pas un $$ entre guillemets pour le début d'un corps", () => {
+    const sql = `COMMENT ON TABLE "token" IS '$$'; DROP TABLE "token";`;
+
+    expect(rejectedStatements(sql)).toEqual([
+      `COMMENT ON TABLE "token" IS '$$'`,
+      `DROP TABLE "token"`,
+    ]);
+  });
+
+  it.each([`CREATE INDEX "i" ON "t" (a$$b)`, `GRANT SELECT ON a$$b TO app`])(
+    "ne prend pas le $$ d'un identifiant pour le début d'un corps : %s",
+    (statement) => {
+      expect(rejectedStatements(`${statement}; DROP TABLE "t";`)).toEqual([`DROP TABLE "t"`]);
+    },
+  );
+
+  it("ne coupe pas une chaîne d'échappement E'…' sur son point-virgule", () => {
+    expect(rejectedStatements(`COMMENT ON TABLE "t" IS E'a;b'; DROP TABLE "t";`)).toEqual([
+      `COMMENT ON TABLE "t" IS E'a;b'`,
+      `DROP TABLE "t"`,
+    ]);
+  });
+
+  it("ne prend pas un $$ en commentaire pour le début d'un corps", () => {
+    const sql = `-- Fonction en $$\nGRANT SELECT ON "token" TO app; DROP TABLE "token";`;
+
+    expect(rejectedStatements(sql)).toEqual([`DROP TABLE "token"`]);
+  });
+
   it("ne prend pas un signe moins pour un commentaire", () => {
     const statement = `UPDATE "token" SET "position" = "position" - 1`;
 

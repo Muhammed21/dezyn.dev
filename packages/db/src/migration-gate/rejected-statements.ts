@@ -3,30 +3,49 @@ const STATEMENT_BREAKPOINT = "--> statement-breakpoint";
 type Scan = {
   readonly quote: string | undefined;
   readonly comment: boolean;
+  readonly skip: number;
   readonly current: string;
   readonly done: readonly string[];
 };
 
-const QUOTES = new Set(["'", '"']);
+const DOLLAR_QUOTE = "$$";
+const QUOTES = [DOLLAR_QUOTE, "'", '"'];
+const IDENTIFIER_CHARACTER = /[A-Za-z0-9_$]/;
 
-const scanCharacter = (scan: Scan, character: string, next: string | undefined): Scan => {
+const append = (scan: Scan, text: string, quote: string | undefined): Scan => ({
+  ...scan,
+  quote,
+  skip: text.length - 1,
+  current: scan.current + text,
+});
+
+const scanCharacter = (scan: Scan, chunk: string, index: number): Scan => {
+  if (scan.skip > 0) return { ...scan, skip: scan.skip - 1 };
+  const character = chunk.charAt(index);
   if (scan.comment) return character === "\n" ? { ...scan, comment: false } : scan;
   if (scan.quote !== undefined) {
-    const quote = character === scan.quote ? undefined : scan.quote;
-    return { ...scan, quote, current: scan.current + character };
+    return chunk.startsWith(scan.quote, index)
+      ? append(scan, scan.quote, undefined)
+      : append(scan, character, scan.quote);
   }
-  if (character === "-" && next === "-") return { ...scan, comment: true };
+  if (chunk.startsWith("--", index)) return { ...scan, comment: true };
   if (character === ";") return { ...scan, current: "", done: [...scan.done, scan.current] };
-  const quote = QUOTES.has(character) ? character : undefined;
-  return { ...scan, quote, current: scan.current + character };
+  const quote = QUOTES.filter(
+    (opening) => opening !== DOLLAR_QUOTE || !IDENTIFIER_CHARACTER.test(chunk.charAt(index - 1)),
+  ).find((opening) => chunk.startsWith(opening, index));
+  return append(scan, quote ?? character, quote);
 };
 
 const splitChunk = (chunk: string): readonly string[] => {
-  const characters = chunk.split("");
-  const scan = characters.reduce<Scan>(
-    (state, character, index) => scanCharacter(state, character, characters[index + 1]),
-    { quote: undefined, comment: false, current: "", done: [] },
-  );
+  const scan = chunk
+    .split("")
+    .reduce<Scan>((state, _character, index) => scanCharacter(state, chunk, index), {
+      quote: undefined,
+      comment: false,
+      skip: 0,
+      current: "",
+      done: [],
+    });
   return [...scan.done, scan.current];
 };
 

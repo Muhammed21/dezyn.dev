@@ -12,6 +12,7 @@ const NON_ADDITIVE_MIGRATIONS = [
   "0005_history.sql",
   "0011_proposal_position.sql",
   "0020_history_entry_stored_size.sql",
+  "0021_history_entry_stored_size_trigger_removal.sql",
 ];
 
 const additiveMigrations = readdirSync(MIGRATIONS).filter(
@@ -40,15 +41,27 @@ describe("rejectedStatements sur les migrations du dépôt", () => {
 
   it("refuse les fonctions, le trigger, le remplissage et la contrainte de 0020_history_entry_stored_size.sql, pas l'ajout de la colonne", () => {
     expect(rejectedStatements(readMigration("0020_history_entry_stored_size.sql"))).toEqual([
-      expect.stringMatching(/^CREATE FUNCTION history_entry_json_length\(value jsonb\)/),
-      expect.stringMatching(/^CREATE FUNCTION history_entry_stored_size\(entry "history_entry"\)/),
-      "CREATE FUNCTION history_entry_fill_stored_size() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN NEW.stored_size := history_entry_stored_size(NEW)",
-      "RETURN NEW",
-      "END",
-      "$$",
+      expect.stringMatching(
+        /^CREATE FUNCTION history_entry_json_length\(value jsonb\) RETURNS integer LANGUAGE sql IMMUTABLE STRICT AS \$\$ SELECT .+\)::integer \$\$$/,
+      ),
+      expect.stringMatching(
+        /^CREATE FUNCTION history_entry_stored_size\(entry "history_entry"\) RETURNS integer LANGUAGE sql STABLE AS \$\$ SELECT 115 .+ \+ 26 \$\$$/,
+      ),
+      "CREATE FUNCTION history_entry_fill_stored_size() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN NEW.stored_size := history_entry_stored_size(NEW); RETURN NEW; END; $$",
       `CREATE TRIGGER history_entry_fill_stored_size BEFORE INSERT ON "history_entry" FOR EACH ROW WHEN (NEW.stored_size IS NULL) EXECUTE FUNCTION history_entry_fill_stored_size()`,
       `UPDATE "history_entry" SET "stored_size" = history_entry_stored_size("history_entry")`,
       `ALTER TABLE "history_entry" ALTER COLUMN "stored_size" SET NOT NULL`,
+    ]);
+  });
+
+  it("refuse la suppression du trigger et des fonctions de 0021_history_entry_stored_size_trigger_removal.sql", () => {
+    expect(
+      rejectedStatements(readMigration("0021_history_entry_stored_size_trigger_removal.sql")),
+    ).toEqual([
+      `DROP TRIGGER history_entry_fill_stored_size ON "history_entry"`,
+      "DROP FUNCTION history_entry_fill_stored_size()",
+      `DROP FUNCTION history_entry_stored_size("history_entry")`,
+      "DROP FUNCTION history_entry_json_length(jsonb)",
     ]);
   });
 
