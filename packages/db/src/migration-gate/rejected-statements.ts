@@ -8,7 +8,9 @@ type Scan = {
   readonly done: readonly string[];
 };
 
-const QUOTES = ["$$", "'", '"'];
+const DOLLAR_QUOTE = "$$";
+const QUOTES = [DOLLAR_QUOTE, "'", '"'];
+const IDENTIFIER_CHARACTER = /[A-Za-z0-9_$]/;
 
 const append = (scan: Scan, text: string, quote: string | undefined): Scan => ({
   ...scan,
@@ -28,7 +30,9 @@ const scanCharacter = (scan: Scan, chunk: string, index: number): Scan => {
   }
   if (chunk.startsWith("--", index)) return { ...scan, comment: true };
   if (character === ";") return { ...scan, current: "", done: [...scan.done, scan.current] };
-  const quote = QUOTES.find((opening) => chunk.startsWith(opening, index));
+  const quote = QUOTES.filter(
+    (opening) => opening !== DOLLAR_QUOTE || !IDENTIFIER_CHARACTER.test(chunk.charAt(index - 1)),
+  ).find((opening) => chunk.startsWith(opening, index));
   return append(scan, quote ?? character, quote);
 };
 

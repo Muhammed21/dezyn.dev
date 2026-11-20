@@ -107,6 +107,20 @@ describe("rejectedStatements", () => {
     ]);
   });
 
+  it.each([`CREATE INDEX "i" ON "t" (a$$b)`, `GRANT SELECT ON a$$b TO app`])(
+    "ne prend pas le $$ d'un identifiant pour le début d'un corps : %s",
+    (statement) => {
+      expect(rejectedStatements(`${statement}; DROP TABLE "t";`)).toEqual([`DROP TABLE "t"`]);
+    },
+  );
+
+  it("ne coupe pas une chaîne d'échappement E'…' sur son point-virgule", () => {
+    expect(rejectedStatements(`COMMENT ON TABLE "t" IS E'a;b'; DROP TABLE "t";`)).toEqual([
+      `COMMENT ON TABLE "t" IS E'a;b'`,
+      `DROP TABLE "t"`,
+    ]);
+  });
+
   it("ne prend pas un $$ en commentaire pour le début d'un corps", () => {
     const sql = `-- Fonction en $$\nGRANT SELECT ON "token" TO app; DROP TABLE "token";`;
 
