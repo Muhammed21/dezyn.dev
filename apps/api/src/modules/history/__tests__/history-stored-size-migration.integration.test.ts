@@ -16,6 +16,14 @@ const { historyAuthor, historyEntry, identityUser, project, space } = schema;
 
 const BEFORE_STORED_SIZE = "0019_idempotency_key_purge";
 
+const NOT_NULL_VIOLATION = "23502";
+
+const STORED_SIZE_FUNCTIONS = [
+  "history_entry_json_length",
+  "history_entry_stored_size",
+  "history_entry_fill_stored_size",
+];
+
 const seedProjectWithAuthor = async (app: PostgresDatabase) => {
   const userId = randomUUID();
   const spaceId = randomUUID();
@@ -95,17 +103,32 @@ describe("chaque entrée de l'historique porte la taille de son JSON (ADR 0049)"
       });
     }));
 
-  it("une entrée écrite sans taille, comme par la version précédente de l'API, reçoit la taille de son JSON", () =>
+  it("history_entry n'a plus de trigger, et les fonctions qui calculaient la taille en SQL n'existent plus", () =>
+    withThrowawayDatabase(async ({ migratorUrl, appUrl }) => {
+      await migrate({ connectionString: migratorUrl });
+      await withApp(appUrl, async (app) => {
+        const triggers = await app.orm.execute(sql`
+          SELECT tgname FROM pg_trigger
+          WHERE tgrelid = 'history_entry'::regclass AND NOT tgisinternal`);
+        const functions = await app.orm.execute(sql`
+          SELECT proname FROM pg_proc
+          WHERE proname IN ${STORED_SIZE_FUNCTIONS}`);
+
+        expect(triggers.rows).toEqual([]);
+        expect(functions.rows).toEqual([]);
+      });
+    }));
+
+  it("refuse une entrée écrite sans taille", () =>
     withThrowawayDatabase(async ({ migratorUrl, appUrl }) => {
       await migrate({ connectionString: migratorUrl });
       await withApp(appUrl, async (app) => {
         const seeded = await seedProjectWithAuthor(app);
+        const payload = { clientId: null, before: null, after: "texte seul", correlationId: "c" };
 
-        await seedEntriesOfEveryShape(app, seeded);
-
-        const entries = await entriesOf(app, seeded.projectId);
-        expect(entries).toHaveLength(PAYLOADS_OF_EVERY_SHAPE.length);
-        expect(entries.map(({ storedSize }) => storedSize)).toEqual(entries.map(jsonSizeOfEntry));
+        await expect(seedEntryWithoutStoredSize(app, { seeded, payload })).rejects.toMatchObject({
+          cause: { code: NOT_NULL_VIOLATION, column: "stored_size" },
+        });
       });
     }));
 });
