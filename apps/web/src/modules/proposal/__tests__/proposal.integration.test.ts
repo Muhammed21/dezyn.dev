@@ -136,6 +136,7 @@ describe("lecture d'un lot de propositions par l'app web, contre la vraie API (A
               status: "proposed",
               validated: { $type: "color", $value: PRIMARY_BLUE },
               proposed: { $type: "color", $value: NIGHT_BLUE },
+              duplicates: [],
             },
             {
               id: expect.any(String),
@@ -144,6 +145,7 @@ describe("lecture d'un lot de propositions par l'app web, contre la vraie API (A
               status: "proposed",
               validated: undefined,
               proposed: { $type: "color", $value: PRIMARY_BLUE },
+              duplicates: [],
             },
           ],
         }),
