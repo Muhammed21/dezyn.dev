@@ -13,6 +13,7 @@ import {
   type ProjectsFailure,
   recentPurgeOf,
 } from "../domain/project.ts";
+import { PurgeNotice } from "./purge-notice.tsx";
 
 type ListProjects = (space: {
   readonly spaceId: string;
@@ -52,14 +53,6 @@ const creationMessageOf = (failure: Exclude<ProjectCreationFailure, "unauthentic
     ? "Votre plan ne permet pas de créer d'autre projet. Passez au plan Team."
     : `Le plan Free est limité à ${failure.limit} projets. Passez au plan Team pour en créer d'autres.`;
 };
-
-const PURGE_DATE = new Intl.DateTimeFormat("fr-FR", { dateStyle: "long" });
-
-const PurgeNotice = ({ purgedAt }: { readonly purgedAt: Date }) => (
-  <p role="status">
-    L'historique de ce projet a été purgé le {PURGE_DATE.format(purgedAt)} pour libérer du stockage.
-  </p>
-);
 
 const CreateProjectForm = ({
   spaceId,

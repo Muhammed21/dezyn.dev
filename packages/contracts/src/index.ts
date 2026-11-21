@@ -19,7 +19,7 @@ export {
   SelfRemovalProblem,
   SentInvitationOutput,
 } from "./space/members.ts";
-export { ProjectsOutput } from "./project/projects.ts";
+export { ProjectOutput, ProjectsOutput } from "./project/projects.ts";
 export { DeclaredFigmaStatesOutput, TokenOutput, TokensOutput } from "./token/tokens.ts";
 export { HistoryOutput } from "./history/history.ts";
 export {

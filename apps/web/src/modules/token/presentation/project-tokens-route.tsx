@@ -13,6 +13,8 @@ type ReadTokens = (project: {
 
 type ProjectProposals = ComponentType<{ readonly projectId: string }>;
 
+type ProjectBanners = ComponentType<{ readonly projectId: string }>;
+
 const tokensKeyOf = (projectId: string) => ["tokens", projectId];
 
 export const refreshProjectTokens =
@@ -52,11 +54,13 @@ const ProjectTokensList = ({
   projectId,
   readTokens,
   ProjectProposals,
+  ProjectBanners,
   subscribe,
 }: {
   readonly projectId: string;
   readonly readTokens: ReadTokens;
   readonly ProjectProposals: ProjectProposals;
+  readonly ProjectBanners: ProjectBanners;
   readonly subscribe: SubscribeToProject;
 }) => {
   const queryClient = useQueryClient();
@@ -90,6 +94,7 @@ const ProjectTokensList = ({
   return (
     <main>
       <h1>Tokens</h1>
+      <ProjectBanners projectId={projectId} />
       <Link to="/projets/$projectId/historique" params={{ projectId }}>
         Historique
       </Link>
@@ -116,11 +121,13 @@ export const projectTokensRoute = ({
   parent,
   readTokens,
   ProjectProposals,
+  ProjectBanners,
   subscribe,
 }: {
   readonly parent: AnyRootRoute;
   readonly readTokens: ReadTokens;
   readonly ProjectProposals: ProjectProposals;
+  readonly ProjectBanners: ProjectBanners;
   readonly subscribe: SubscribeToProject;
 }) => {
   const route = createRoute({
@@ -133,6 +140,7 @@ export const projectTokensRoute = ({
           projectId={projectId}
           readTokens={readTokens}
           ProjectProposals={ProjectProposals}
+          ProjectBanners={ProjectBanners}
           subscribe={subscribe}
         />
       );

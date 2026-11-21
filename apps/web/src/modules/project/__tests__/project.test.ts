@@ -264,3 +264,95 @@ describe("liste des projets d'un espace dans l'app web (ADR 0044)", () => {
     expect(await projects.listProjects({ spaceId: SPACE_ID })).toEqual(err("invalid_response"));
   });
 });
+
+const PROJECT_ID = "0b6f3c2a-8d4e-4f1a-9c7b-5e2d1a0f9b8c";
+
+const makeReadProject = (overrides: Readonly<Record<string, unknown>> = {}) => ({
+  ...makeListedProject({ id: PROJECT_ID }),
+  spaceId: SPACE_ID,
+  ...overrides,
+});
+
+describe("lecture d'un projet seul dans l'app web", () => {
+  it("demande le projet à l'API avec le cookie du navigateur", async () => {
+    const { projects, calls } = answering(json(makeReadProject(), 200));
+
+    await projects.readProject({ projectId: PROJECT_ID });
+
+    expect(calls).toEqual([
+      {
+        url: `${API_URL}/v1/projects/${PROJECT_ID}`,
+        init: { method: "GET", credentials: "include" },
+      },
+    ]);
+  });
+
+  it("donne le projet avec son espace, sa date de création et sa purge", async () => {
+    const { projects } = answering(
+      json(makeReadProject({ historyPurgedAt: "2026-11-10T08:00:00.000Z", tokenCount: 12 }), 200),
+    );
+
+    expect(await projects.readProject({ projectId: PROJECT_ID })).toEqual(
+      ok({
+        id: PROJECT_ID,
+        spaceId: SPACE_ID,
+        name: "Site vitrine",
+        createdAt: new Date("2026-11-11T18:00:00.000Z"),
+        historyPurgedAt: new Date("2026-11-10T08:00:00.000Z"),
+      }),
+    );
+  });
+
+  it("donne un projet jamais purgé sans date de purge", async () => {
+    const { projects } = answering(json(makeReadProject({ historyPurgedAt: null }), 200));
+
+    const read = await projects.readProject({ projectId: PROJECT_ID });
+
+    expect(read).toEqual(ok(expect.objectContaining({ historyPurgedAt: undefined })));
+  });
+
+  it.each(["../../auth/sign-out", "..", "projet-1", ""])(
+    "donne not_found pour le projet %j, qui n'est pas un UUID, sans appeler l'API",
+    async (projectId) => {
+      const { projects, calls } = answering(json(makeReadProject(), 200));
+
+      expect(await projects.readProject({ projectId })).toEqual(err("not_found"));
+      expect(calls).toEqual([]);
+    },
+  );
+
+  it.each([
+    [401, "unauthenticated"],
+    [404, "not_found"],
+    [500, "unavailable"],
+    [503, "unavailable"],
+    [429, "unavailable"],
+    [403, "invalid_response"],
+  ])("donne sur une réponse %i l'échec attendu", async (status, failure) => {
+    const { projects } = answering(json({ title: "Refus" }, status));
+
+    expect(await projects.readProject({ projectId: PROJECT_ID })).toEqual(err(failure));
+  });
+
+  it("donne unavailable quand l'API est injoignable", async () => {
+    const projects = createProjects({
+      apiUrl: API_URL,
+      fetch: () => Promise.reject(new TypeError("Failed to fetch")),
+    });
+
+    expect(await projects.readProject({ projectId: PROJECT_ID })).toEqual(err("unavailable"));
+  });
+
+  it.each([
+    ["un projet sans espace", json(makeReadProject({ spaceId: undefined }), 200)],
+    [
+      "une date de purge qui n'est pas ISO",
+      json(makeReadProject({ historyPurgedAt: "hier" }), 200),
+    ],
+    ["un corps qui n'est pas du JSON", () => new Response("<html>", { status: 200 })],
+  ])("donne invalid_response sur %s", async (_case, response) => {
+    const { projects } = answering(response);
+
+    expect(await projects.readProject({ projectId: PROJECT_ID })).toEqual(err("invalid_response"));
+  });
+});

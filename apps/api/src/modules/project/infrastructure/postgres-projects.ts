@@ -8,11 +8,20 @@ import { schema } from "@repo/db";
 
 import type { ProjectUnitOfWork } from "../application/create-project.ts";
 import type { ProjectLister } from "../application/list-projects.ts";
+import type { ProjectReader } from "../application/read-project.ts";
 import type { ProjectFinder } from "../domain/project.ts";
 
 const { project, space } = schema;
 
 const StoredPlan = z.enum(PLANS);
+
+const StoredProject = z.object({
+  id: z.string(),
+  spaceId: z.string(),
+  name: z.string(),
+  createdAt: z.date(),
+  historyPurgedAt: z.date().nullable(),
+});
 
 export const postgresProjectUnitOfWork = ({
   db,
@@ -68,4 +77,20 @@ export const postgresProjectLister = (db: PostgresDatabase): ProjectLister => ({
       .from(project)
       .where(eq(project.spaceId, spaceId))
       .orderBy(asc(project.name)),
+});
+
+export const postgresProjectReader = (db: PostgresDatabase): ProjectReader => ({
+  projectOf: async (projectId) => {
+    const [row] = await db.orm
+      .select({
+        id: project.id,
+        spaceId: project.spaceId,
+        name: project.name,
+        createdAt: project.createdAt,
+        historyPurgedAt: project.historyPurgedAt,
+      })
+      .from(project)
+      .where(eq(project.id, projectId));
+    return StoredProject.parse(row);
+  },
 });
