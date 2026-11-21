@@ -4,12 +4,14 @@ import { type ComponentType, type SubmitEvent, useState } from "react";
 
 import type { Result } from "@repo/result";
 
+import type { Clock } from "../../../platform/clock.ts";
 import type { ProjectToCreate } from "../application/project-gateway.ts";
-import type {
-  ListedProject,
-  Project,
-  ProjectCreationFailure,
-  ProjectsFailure,
+import {
+  type ListedProject,
+  type Project,
+  type ProjectCreationFailure,
+  type ProjectsFailure,
+  recentPurgeOf,
 } from "../domain/project.ts";
 
 type ListProjects = (space: {
@@ -49,6 +51,14 @@ const creationMessageOf = (failure: Exclude<ProjectCreationFailure, "unauthentic
     ? "Votre plan ne permet pas de créer d'autre projet. Passez au plan Team."
     : `Le plan Free est limité à ${failure.limit} projets. Passez au plan Team pour en créer d'autres.`;
 };
+
+const PURGE_DATE = new Intl.DateTimeFormat("fr-FR", { dateStyle: "long" });
+
+const PurgeNotice = ({ purgedAt }: { readonly purgedAt: Date }) => (
+  <p role="status">
+    L'historique de ce projet a été purgé le {PURGE_DATE.format(purgedAt)} pour libérer du stockage.
+  </p>
+);
 
 const CreateProjectForm = ({
   spaceId,
@@ -104,6 +114,7 @@ const SpaceProjects = ({
   readSpace,
   InviteMember,
   SpaceMembers,
+  clock,
 }: {
   readonly spaceId: string;
   readonly listProjects: ListProjects;
@@ -111,6 +122,7 @@ const SpaceProjects = ({
   readonly readSpace: ReadSpace;
   readonly InviteMember: InviteMember;
   readonly SpaceMembers: SpaceMembers;
+  readonly clock: Clock;
 }) => {
   const { data } = useQuery({
     queryKey: ["projects", spaceId],
@@ -140,13 +152,17 @@ const SpaceProjects = ({
         <p>Aucun projet pour le moment.</p>
       ) : (
         <ul aria-label="Projets">
-          {data.value.map((project) => (
-            <li key={project.id}>
-              <Link to="/projets/$projectId" params={{ projectId: project.id }}>
-                {project.name}
-              </Link>
-            </li>
-          ))}
+          {data.value.map((project) => {
+            const purgedAt = recentPurgeOf({ project, now: clock() });
+            return (
+              <li key={project.id}>
+                <Link to="/projets/$projectId" params={{ projectId: project.id }}>
+                  {project.name}
+                </Link>
+                {purgedAt !== undefined && <PurgeNotice purgedAt={purgedAt} />}
+              </li>
+            );
+          })}
         </ul>
       )}
       {canCreateProject && <CreateProjectForm spaceId={spaceId} createProject={createProject} />}
@@ -163,6 +179,7 @@ export const spaceProjectsRoute = ({
   readSpace,
   InviteMember,
   SpaceMembers,
+  clock,
 }: {
   readonly parent: AnyRootRoute;
   readonly listProjects: ListProjects;
@@ -170,6 +187,7 @@ export const spaceProjectsRoute = ({
   readonly readSpace: ReadSpace;
   readonly InviteMember: InviteMember;
   readonly SpaceMembers: SpaceMembers;
+  readonly clock: Clock;
 }) => {
   const route = createRoute({
     getParentRoute: () => parent,
@@ -184,6 +202,7 @@ export const spaceProjectsRoute = ({
           readSpace={readSpace}
           InviteMember={InviteMember}
           SpaceMembers={SpaceMembers}
+          clock={clock}
         />
       );
     },

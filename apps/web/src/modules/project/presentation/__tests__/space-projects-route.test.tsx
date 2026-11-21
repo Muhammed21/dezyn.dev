@@ -12,6 +12,7 @@ import { render } from "vitest-browser-react";
 
 import { err, ok, type Result } from "@repo/result";
 
+import type { Clock } from "../../../../platform/clock.ts";
 import type { ProjectToCreate } from "../../application/project-gateway.ts";
 import type {
   ListedProject,
@@ -36,6 +37,14 @@ const allowing =
   (allowedActions: readonly string[]): ReadSpace =>
   () =>
     Promise.resolve(ok({ allowedActions }));
+
+const PURGED_AT = new Date("2026-01-10T12:00:00.000Z");
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+const daysAfterPurge = (days: number, extraMs = 0): Clock => {
+  const now = new Date(PURGED_AT.getTime() + days * DAY_MS + extraMs);
+  return () => now;
+};
 
 const OWNER_ACTIONS = ["space.read", "project.create", "member.invite"];
 const EDITOR_ACTIONS = ["space.read", "token.create", "proposal.review"];
@@ -74,11 +83,13 @@ const renderSpaceProjects = ({
   createProject = refusing("unavailable"),
   readSpace = allowing(OWNER_ACTIONS),
   history = createMemoryHistory({ initialEntries: [`/espaces/${SPACE_ID}`] }),
+  clock = daysAfterPurge(1),
 }: {
   readonly listProjects?: ListProjects;
   readonly createProject?: CreateProject;
   readonly readSpace?: ReadSpace;
   readonly history?: RouterHistory;
+  readonly clock?: Clock;
 } = {}) => {
   const root = createRootRoute();
   const signIn = createRoute({
@@ -102,6 +113,7 @@ const renderSpaceProjects = ({
         readSpace,
         InviteMember: InviteMemberStub,
         SpaceMembers: SpaceMembersStub,
+        clock,
       }),
       signIn,
       projectPage,
@@ -413,5 +425,58 @@ describe("membres de l'espace sur la page de l'espace (ADR 0044 §5)", () => {
     });
 
     await expect.element(screen.getByText(`Membres de l'espace ${SPACE_ID}`)).toBeVisible();
+  });
+});
+
+const PURGE_NOTICE =
+  "L'historique de ce projet a été purgé le 10 janvier 2026 pour libérer du stockage.";
+
+const makePurgedProject = () =>
+  makeProject({
+    id: "7c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f",
+    name: "Application",
+    historyPurgedAt: PURGED_AT,
+  });
+
+describe("bandeau d'un projet purgé, 7 jours après la purge (ADR 0042 §6)", () => {
+  it("montre la date de la purge sur le seul projet purgé", async () => {
+    const screen = await renderSpaceProjects({
+      listProjects: listing([makePurgedProject(), makeProject()]),
+      clock: daysAfterPurge(1),
+    });
+
+    const items = projectList(screen).getByRole("listitem");
+    await expect.element(items.nth(0).getByRole("status")).toHaveTextContent(PURGE_NOTICE);
+    await expect.element(items.nth(1)).toHaveTextContent("Site vitrine");
+    expect(items.nth(1).getByRole("status").elements()).toHaveLength(0);
+  });
+
+  it("montre aussi le bandeau à un éditeur", async () => {
+    const screen = await renderSpaceProjects({
+      listProjects: listing([makePurgedProject()]),
+      readSpace: allowing(EDITOR_ACTIONS),
+      clock: daysAfterPurge(1),
+    });
+
+    await expect.element(projectList(screen).getByRole("status")).toHaveTextContent(PURGE_NOTICE);
+  });
+
+  it("garde le bandeau une milliseconde avant les 7 jours", async () => {
+    const screen = await renderSpaceProjects({
+      listProjects: listing([makePurgedProject()]),
+      clock: daysAfterPurge(7, -1),
+    });
+
+    await expect.element(projectList(screen).getByRole("status")).toHaveTextContent(PURGE_NOTICE);
+  });
+
+  it("retire le bandeau à 7 jours tout juste", async () => {
+    const screen = await renderSpaceProjects({
+      listProjects: listing([makePurgedProject()]),
+      clock: daysAfterPurge(7),
+    });
+
+    await expect.element(projectList(screen)).toHaveTextContent("Application");
+    expect(screen.getByRole("status").elements()).toHaveLength(0);
   });
 });
