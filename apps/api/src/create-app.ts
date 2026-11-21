@@ -11,7 +11,7 @@ import { registerWhoami } from "#modules/identity/presentation/whoami-tool.ts";
 import type { ProjectUseCases } from "#modules/project/application/project-use-cases.ts";
 import { registerListProjects } from "#modules/project/presentation/list-projects-tool.ts";
 import { projectEventsRoutes } from "#modules/project/presentation/project-events-routes.ts";
-import { projectsRoutes } from "#modules/project/presentation/projects-routes.ts";
+import { projectRoutes, projectsRoutes } from "#modules/project/presentation/projects-routes.ts";
 import type { ProposalUseCases } from "#modules/proposal/application/proposal-use-cases.ts";
 import { registerProposalBatchTools } from "#modules/proposal/presentation/proposal-batch-tools.ts";
 import {
@@ -205,6 +205,7 @@ export const createApp = ({
   v1.route("/spaces", spacesRoutes(spaces));
   v1.route("/spaces", projectsRoutes(projects));
   v1.use("/projects/:projectId/events", requireWebOrigin(webUrl));
+  v1.route("/projects", projectRoutes(projects));
   v1.route("/projects", projectEventsRoutes(projects));
   v1.route("/projects", historyRoutes(history));
   v1.post(

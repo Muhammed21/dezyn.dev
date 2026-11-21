@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { checkOutputSchema, ProjectsOutput } from "../../index.ts";
+import { checkOutputSchema, ProjectOutput, ProjectsOutput } from "../../index.ts";
 
 const makeProject = (overrides: Readonly<Record<string, unknown>> = {}) => ({
   id: "4f2a9c1e-7b3d-4e8a-9f10-2c5d6e7f8a9b",
@@ -48,7 +48,41 @@ describe("sortie de la liste des projets d'un espace", () => {
   });
 });
 
+const SPACE_ID = "9b8a7f6e-5d4c-4b3a-8f2e-1d0c9b8a7f6e";
+
+describe("sortie de la lecture d'un projet, avec son espace", () => {
+  it("lit le projet, son espace et la date de la dernière purge de son historique", () => {
+    const read = makeProject({ spaceId: SPACE_ID, historyPurgedAt: "2026-11-10T08:00:00.000Z" });
+
+    expect(ProjectOutput.parse(read)).toEqual(read);
+  });
+
+  it("refuse un projet lu sans son espace", () => {
+    expect(ProjectOutput.safeParse(makeProject()).success).toBe(false);
+  });
+
+  it("refuse un espace qui n'est pas un UUID", () => {
+    expect(ProjectOutput.safeParse(makeProject({ spaceId: "espace-1" })).success).toBe(false);
+  });
+
+  it("refuse un projet qui ne dit pas quand son historique a été purgé", () => {
+    const { historyPurgedAt: _, ...withoutTrace } = makeProject({ spaceId: SPACE_ID });
+
+    expect(ProjectOutput.safeParse(withoutTrace).success).toBe(false);
+  });
+
+  it("garde une clé ajoutée plus tard par le serveur (ADR 0023 §1)", () => {
+    const later = makeProject({ spaceId: SPACE_ID, tokenCount: 12 });
+
+    expect(ProjectOutput.parse(later)).toEqual(later);
+  });
+});
+
 describe("conventions de sortie de la liste des projets (ADR 0023 §4)", () => {
+  it("ProjectOutput les respecte", () => {
+    expect(checkOutputSchema("ProjectOutput", ProjectOutput)).toEqual([]);
+  });
+
   it("ProjectsOutput les respecte", () => {
     expect(checkOutputSchema("ProjectsOutput", ProjectsOutput)).toEqual([]);
   });

@@ -7,6 +7,7 @@ import {
   bestEffortSignals,
   projectLockOn,
   projectModule,
+  readProject,
   storageMeterOn,
   subscribeToProject,
 } from "#modules/project/project-module.ts";
@@ -66,7 +67,11 @@ export const composeModules = ({
     historyWriterOn: writerOn,
   });
   const access = spaces.projectAccess(projectsOnly.finder);
-  const projects = { ...projectsOnly, subscribeToProject: subscribeToProject({ access, channel }) };
+  const projects = {
+    ...projectsOnly,
+    readProject: readProject({ access, projects: projectsOnly.reader }),
+    subscribeToProject: subscribeToProject({ access, channel }),
+  };
   const projectSignals = bestEffortSignals(signals, log);
   const history = historyModule({
     db,

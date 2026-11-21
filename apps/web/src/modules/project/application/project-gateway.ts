@@ -16,4 +16,7 @@ export type ProjectGateway = {
   readonly listProjects: (space: {
     readonly spaceId: string;
   }) => Promise<Result<readonly ListedProject[], ProjectsFailure>>;
+  readonly readProject: (project: {
+    readonly projectId: string;
+  }) => Promise<Result<ListedProject, ProjectsFailure>>;
 };

@@ -8,6 +8,26 @@ import { CreateProjectInput, Uuid } from "@repo/contracts";
 
 import type { ProjectUseCases } from "../application/project-use-cases.ts";
 
+export const projectRoutes = ({ readProject }: ProjectUseCases) =>
+  new Hono<MemberEnv>().get("/:projectId", async (c) => {
+    const projectId = Uuid.safeParse(c.req.param("projectId")).data;
+    if (projectId === undefined) {
+      return c.notFound();
+    }
+    const read = await readProject({ projectId, userId: c.get("identity").userId });
+    if (!read.ok) {
+      return c.notFound();
+    }
+    const { id, spaceId, name, createdAt, historyPurgedAt } = read.value;
+    return c.json({
+      id,
+      spaceId,
+      name,
+      createdAt: createdAt.toISOString(),
+      historyPurgedAt: historyPurgedAt?.toISOString() ?? null,
+    });
+  });
+
 export const projectsRoutes = ({ createProject, listProjects }: ProjectUseCases) =>
   new Hono<MemberEnv>()
     .get("/:spaceId/projects", async (c) => {

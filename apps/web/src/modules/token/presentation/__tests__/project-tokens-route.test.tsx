@@ -42,6 +42,10 @@ const ProjectProposals = ({ projectId }: { readonly projectId: string }) => (
   <p>Propositions du projet {projectId}</p>
 );
 
+const ProjectBanners = ({ projectId }: { readonly projectId: string }) => (
+  <p>Bandeaux du projet {projectId}</p>
+);
+
 const renderProjectTokens = (
   readTokens: ReadTokens,
   history = createMemoryHistory({ initialEntries: [`/projets/${PROJECT_ID}`] }),
@@ -60,6 +64,7 @@ const renderProjectTokens = (
         parent: root,
         readTokens,
         ProjectProposals,
+        ProjectBanners,
         subscribe: events.subscribe,
       }),
       signIn,
@@ -209,6 +214,18 @@ describe("page des tokens d'un projet (ADR 0044 §6)", () => {
     const screen = await renderProjectTokens(reading({ modes: [], tokens: [makeToken()] }));
 
     await expect.element(screen.getByText(`Propositions du projet ${PROJECT_ID}`)).toBeVisible();
+  });
+
+  it("montre les bandeaux du projet de l'adresse, sous son titre et avant ses tokens", async () => {
+    const screen = await renderProjectTokens(reading({ modes: [], tokens: [makeToken()] }));
+
+    const banners = screen.getByText(`Bandeaux du projet ${PROJECT_ID}`);
+    await expect.element(banners).toBeVisible();
+    expect(
+      banners
+        .element()
+        .compareDocumentPosition(screen.getByRole("list", { name: "Tokens" }).element()),
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
   it("annonce un projet sans token", async () => {

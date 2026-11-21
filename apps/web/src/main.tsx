@@ -8,6 +8,7 @@ import { projectHistoryRoute } from "./modules/history/presentation/project-hist
 import { createIdentity } from "./modules/identity/identity-module.ts";
 import { signInRoute } from "./modules/identity/presentation/sign-in-route.tsx";
 import { signUpRoute } from "./modules/identity/presentation/sign-up-route.tsx";
+import { projectBanners } from "./modules/project/presentation/project-banners.tsx";
 import { spaceProjectsRoute } from "./modules/project/presentation/space-projects-route.tsx";
 import { createProjectEvents, createProjects } from "./modules/project/project-module.ts";
 import { projectProposals } from "./modules/proposal/presentation/project-proposals.tsx";
@@ -35,6 +36,8 @@ const scheduleInBrowser = (delayMs: number, run: () => void) => {
   return () => window.clearTimeout(timer);
 };
 
+const clock = () => new Date();
+
 const appRouter = ({
   apiUrl,
   queryClient,
@@ -53,6 +56,8 @@ const appRouter = ({
     openSocket: openBrowserSocket,
     schedule: scheduleInBrowser,
   });
+
+  const SpaceStorageAlert = spaceStorageAlert({ readSpace: spaces.readSpace });
 
   const root = createRootRoute();
   return createRouter({
@@ -77,8 +82,8 @@ const appRouter = ({
           changeRole: spaces.changeRole,
           removeMember: spaces.removeMember,
         }),
-        SpaceStorageAlert: spaceStorageAlert({ readSpace: spaces.readSpace }),
-        clock: () => new Date(),
+        SpaceStorageAlert,
+        clock,
       }),
       projectTokensRoute({
         parent: root,
@@ -86,6 +91,11 @@ const appRouter = ({
         ProjectProposals: projectProposals({
           listBatches: proposals.listBatches,
           subscribe: projectEvents.subscribe,
+        }),
+        ProjectBanners: projectBanners({
+          readProject: projects.readProject,
+          SpaceStorageAlert,
+          clock,
         }),
         subscribe: projectEvents.subscribe,
       }),

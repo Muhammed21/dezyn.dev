@@ -1,4 +1,9 @@
-import { CreatedProjectOutput, PlanRequiredProblem, ProjectsOutput } from "@repo/contracts";
+import {
+  CreatedProjectOutput,
+  PlanRequiredProblem,
+  ProjectOutput,
+  ProjectsOutput,
+} from "@repo/contracts";
 import { err, ok } from "@repo/result";
 
 import {
@@ -14,7 +19,20 @@ import {
   UNAUTHORIZED,
 } from "../../../platform/http.ts";
 import type { ProjectGateway } from "../application/project-gateway.ts";
-import type { ProjectCreationFailure } from "../domain/project.ts";
+import type { ProjectCreationFailure, ProjectsFailure } from "../domain/project.ts";
+
+const readingRefusalOf = (response: Response): ProjectsFailure => {
+  if (response.status === UNAUTHORIZED) {
+    return "unauthenticated";
+  }
+  if (response.status === NOT_FOUND) {
+    return "not_found";
+  }
+  return failureOf(response);
+};
+
+const purgeDateOf = (historyPurgedAt: string | null) =>
+  historyPurgedAt === null ? undefined : new Date(historyPurgedAt);
 
 const refusalOf = async (response: Response): Promise<ProjectCreationFailure> => {
   if (response.status === BAD_REQUEST) {
@@ -70,14 +88,8 @@ export const createHttpProjectGateway = ({
       return sent;
     }
     const response = sent.value;
-    if (response.status === UNAUTHORIZED) {
-      return err("unauthenticated");
-    }
-    if (response.status === NOT_FOUND) {
-      return err("not_found");
-    }
     if (response.status !== OK) {
-      return err(failureOf(response));
+      return err(readingRefusalOf(response));
     }
     const body = await parseJson(response, ProjectsOutput);
     if (!body.ok) {
@@ -89,8 +101,30 @@ export const createHttpProjectGateway = ({
         spaceId,
         name,
         createdAt: new Date(createdAt),
-        historyPurgedAt: historyPurgedAt === null ? undefined : new Date(historyPurgedAt),
+        historyPurgedAt: purgeDateOf(historyPurgedAt),
       })),
     );
+  },
+  readProject: async ({ projectId }) => {
+    const sent = await send(fetch, `${apiUrl}/v1/projects/${projectId}`, { method: "GET" });
+    if (!sent.ok) {
+      return sent;
+    }
+    const response = sent.value;
+    if (response.status !== OK) {
+      return err(readingRefusalOf(response));
+    }
+    const body = await parseJson(response, ProjectOutput);
+    if (!body.ok) {
+      return body;
+    }
+    const { id, spaceId, name, createdAt, historyPurgedAt } = body.value;
+    return ok({
+      id,
+      spaceId,
+      name,
+      createdAt: new Date(createdAt),
+      historyPurgedAt: purgeDateOf(historyPurgedAt),
+    });
   },
 });

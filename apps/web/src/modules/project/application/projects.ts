@@ -9,14 +9,14 @@ import type {
 } from "../domain/project.ts";
 import type { ProjectGateway, ProjectToCreate } from "./project-gateway.ts";
 
-const isSpaceId = (spaceId: string) => Uuid.safeParse(spaceId).success;
+const isUuid = (id: string) => Uuid.safeParse(id).success;
 
 export const projectUseCases = ({ gateway }: { readonly gateway: ProjectGateway }) => ({
   createProject: async ({
     spaceId,
     name,
   }: ProjectToCreate): Promise<Result<Project, ProjectCreationFailure>> => {
-    if (!isSpaceId(spaceId)) {
+    if (!isUuid(spaceId)) {
       return err("not_found");
     }
     const input = CreateProjectInput.safeParse({ name });
@@ -30,5 +30,11 @@ export const projectUseCases = ({ gateway }: { readonly gateway: ProjectGateway 
   }: {
     readonly spaceId: string;
   }): Promise<Result<readonly ListedProject[], ProjectsFailure>> =>
-    isSpaceId(spaceId) ? gateway.listProjects({ spaceId }) : err("not_found"),
+    isUuid(spaceId) ? gateway.listProjects({ spaceId }) : err("not_found"),
+  readProject: async ({
+    projectId,
+  }: {
+    readonly projectId: string;
+  }): Promise<Result<ListedProject, ProjectsFailure>> =>
+    isUuid(projectId) ? gateway.readProject({ projectId }) : err("not_found"),
 });
