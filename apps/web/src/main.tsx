@@ -78,6 +78,7 @@ const appRouter = ({
           removeMember: spaces.removeMember,
         }),
         SpaceStorageAlert: spaceStorageAlert({ readSpace: spaces.readSpace }),
+        clock: () => new Date(),
       }),
       projectTokensRoute({
         parent: root,

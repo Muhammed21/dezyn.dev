@@ -19,3 +19,18 @@ export type ProjectCreationFailure =
 export type ListedProject = Project & { readonly historyPurgedAt: Date | undefined };
 
 export type ProjectsFailure = "unauthenticated" | "not_found" | "unavailable" | "invalid_response";
+
+const PURGE_NOTICE_MS = 7 * 24 * 60 * 60 * 1000;
+
+export const recentPurgeOf = ({
+  project,
+  now,
+}: {
+  readonly project: ListedProject;
+  readonly now: Date;
+}): Date | undefined => {
+  const purgedAt = project.historyPurgedAt;
+  return purgedAt !== undefined && now.getTime() - purgedAt.getTime() < PURGE_NOTICE_MS
+    ? purgedAt
+    : undefined;
+};
