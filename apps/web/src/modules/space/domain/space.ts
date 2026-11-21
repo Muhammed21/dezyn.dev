@@ -27,6 +27,14 @@ export type Space = {
   readonly allowedActions: readonly Action[];
 };
 
+export type SpaceStorage = {
+  readonly usedBytes: number;
+  readonly limitBytes: number;
+  readonly alertReached: boolean;
+};
+
+export type SpaceWithStorage = Space & { readonly storage: SpaceStorage };
+
 export type SpaceFailure = "unauthenticated" | "not_found" | "unavailable" | "invalid_response";
 
 export type SpaceMember = {

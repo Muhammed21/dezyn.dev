@@ -14,3 +14,21 @@ export const storageAlertReached = ({
   readonly plan: Plan;
   readonly storedBytes: number;
 }): boolean => storedBytes * 5 >= storageLimitOf(plan) * 4;
+
+export type SpaceStorage = {
+  readonly usedBytes: number;
+  readonly limitBytes: number;
+  readonly alertReached: boolean;
+};
+
+export const spaceStorageOf = ({
+  plan,
+  storedBytes,
+}: {
+  readonly plan: Plan;
+  readonly storedBytes: number;
+}): SpaceStorage => ({
+  usedBytes: storedBytes,
+  limitBytes: storageLimitOf(plan),
+  alertReached: storageAlertReached({ plan, storedBytes }),
+});

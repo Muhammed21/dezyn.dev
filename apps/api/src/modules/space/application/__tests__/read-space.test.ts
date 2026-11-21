@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { allowedActionsOf, type Membership } from "../../domain/can.ts";
+import { spaceStorageOf } from "../../domain/storage-limit.ts";
 import { inMemoryMembershipReader } from "../membership-reader.fake.ts";
 import { readSpace } from "../read-space.ts";
 
@@ -19,10 +20,12 @@ const makeMembership = (overrides: Partial<Membership> = {}): Membership => ({
   ...overrides,
 });
 
-const readWith = (memberships: readonly Membership[]) =>
+const STORED_BYTES = 1_200_000;
+
+const readWith = (memberships: readonly Membership[], storedBytes = STORED_BYTES) =>
   readSpace({
     memberships: inMemoryMembershipReader(memberships),
-    spaces: { find: async () => SPACE },
+    spaces: { find: async () => ({ ...SPACE, storedBytes }) },
   });
 
 describe("lire un espace", () => {
@@ -31,9 +34,29 @@ describe("lire un espace", () => {
 
     expect(await read({ spaceId: SPACE.id, userId: ADA })).toEqual({
       ok: true,
-      value: { ...SPACE, role: "editor", allowedActions: allowedActionsOf("editor") },
+      value: {
+        ...SPACE,
+        role: "editor",
+        allowedActions: allowedActionsOf("editor"),
+        storage: spaceStorageOf({ plan: SPACE.plan, storedBytes: STORED_BYTES }),
+      },
     });
   });
+
+  it.each(["owner", "editor"] as const)(
+    "rend au rôle %s le stockage de l'espace, sa limite et l'alerte à 80 % (ADR 0032)",
+    async (role) => {
+      const read = readWith([makeMembership({ role })], 16_000_000_000);
+
+      const space = await read({ spaceId: SPACE.id, userId: ADA });
+
+      expect(space.ok && space.value.storage).toEqual({
+        usedBytes: 16_000_000_000,
+        limitBytes: 20_000_000_000,
+        alertReached: true,
+      });
+    },
+  );
 
   it("ne trouve pas l'espace pour un utilisateur qui n'en est pas membre", async () => {
     const read = readWith([makeMembership({ userId: ADA })]);

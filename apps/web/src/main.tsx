@@ -17,6 +17,7 @@ import { invitationRoute } from "./modules/space/presentation/invitation-route.t
 import { inviteMemberForm } from "./modules/space/presentation/invite-member.tsx";
 import { mySpacesRoute } from "./modules/space/presentation/my-spaces-route.tsx";
 import { spaceMembers } from "./modules/space/presentation/space-members.tsx";
+import { spaceStorageAlert } from "./modules/space/presentation/space-storage-alert.tsx";
 import { createSpaces } from "./modules/space/space-module.ts";
 import {
   projectTokensRoute,
@@ -76,6 +77,7 @@ const appRouter = ({
           changeRole: spaces.changeRole,
           removeMember: spaces.removeMember,
         }),
+        SpaceStorageAlert: spaceStorageAlert({ readSpace: spaces.readSpace }),
       }),
       projectTokensRoute({
         parent: root,

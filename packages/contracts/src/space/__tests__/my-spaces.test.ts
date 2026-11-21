@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
-import { checkOutputSchema, MySpaceOutput, MySpacesOutput } from "../../index.ts";
+import { checkOutputSchema, MySpaceOutput, MySpacesOutput, SpaceOutput } from "../../index.ts";
 
 const makeSpace = (overrides: Readonly<Record<string, unknown>> = {}) => ({
   id: "4f2a9c1e-7b3d-4e8a-9f10-2c5d6e7f8a9b",
@@ -86,7 +86,44 @@ describe("sortie de la liste de mes espaces", () => {
   });
 });
 
+const makeStorage = (overrides: Readonly<Record<string, unknown>> = {}) => ({
+  usedBytes: 400_000_000,
+  limitBytes: 500_000_000,
+  alertReached: true,
+  ...overrides,
+});
+
+describe("sortie de la lecture d'un espace, avec son stockage (ADR 0032)", () => {
+  it("lit l'espace, son stockage utilisé, la limite de son plan et l'alerte à 80 %", () => {
+    const read = makeSpace({ storage: makeStorage() });
+
+    expect(SpaceOutput.parse(read)).toEqual(read);
+  });
+
+  it("refuse un espace lu sans son stockage", () => {
+    expect(SpaceOutput.safeParse(makeSpace()).success).toBe(false);
+  });
+
+  it.each([
+    ["un stockage négatif", { usedBytes: -1 }],
+    ["une limite fractionnaire", { limitBytes: 1.5 }],
+    ["une alerte qui n'est pas un booléen", { alertReached: "oui" }],
+  ])("refuse %s", (_case, storage) => {
+    expect(SpaceOutput.safeParse(makeSpace({ storage: makeStorage(storage) })).success).toBe(false);
+  });
+
+  it("garde une clé de stockage ajoutée plus tard par le serveur (ADR 0023 §1)", () => {
+    const later = makeSpace({ storage: makeStorage({ purgeAt: "2026-12-01" }) });
+
+    expect(SpaceOutput.parse(later)).toEqual(later);
+  });
+});
+
 describe("conventions de sortie de la liste de mes espaces (ADR 0023 §4)", () => {
+  it("SpaceOutput les respecte", () => {
+    expect(checkOutputSchema("SpaceOutput", SpaceOutput)).toEqual([]);
+  });
+
   it("MySpacesOutput les respecte", () => {
     expect(checkOutputSchema("MySpacesOutput", MySpacesOutput)).toEqual([]);
   });

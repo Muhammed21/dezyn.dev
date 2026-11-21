@@ -11,6 +11,9 @@ import {
   obtainAccessToken,
   withIdentityApp,
 } from "#testing/authorization-flow.ts";
+import { seedProjectStoring } from "#testing/project-storage.ts";
+import { makeOutbox, seedSpaceWithInvitedEditor } from "#testing/space-fixtures.ts";
+import { SpaceOutput } from "@repo/contracts";
 import { schema } from "@repo/db";
 
 const getSpace = (app: App, { accessToken, spaceId }: { accessToken: string; spaceId: string }) =>
@@ -58,6 +61,53 @@ describe("lire un espace (ADR 0017 §3)", () => {
           "token.declareFigmaState",
           "proposal.review",
         ],
+        storage: { usedBytes: 0, limitBytes: 500_000_000, alertReached: false },
+      });
+    }));
+
+  it("un propriétaire lit le stockage cumulé des projets de son espace, sous 80 % (ADR 0032 §1)", () =>
+    withIdentityApp(async (app, db) => {
+      const { accessToken, userId } = await obtainAccessToken(app);
+      const spaceId = await personalSpaceOf(db, userId);
+      await seedProjectStoring(db, { spaceId, bytes: 250_000_000 });
+      await seedProjectStoring(db, { spaceId, bytes: 149_999_999 });
+
+      const response = await getSpace(app, { accessToken, spaceId });
+
+      expect(await response.json()).toMatchObject({
+        storage: { usedBytes: 399_999_999, limitBytes: 500_000_000, alertReached: false },
+      });
+    }));
+
+  it("un éditeur lit le stockage de l'espace et l'alerte à 80 % de la limite Team", () => {
+    const outbox = makeOutbox();
+    return withIdentityApp(
+      async (app, db) => {
+        const { grace, spaceId } = await seedSpaceWithInvitedEditor(app, db, outbox);
+        await seedProjectStoring(db, { spaceId, bytes: 16_000_000_000 });
+
+        const response = await getSpace(app, { accessToken: grace.accessToken, spaceId });
+
+        expect(SpaceOutput.parse(await response.json())).toMatchObject({
+          role: "editor",
+          storage: { usedBytes: 16_000_000_000, limitBytes: 20_000_000_000, alertReached: true },
+        });
+      },
+      { mailer: outbox.mailer },
+    );
+  });
+
+  it("le stockage d'un espace ne compte pas les projets d'un autre espace", () =>
+    withIdentityApp(async (app, db) => {
+      const { accessToken, userId } = await obtainAccessToken(app);
+      const spaceId = await personalSpaceOf(db, userId);
+      await seedProjectStoring(db, { spaceId, bytes: 1_000 });
+      await seedProjectStoring(db, { spaceId: await seedSpace(db), bytes: 450_000_000 });
+
+      const response = await getSpace(app, { accessToken, spaceId });
+
+      expect(await response.json()).toMatchObject({
+        storage: { usedBytes: 1_000, alertReached: false },
       });
     }));
 

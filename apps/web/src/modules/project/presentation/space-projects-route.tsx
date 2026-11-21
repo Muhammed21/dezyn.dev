@@ -22,6 +22,7 @@ type ReadSpace = (space: {
 
 type InviteMember = ComponentType<{ readonly spaceId: string }>;
 type SpaceMembers = ComponentType<{ readonly spaceId: string }>;
+type SpaceStorageAlert = ComponentType<{ readonly spaceId: string }>;
 
 const UNKNOWN_SPACE = "Cet espace est introuvable.";
 
@@ -104,6 +105,7 @@ const SpaceProjects = ({
   readSpace,
   InviteMember,
   SpaceMembers,
+  SpaceStorageAlert,
 }: {
   readonly spaceId: string;
   readonly listProjects: ListProjects;
@@ -111,6 +113,7 @@ const SpaceProjects = ({
   readonly readSpace: ReadSpace;
   readonly InviteMember: InviteMember;
   readonly SpaceMembers: SpaceMembers;
+  readonly SpaceStorageAlert: SpaceStorageAlert;
 }) => {
   const { data } = useQuery({
     queryKey: ["projects", spaceId],
@@ -136,6 +139,7 @@ const SpaceProjects = ({
   return (
     <main>
       <h1>Projets</h1>
+      <SpaceStorageAlert spaceId={spaceId} />
       {data.value.length === 0 ? (
         <p>Aucun projet pour le moment.</p>
       ) : (
@@ -163,6 +167,7 @@ export const spaceProjectsRoute = ({
   readSpace,
   InviteMember,
   SpaceMembers,
+  SpaceStorageAlert,
 }: {
   readonly parent: AnyRootRoute;
   readonly listProjects: ListProjects;
@@ -170,6 +175,7 @@ export const spaceProjectsRoute = ({
   readonly readSpace: ReadSpace;
   readonly InviteMember: InviteMember;
   readonly SpaceMembers: SpaceMembers;
+  readonly SpaceStorageAlert: SpaceStorageAlert;
 }) => {
   const route = createRoute({
     getParentRoute: () => parent,
@@ -184,6 +190,7 @@ export const spaceProjectsRoute = ({
           readSpace={readSpace}
           InviteMember={InviteMember}
           SpaceMembers={SpaceMembers}
+          SpaceStorageAlert={SpaceStorageAlert}
         />
       );
     },

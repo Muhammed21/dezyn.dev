@@ -14,12 +14,13 @@ import type { DepartureFailure } from "./leave-space.ts";
 import type { SpaceMember } from "./list-members.ts";
 import type { RemovalFailure, RoleChangeFailure } from "./manage-members.ts";
 import type { MembershipKey } from "./membership-reader.ts";
+import type { SpaceWithStorage } from "./read-space.ts";
 import type { SpaceAccess } from "./space-access.ts";
 
 export type SpaceUseCases = {
   readonly allowedInSpace: SpaceAccess;
   readonly listMySpaces: (userId: string) => Promise<readonly MySpace[]>;
-  readonly readSpace: (key: MembershipKey) => Promise<Result<MySpace, "not_found">>;
+  readonly readSpace: (key: MembershipKey) => Promise<Result<SpaceWithStorage, "not_found">>;
   readonly listMembers: (
     key: MembershipKey,
   ) => Promise<Result<readonly SpaceMember[], "not_found">>;

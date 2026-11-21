@@ -9,6 +9,7 @@ import {
   signUp,
   withIdentityApp,
 } from "@repo/api/testing/authorization-flow.ts";
+import { seedProjectStoring } from "@repo/api/testing/project-storage.ts";
 import {
   makeOutbox,
   personalSpaceOf,
@@ -94,6 +95,21 @@ describe("lecture d'un espace par l'app web, contre la vraie API (ADR 0044 §5)"
       expect(read).toEqual(ok(expect.objectContaining({ id: spaceId, role: "editor" })));
       expect(read.ok && read.value.allowedActions).toContain("proposal.review");
       expect(read.ok && read.value.allowedActions).not.toContain("project.create");
+    }));
+
+  it("un éditeur lit le stockage de l'espace d'équipe et l'alerte à 80 % (ADR 0032)", () =>
+    withIdentityApp(async (app, db) => {
+      const { userId, spaces } = await signedInAda(app);
+      const spaceId = await seedTeamSpaceWith(db, { userId, role: "editor" });
+      await seedProjectStoring(db, { spaceId, bytes: 16_000_000_000 });
+
+      const read = await spaces.readSpace({ spaceId });
+
+      expect(read.ok && read.value.storage).toEqual({
+        usedBytes: 16_000_000_000,
+        limitBytes: 20_000_000_000,
+        alertReached: true,
+      });
     }));
 
   it("l'espace personnel d'un autre membre donne not_found", () =>

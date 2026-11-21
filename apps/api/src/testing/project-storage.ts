@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { eq } from "drizzle-orm";
 
 import { createPostgresDatabase, type PostgresDatabase } from "#db";
@@ -23,6 +25,21 @@ export const seedStoredBytes = (
   db: PostgresDatabase,
   { projectId, bytes }: { readonly projectId: string; readonly bytes: number },
 ) => db.orm.update(project).set({ storedBytes: bytes }).where(eq(project.id, projectId));
+
+export const seedProjectStoring = async (
+  db: PostgresDatabase,
+  { spaceId, bytes }: { readonly spaceId: string; readonly bytes: number },
+) => {
+  const projectId = randomUUID();
+  await db.orm.insert(project).values({
+    id: projectId,
+    spaceId,
+    name: "Application mobile",
+    createdAt: new Date(),
+    storedBytes: bytes,
+  });
+  return projectId;
+};
 
 export const storedBytesOf = async (db: PostgresDatabase, projectId: string) => {
   const [row] = await db.orm

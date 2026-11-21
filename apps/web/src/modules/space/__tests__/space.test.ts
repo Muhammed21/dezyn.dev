@@ -133,9 +133,19 @@ describe("liste des espaces du membre dans l'app web (ADR 0044 §6)", () => {
 
 const SPACE_ID = makeSpace().id;
 
+const makeStorage = (overrides: Readonly<Record<string, unknown>> = {}) => ({
+  usedBytes: 1_200_000,
+  limitBytes: 500_000_000,
+  alertReached: false,
+  ...overrides,
+});
+
+const makeReadSpace = (overrides: Readonly<Record<string, unknown>> = {}) =>
+  makeSpace({ storage: makeStorage(), ...overrides });
+
 describe("lecture d'un espace du membre dans l'app web (ADR 0044 §5)", () => {
   it("demande l'espace de l'adresse à l'API avec le cookie du navigateur", async () => {
-    const { spaces, calls } = answering(json(makeSpace()));
+    const { spaces, calls } = answering(json(makeReadSpace()));
 
     await spaces.readSpace({ spaceId: SPACE_ID });
 
@@ -145,7 +155,7 @@ describe("lecture d'un espace du membre dans l'app web (ADR 0044 §5)", () => {
   });
 
   it("donne l'espace avec le rôle du membre et les actions que ce rôle permet", async () => {
-    const editorSpace = makeSpace({
+    const editorSpace = makeReadSpace({
       role: "editor",
       allowedActions: ["space.read", "token.create", "proposal.review"],
     });
@@ -158,13 +168,23 @@ describe("lecture d'un espace du membre dans l'app web (ADR 0044 §5)", () => {
         plan: "free",
         role: "editor",
         allowedActions: ["space.read", "token.create", "proposal.review"],
+        storage: { usedBytes: 1_200_000, limitBytes: 500_000_000, alertReached: false },
       }),
     );
   });
 
+  it("donne le stockage de l'espace et l'alerte à 80 % décidée par l'API (ADR 0032)", async () => {
+    const storage = { usedBytes: 400_000_000, limitBytes: 500_000_000, alertReached: true };
+    const { spaces } = answering(json(makeReadSpace({ storage })));
+
+    const read = await spaces.readSpace({ spaceId: SPACE_ID });
+
+    expect(read.ok && read.value.storage).toEqual(storage);
+  });
+
   it("ignore une action inconnue de l'app (ADR 0023 §2)", async () => {
     const { spaces } = answering(
-      json(makeSpace({ allowedActions: ["space.archive", "project.create"] })),
+      json(makeReadSpace({ allowedActions: ["space.archive", "project.create"] })),
     );
 
     const read = await spaces.readSpace({ spaceId: SPACE_ID });
@@ -202,8 +222,9 @@ describe("lecture d'un espace du membre dans l'app web (ADR 0044 §5)", () => {
   });
 
   it.each([
-    ["un espace sans actions permises", json(makeSpace({ allowedActions: undefined }))],
-    ["un identifiant qui n'est pas un UUID", json(makeSpace({ id: "espace-1" }))],
+    ["un espace sans actions permises", json(makeReadSpace({ allowedActions: undefined }))],
+    ["un identifiant qui n'est pas un UUID", json(makeReadSpace({ id: "espace-1" }))],
+    ["un espace sans son stockage", json(makeSpace())],
     ["un corps qui n'est pas du JSON", () => new Response("<html>", { status: 200 })],
   ])("donne invalid_response sur %s", async (_case, response) => {
     const { spaces } = answering(response);

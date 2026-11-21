@@ -8,6 +8,8 @@ const StoredRole = z.enum(ROLES);
 
 export const StoredSpace = z.object({ id: z.string(), name: z.string(), plan: StoredPlan });
 
+export const StoredSpaceWithStorage = StoredSpace.extend({ storedBytes: z.coerce.number() });
+
 export const StoredSpaceWithRole = StoredSpace.extend({ role: StoredRole });
 
 export const StoredMembership = z.object({
