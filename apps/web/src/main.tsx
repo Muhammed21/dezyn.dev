@@ -76,6 +76,7 @@ const appRouter = ({
           changeRole: spaces.changeRole,
           removeMember: spaces.removeMember,
         }),
+        clock: () => new Date(),
       }),
       projectTokensRoute({
         parent: root,
