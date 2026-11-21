@@ -24,6 +24,7 @@ type ReadSpace = (space: {
 
 type InviteMember = ComponentType<{ readonly spaceId: string }>;
 type SpaceMembers = ComponentType<{ readonly spaceId: string }>;
+type SpaceStorageAlert = ComponentType<{ readonly spaceId: string }>;
 
 const UNKNOWN_SPACE = "Cet espace est introuvable.";
 
@@ -114,6 +115,7 @@ const SpaceProjects = ({
   readSpace,
   InviteMember,
   SpaceMembers,
+  SpaceStorageAlert,
   clock,
 }: {
   readonly spaceId: string;
@@ -122,6 +124,7 @@ const SpaceProjects = ({
   readonly readSpace: ReadSpace;
   readonly InviteMember: InviteMember;
   readonly SpaceMembers: SpaceMembers;
+  readonly SpaceStorageAlert: SpaceStorageAlert;
   readonly clock: Clock;
 }) => {
   const { data } = useQuery({
@@ -148,6 +151,7 @@ const SpaceProjects = ({
   return (
     <main>
       <h1>Projets</h1>
+      <SpaceStorageAlert spaceId={spaceId} />
       {data.value.length === 0 ? (
         <p>Aucun projet pour le moment.</p>
       ) : (
@@ -179,6 +183,7 @@ export const spaceProjectsRoute = ({
   readSpace,
   InviteMember,
   SpaceMembers,
+  SpaceStorageAlert,
   clock,
 }: {
   readonly parent: AnyRootRoute;
@@ -187,6 +192,7 @@ export const spaceProjectsRoute = ({
   readonly readSpace: ReadSpace;
   readonly InviteMember: InviteMember;
   readonly SpaceMembers: SpaceMembers;
+  readonly SpaceStorageAlert: SpaceStorageAlert;
   readonly clock: Clock;
 }) => {
   const route = createRoute({
@@ -202,6 +208,7 @@ export const spaceProjectsRoute = ({
           readSpace={readSpace}
           InviteMember={InviteMember}
           SpaceMembers={SpaceMembers}
+          SpaceStorageAlert={SpaceStorageAlert}
           clock={clock}
         />
       );

@@ -12,13 +12,16 @@ import type {
   Space,
   SpaceFailure,
   SpaceMember,
+  SpaceWithStorage,
 } from "../domain/space.ts";
 
 export type SpacesFailure = "unauthenticated" | "unavailable" | "invalid_response";
 
 export type SpaceGateway = {
   readonly listMySpaces: () => Promise<Result<readonly Space[], SpacesFailure>>;
-  readonly readSpace: (space: { readonly spaceId: string }) => Promise<Result<Space, SpaceFailure>>;
+  readonly readSpace: (space: {
+    readonly spaceId: string;
+  }) => Promise<Result<SpaceWithStorage, SpaceFailure>>;
   readonly acceptInvitation: (invitation: {
     readonly token: string;
   }) => Promise<Result<Space, AcceptanceFailure>>;

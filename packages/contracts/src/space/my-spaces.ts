@@ -25,6 +25,14 @@ export const MySpaceOutput = z.looseObject({
   allowedActions: z.array(openEnum(ACTIONS)),
 });
 
+export const SpaceOutput = MySpaceOutput.extend({
+  storage: z.looseObject({
+    usedBytes: z.int().nonnegative(),
+    limitBytes: z.int().nonnegative(),
+    alertReached: z.boolean(),
+  }),
+});
+
 export const MySpacesOutput = z.looseObject({
   spaces: z.array(MySpaceOutput),
 });

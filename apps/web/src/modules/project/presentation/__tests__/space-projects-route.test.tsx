@@ -78,6 +78,10 @@ const SpaceMembersStub = ({ spaceId }: { readonly spaceId: string }) => (
   <p>Membres de l'espace {spaceId}</p>
 );
 
+const SpaceStorageAlertStub = ({ spaceId }: { readonly spaceId: string }) => (
+  <p>Stockage de l'espace {spaceId}</p>
+);
+
 const renderSpaceProjects = ({
   listProjects = listing([]),
   createProject = refusing("unavailable"),
@@ -113,6 +117,7 @@ const renderSpaceProjects = ({
         readSpace,
         InviteMember: InviteMemberStub,
         SpaceMembers: SpaceMembersStub,
+        SpaceStorageAlert: SpaceStorageAlertStub,
         clock,
       }),
       signIn,
@@ -426,6 +431,30 @@ describe("membres de l'espace sur la page de l'espace (ADR 0044 §5)", () => {
 
     await expect.element(screen.getByText(`Membres de l'espace ${SPACE_ID}`)).toBeVisible();
   });
+});
+
+describe("stockage de l'espace sur la page de l'espace (ADR 0032, #32)", () => {
+  it.each([
+    ["au propriétaire", OWNER_ACTIONS],
+    ["à un éditeur", EDITOR_ACTIONS],
+  ])(
+    "place l'alerte de stockage de l'espace de l'adresse %s, au-dessus des projets",
+    async (_case, actions) => {
+      const screen = await renderSpaceProjects({
+        listProjects: listing([makeProject()]),
+        readSpace: allowing(actions),
+      });
+
+      const alert = screen.getByText(`Stockage de l'espace ${SPACE_ID}`);
+      await expect.element(alert).toBeVisible();
+      expect(
+        alert
+          .element()
+          .compareDocumentPosition(screen.getByRole("list", { name: "Projets" }).element()) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    },
+  );
 });
 
 const PURGE_NOTICE =

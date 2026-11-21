@@ -11,6 +11,7 @@ import {
   PlanRequiredProblem,
   SelfRemovalProblem,
   SentInvitationOutput,
+  SpaceOutput,
 } from "@repo/contracts";
 import { err, ok } from "@repo/result";
 
@@ -168,8 +169,17 @@ export const createHttpSpaceGateway = ({
     if (!response.ok) {
       return err(failureOf(response));
     }
-    const body = await parseJson(response, MySpaceOutput);
-    return body.ok ? ok(spaceOf(body.value)) : body;
+    const body = await parseJson(response, SpaceOutput);
+    return body.ok
+      ? ok({
+          ...spaceOf(body.value),
+          storage: {
+            usedBytes: body.value.storage.usedBytes,
+            limitBytes: body.value.storage.limitBytes,
+            alertReached: body.value.storage.alertReached,
+          },
+        })
+      : body;
   },
   acceptInvitation: async ({ token }) => {
     const sent = await send(fetch, `${apiUrl}/v1/invitations/${token}/accept`, {

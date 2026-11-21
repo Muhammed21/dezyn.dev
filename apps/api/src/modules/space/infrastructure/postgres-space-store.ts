@@ -1,21 +1,28 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 
 import type { PostgresDatabase } from "#db";
 import { schema } from "@repo/db";
 
 import type { SpaceFinder } from "../application/read-space.ts";
 import type { SpaceStore } from "../application/spaces.ts";
-import { StoredSpaceWithRole, StoredSpace } from "./stored-rows.ts";
+import { StoredSpaceWithRole, StoredSpaceWithStorage } from "./stored-rows.ts";
 
-const { space, spaceMember } = schema;
+const { project, space, spaceMember } = schema;
 
 export const postgresSpaceStore = (db: PostgresDatabase): SpaceStore & SpaceFinder => ({
   find: async (spaceId) => {
     const [row] = await db.orm
-      .select({ id: space.id, name: space.name, plan: space.plan })
+      .select({
+        id: space.id,
+        name: space.name,
+        plan: space.plan,
+        storedBytes: sql`coalesce(sum(${project.storedBytes}), 0)`,
+      })
       .from(space)
-      .where(eq(space.id, spaceId));
-    return StoredSpace.parse(row);
+      .leftJoin(project, eq(project.spaceId, space.id))
+      .where(eq(space.id, spaceId))
+      .groupBy(space.id);
+    return StoredSpaceWithStorage.parse(row);
   },
   createPersonal: ({ space: personal, owner, at }) =>
     db.orm.transaction(async (tx) => {
