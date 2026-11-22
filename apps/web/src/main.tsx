@@ -18,6 +18,7 @@ import { invitationRoute } from "./modules/space/presentation/invitation-route.t
 import { inviteMemberForm } from "./modules/space/presentation/invite-member.tsx";
 import { mySpacesRoute } from "./modules/space/presentation/my-spaces-route.tsx";
 import { spaceMembers } from "./modules/space/presentation/space-members.tsx";
+import { spacePlanRoute } from "./modules/space/presentation/space-plan-route.tsx";
 import { spaceStorageAlert } from "./modules/space/presentation/space-storage-alert.tsx";
 import { createSpaces } from "./modules/space/space-module.ts";
 import {
@@ -37,6 +38,10 @@ const scheduleInBrowser = (delayMs: number, run: () => void) => {
 };
 
 const clock = () => new Date();
+
+const goToInBrowser = (url: string) => window.location.assign(url);
+
+const CHECKOUT_RETURN_POLLING = { intervalMs: 2_000, timeoutMs: 30_000 };
 
 const appRouter = ({
   apiUrl,
@@ -84,6 +89,13 @@ const appRouter = ({
         }),
         SpaceStorageAlert,
         clock,
+      }),
+      spacePlanRoute({
+        parent: root,
+        readSpace: spaces.readSpace,
+        startCheckout: spaces.startCheckout,
+        goTo: goToInBrowser,
+        polling: CHECKOUT_RETURN_POLLING,
       }),
       projectTokensRoute({
         parent: root,

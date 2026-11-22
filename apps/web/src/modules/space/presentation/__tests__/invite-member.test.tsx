@@ -49,8 +49,15 @@ const renderInviteMember = async (
     path: "/connexion",
     component: () => <p>Page de connexion</p>,
   });
+  const planPage = createRoute({
+    getParentRoute: () => root,
+    path: "/espaces/$spaceId/plan",
+    component: function PlanPage() {
+      return <p>Plan de l'espace {planPage.useParams().spaceId}</p>;
+    },
+  });
   const router = createRouter({
-    routeTree: root.addChildren([spacePage, signIn]),
+    routeTree: root.addChildren([spacePage, planPage, signIn]),
     history,
   });
   return render(
@@ -135,6 +142,29 @@ describe("formulaire d'invitation d'un membre (ADR 0011, ADR 0017 §1)", () => {
     await expect.element(inviteButton(screen)).toBeEnabled();
     expect(screen.getByRole("status").query()).toBeNull();
   });
+
+  it("mène du refus plan_required à la page « Plan » de l'espace (spec #343, story 11)", async () => {
+    const screen = await renderInviteMember(() => Promise.resolve(err("plan_required")));
+
+    await invite(screen, GRACE_EMAIL);
+    await screen.getByRole("link", { name: "Passer au plan Team" }).click();
+
+    await expect.element(screen.getByText(`Plan de l'espace ${SPACE_ID}`)).toBeVisible();
+  });
+
+  it.each(["forbidden", "already_member"] as const)(
+    "ne mène pas à la page « Plan » après l'échec %s",
+    async (failure) => {
+      const screen = await renderInviteMember(() => Promise.resolve(err(failure)));
+
+      await invite(screen, GRACE_EMAIL);
+
+      await expect.element(screen.getByRole("alert")).toBeVisible();
+      await expect
+        .element(screen.getByRole("link", { name: "Passer au plan Team" }))
+        .not.toBeInTheDocument();
+    },
+  );
 
   it("efface l'échec précédent quand une invitation suivante réussit", async () => {
     const answers: Result<SentInvitation, InvitationFailure>[] = [

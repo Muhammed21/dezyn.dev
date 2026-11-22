@@ -4,6 +4,8 @@ import type {
   AcceptanceFailure,
   AssignableRole,
   ChangedRole,
+  Checkout,
+  CheckoutFailure,
   InvitationFailure,
   MembersFailure,
   RemovalFailure,
@@ -37,6 +39,9 @@ export type SpaceGateway = {
     readonly memberId: string;
     readonly role: AssignableRole;
   }) => Promise<Result<ChangedRole, RoleChangeFailure>>;
+  readonly startCheckout: (space: {
+    readonly spaceId: string;
+  }) => Promise<Result<Checkout, CheckoutFailure>>;
   readonly removeMember: (removal: {
     readonly spaceId: string;
     readonly memberId: string;

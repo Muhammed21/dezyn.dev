@@ -5,6 +5,7 @@ review:critical:
       - any-glob-to-any-file:
           - "apps/**/auth/**"
           - "apps/**/billing/**"
+          - "apps/**/subscription/**"
           - "apps/**/storage/**"
           - "packages/**/auth/**"
           - "packages/**/billing/**"

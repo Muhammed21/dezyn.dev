@@ -15,6 +15,7 @@ export const ACTIONS = [
   "token.create",
   "token.declareFigmaState",
   "proposal.review",
+  "subscription.checkout",
 ] as const;
 
 export const MySpaceOutput = z.looseObject({

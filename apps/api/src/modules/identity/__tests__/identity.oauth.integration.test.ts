@@ -8,6 +8,7 @@ import {
   makeProjectAccess,
   makeProjects,
   makeSpaces,
+  makeSubscriptions,
   makeProposals,
   makeTokens,
 } from "#testing/make-app.ts";
@@ -40,6 +41,7 @@ const withIdentityApp = (run: (app: ReturnType<typeof createApp>) => Promise<voi
           auth,
           log: () => undefined,
           spaces: makeSpaces(),
+          subscriptions: makeSubscriptions(),
           projects: makeProjects(),
           history: makeHistory(),
           tokens: makeTokens(),

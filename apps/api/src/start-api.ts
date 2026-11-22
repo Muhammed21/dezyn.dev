@@ -1,7 +1,7 @@
 import { serve, type ServerType } from "@hono/node-server";
 
 import { createPostgresDatabase } from "#db";
-import type { AuthSecret } from "#platform/api-config.ts";
+import type { AuthSecret, PolarConfig } from "#platform/api-config.ts";
 import type { LogSink } from "#platform/logging.ts";
 import { createSmtpMailer } from "#platform/smtp-mailer.ts";
 import { assertSchemaVersion, type Migration } from "@repo/db";
@@ -33,6 +33,7 @@ export const startApi = async ({
   trustedIpHeader,
   smtp,
   webUrl,
+  polar,
 }: {
   readonly databaseUrl: string;
   readonly migration: Migration;
@@ -44,6 +45,7 @@ export const startApi = async ({
   readonly trustedIpHeader: string;
   readonly smtp: { readonly host: string; readonly port: number; readonly from: string };
   readonly webUrl: string;
+  readonly polar?: PolarConfig;
 }): Promise<RunningApi> => {
   await assertSchemaVersion({ connectionString: databaseUrl, migration });
   const db = createPostgresDatabase({ url: databaseUrl, log });
@@ -56,6 +58,7 @@ export const startApi = async ({
     baseURL,
     trustedIpHeader,
     webUrl,
+    ...(polar === undefined ? {} : { polar }),
   });
 
   return new Promise((resolve) => {

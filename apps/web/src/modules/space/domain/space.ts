@@ -11,6 +11,7 @@ const ACTIONS = [
   "token.create",
   "token.declareFigmaState",
   "proposal.review",
+  "subscription.checkout",
 ] as const;
 
 export type Plan = (typeof PLANS)[number] | "unknown";
@@ -76,6 +77,16 @@ export type InvitationFailure =
   | "forbidden"
   | "plan_required"
   | "already_member"
+  | "unavailable"
+  | "invalid_response";
+
+export type Checkout = { readonly url: string };
+
+export type CheckoutFailure =
+  | "unauthenticated"
+  | "not_found"
+  | "forbidden"
+  | "already_team"
   | "unavailable"
   | "invalid_response";
 

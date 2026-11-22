@@ -96,7 +96,19 @@ const CreateProjectForm = ({
           Créer le projet
         </button>
       </form>
-      {failure !== undefined && <p role="alert">{creationMessageOf(failure)}</p>}
+      {failure !== undefined && (
+        <p role="alert">
+          {creationMessageOf(failure)}
+          {typeof failure === "object" && (
+            <>
+              {" "}
+              <Link to="/espaces/$spaceId/plan" params={{ spaceId }}>
+                Passer au plan Team
+              </Link>
+            </>
+          )}
+        </p>
+      )}
     </>
   );
 };
@@ -144,6 +156,9 @@ const SpaceProjects = ({
   return (
     <main>
       <h1>Projets</h1>
+      <Link to="/espaces/$spaceId/plan" params={{ spaceId }}>
+        Plan de l'espace
+      </Link>
       <SpaceStorageAlert spaceId={spaceId} />
       {data.value.length === 0 ? (
         <p>Aucun projet pour le moment.</p>

@@ -17,6 +17,10 @@ import {
   switchToTeam,
   tokenOf,
 } from "@repo/api/testing/space-fixtures.ts";
+import {
+  makeSubscriptionEvent,
+  postPolarWebhook,
+} from "@repo/api/testing/subscription-fixtures.ts";
 import { err, ok } from "@repo/result";
 
 import { makeApiBrowser } from "../../../testing/api-browser.ts";
@@ -426,4 +430,27 @@ describe("retrait d'un membre par l'app web, contre la vraie API (ADR 0017 §2)"
       { mailer: outbox.mailer },
     );
   });
+});
+
+describe("passage au plan Team depuis l'app web, contre la vraie API (ADR 0050)", () => {
+  it("un propriétaire obtient l'URL du checkout, puis lit son espace au plan Team après le webhook de Polar", () =>
+    withIdentityApp(async (app, db) => {
+      const ip = makeClientIp();
+      const userId = await signUp(app, ip);
+      const fetch = makeApiBrowser(app, { ip });
+      await fetch(`${BASE_URL}/auth/sign-in/email`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: ADA.email, password: ADA.password }),
+      });
+      const spaceId = await personalSpaceOf(db, userId);
+      const spaces = createSpaces({ apiUrl: BASE_URL, fetch });
+
+      const checkout = await spaces.startCheckout({ spaceId });
+      await postPolarWebhook(app, { event: makeSubscriptionEvent({ spaceId, payerId: userId }) });
+      const space = await spaces.readSpace({ spaceId });
+
+      expect(checkout).toEqual(ok({ url: expect.stringContaining(spaceId) }));
+      expect(space).toMatchObject(ok({ plan: "team", storage: { limitBytes: 20_000_000_000 } }));
+    }));
 });

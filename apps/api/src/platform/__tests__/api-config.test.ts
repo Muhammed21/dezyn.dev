@@ -265,6 +265,79 @@ describe.each([
   });
 });
 
+const POLAR = {
+  POLAR_ACCESS_TOKEN: "jeton-polar-de-test",
+  POLAR_WEBHOOK_SECRET: "secret-de-webhook-de-test",
+  POLAR_TEAM_PRODUCT_ID: "5c4b3a29-1807-4f6e-9d5c-4b3a29180706",
+  POLAR_SERVER: "sandbox",
+};
+
+describe.each([
+  ["l'API", (polar: Readonly<Record<string, string>>) => readApiConfig(makeEnv(polar))],
+  ["le Worker", (polar: Readonly<Record<string, string>>) => readWorkerConfig(makeBindings(polar))],
+])("%s lit la configuration de Polar (ADR 0050 §1)", (_, readConfig) => {
+  it("les quatre variables donnent la configuration de Polar", () => {
+    expect(readConfig(POLAR)).toMatchObject(
+      ok({
+        polar: {
+          accessToken: "jeton-polar-de-test",
+          webhookSecret: "secret-de-webhook-de-test",
+          teamProductId: "5c4b3a29-1807-4f6e-9d5c-4b3a29180706",
+          server: "sandbox",
+        },
+      }),
+    );
+  });
+
+  it("POLAR_SERVER=production vise la production de Polar", () => {
+    expect(readConfig({ ...POLAR, POLAR_SERVER: "production" })).toMatchObject(
+      ok({ polar: { server: "production" } }),
+    );
+  });
+
+  it("sans aucune variable, ou avec des variables vides, l'API tourne sans Polar", () => {
+    const withoutPolar = readConfig({});
+    const empty = readConfig({
+      POLAR_ACCESS_TOKEN: "",
+      POLAR_WEBHOOK_SECRET: "",
+      POLAR_TEAM_PRODUCT_ID: "",
+      POLAR_SERVER: "",
+    });
+
+    expect(withoutPolar.ok && "polar" in withoutPolar.value).toBe(false);
+    expect(withoutPolar.ok).toBe(true);
+    expect(empty).toEqual(withoutPolar);
+  });
+
+  it("une configuration incomplète nomme chaque variable manquante", () => {
+    expect(readConfig({ POLAR_ACCESS_TOKEN: "jeton-polar-de-test", POLAR_SERVER: "" })).toEqual(
+      err([
+        "POLAR_WEBHOOK_SECRET : manquante",
+        "POLAR_TEAM_PRODUCT_ID : manquante",
+        "POLAR_SERVER : manquante",
+      ]),
+    );
+  });
+
+  it.each([
+    ["POLAR_SERVER", "staging", "sandbox ou production attendu"],
+    ["POLAR_TEAM_PRODUCT_ID", "produit-team", "UUID attendu"],
+  ])("%s=%j est refusée : %s", (variable, value, message) => {
+    expect(readConfig({ ...POLAR, [variable]: value })).toEqual(err([`${variable} : ${message}`]));
+  });
+
+  it("une erreur de Polar s'ajoute aux autres erreurs de configuration", () => {
+    expect(
+      readConfig({ ...POLAR, BETTER_AUTH_URL: "127.0.0.1:3000", POLAR_SERVER: "staging" }),
+    ).toEqual(
+      err([
+        "BETTER_AUTH_URL : URL http(s) attendue",
+        "POLAR_SERVER : sandbox ou production attendu",
+      ]),
+    );
+  });
+});
+
 const makePurgeEnv = (overrides: Readonly<Record<string, string | undefined>> = {}) => ({
   DATABASE_URL_HISTORY_MAINTAINER: "postgresql://history_maintainer@127.0.0.1:5432/dezyn",
   SMTP_HOST: "127.0.0.1",

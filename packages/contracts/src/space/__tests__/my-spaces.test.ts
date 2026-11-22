@@ -72,6 +72,7 @@ describe("sortie de la liste de mes espaces", () => {
                         "token.create",
                         "token.declareFigmaState",
                         "proposal.review",
+                        "subscription.checkout",
                       ],
                     },
                     { type: "string" },

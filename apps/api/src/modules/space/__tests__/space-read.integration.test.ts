@@ -60,6 +60,7 @@ describe("lire un espace (ADR 0017 §3)", () => {
           "token.create",
           "token.declareFigmaState",
           "proposal.review",
+          "subscription.checkout",
         ],
         storage: { usedBytes: 0, limitBytes: 500_000_000, alertReached: false },
       });

@@ -108,8 +108,16 @@ const renderSpaceProjects = ({
       return <p>Page du projet {projectPage.useParams().projectId}</p>;
     },
   });
+  const planPage = createRoute({
+    getParentRoute: () => root,
+    path: "/espaces/$spaceId/plan",
+    component: function PlanPage() {
+      return <p>Plan de l'espace {planPage.useParams().spaceId}</p>;
+    },
+  });
   const router = createRouter({
     routeTree: root.addChildren([
+      planPage,
       spaceProjectsRoute({
         parent: root,
         listProjects,
@@ -253,6 +261,40 @@ describe("page des projets d'un espace (ADR 0044 §6)", () => {
         .toHaveTextContent("Site vitrine");
     },
   );
+
+  it.each([3, undefined])(
+    "mène du refus plan_required (limite %s) à la page « Plan » de l'espace (spec #343, story 10)",
+    async (limit) => {
+      const screen = await renderSpaceProjects({
+        createProject: refusing({ reason: "plan_required", limit }),
+      });
+
+      await create(screen, "Quatrième projet");
+      await screen.getByRole("alert").getByRole("link", { name: "Passer au plan Team" }).click();
+
+      await expect.element(screen.getByText(`Plan de l'espace ${SPACE_ID}`)).toBeVisible();
+    },
+  );
+
+  it.each(["forbidden", "invalid_name"] as const)(
+    "ne mène pas à la page « Plan » après l'échec %s",
+    async (failure) => {
+      const screen = await renderSpaceProjects({ createProject: refusing(failure) });
+
+      await create(screen, "Application");
+
+      await expect.element(screen.getByRole("alert")).toBeVisible();
+      expect(screen.getByRole("alert").getByRole("link").elements()).toHaveLength(0);
+    },
+  );
+
+  it("mène à la page « Plan » de l'espace", async () => {
+    const screen = await renderSpaceProjects();
+
+    await screen.getByRole("link", { name: "Plan de l'espace" }).click();
+
+    await expect.element(screen.getByText(`Plan de l'espace ${SPACE_ID}`)).toBeVisible();
+  });
 
   it("garde le nom saisi et ne relit pas la liste après un échec", async () => {
     const reads = { count: 0 };

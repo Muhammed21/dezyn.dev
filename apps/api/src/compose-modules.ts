@@ -17,6 +17,7 @@ import {
   proposalWriterOn,
 } from "#modules/proposal/proposal-module.ts";
 import { spaceModule } from "#modules/space/space-module.ts";
+import { type Billing, subscriptionModule } from "#modules/subscription/subscription-module.ts";
 import {
   checkTokensOn,
   figmaStateOn,
@@ -35,6 +36,7 @@ export const composeModules = ({
   mailer,
   webUrl,
   log,
+  billing,
   wrapHistoryWriter = (writer) => writer,
   clock = () => new Date(),
   signals = { changed: async () => undefined, signalAt: async () => undefined },
@@ -53,6 +55,7 @@ export const composeModules = ({
   readonly mailer: Mailer;
   readonly webUrl: string;
   readonly log: LogSink;
+  readonly billing?: Billing;
   readonly wrapHistoryWriter?: (writer: HistoryWriter) => HistoryWriter;
   readonly clock?: Clock;
   readonly signals?: ProjectSignals;
@@ -108,8 +111,17 @@ export const composeModules = ({
     signals: projectSignals,
     clock,
   });
+  const subscriptions = subscriptionModule({
+    db,
+    memberships: spaces.memberships,
+    webUrl,
+    log,
+    clock,
+    billing,
+  });
   return {
     spaces,
+    subscriptions,
     projects,
     history,
     tokens,

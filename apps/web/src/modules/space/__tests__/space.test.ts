@@ -669,3 +669,66 @@ describe("retrait d'un membre depuis l'app web (ADR 0017 §2)", () => {
     );
   });
 });
+
+const CHECKOUT_URL = "https://sandbox.polar.sh/checkout/polar_c_1";
+
+describe("checkout du plan Team depuis l'app web (ADR 0050 §7)", () => {
+  it("demande le checkout de l'espace à l'API avec le cookie du navigateur", async () => {
+    const { spaces, calls } = answering(json({ url: CHECKOUT_URL }, 201));
+
+    await spaces.startCheckout({ spaceId: SPACE_ID });
+
+    expect(calls).toEqual([
+      {
+        url: `${API_URL}/v1/spaces/${SPACE_ID}/checkout`,
+        init: { method: "POST", credentials: "include" },
+      },
+    ]);
+  });
+
+  it("donne l'URL du checkout sur un 201", async () => {
+    const { spaces } = answering(json({ url: CHECKOUT_URL }, 201));
+
+    expect(await spaces.startCheckout({ spaceId: SPACE_ID })).toEqual(ok({ url: CHECKOUT_URL }));
+  });
+
+  it("donne not_found sans appeler l'API quand l'identifiant de l'espace n'est pas un UUID", async () => {
+    const { spaces, calls } = answering(json({ url: CHECKOUT_URL }, 201));
+
+    expect(await spaces.startCheckout({ spaceId: "espace-1" })).toEqual(err("not_found"));
+    expect(calls).toEqual([]);
+  });
+
+  it.each([
+    ["unauthenticated", json({}, 401)],
+    ["not_found", problem({ type: "about:blank" }, 404)],
+    ["forbidden", problem({ type: "about:blank" }, 403)],
+    ["already_team", problem({ type: "https://dezyn.dev/problems/already-team" }, 409)],
+    ["unavailable", json({}, 503)],
+    ["unavailable", json({}, 429)],
+  ] as const)("donne %s", async (failure, response) => {
+    const { spaces } = answering(response);
+
+    expect(await spaces.startCheckout({ spaceId: SPACE_ID })).toEqual(err(failure));
+  });
+
+  it.each([
+    ["un 409 sans type connu", problem({ type: "about:blank" }, 409)],
+    ["un 200 au lieu d'un 201", json({ url: CHECKOUT_URL }, 200)],
+    ["un 201 sans URL", json({}, 201)],
+    ["un 400", json({}, 400)],
+  ])("donne invalid_response sur %s", async (_case, response) => {
+    const { spaces } = answering(response);
+
+    expect(await spaces.startCheckout({ spaceId: SPACE_ID })).toEqual(err("invalid_response"));
+  });
+
+  it("donne unavailable quand l'API est injoignable", async () => {
+    const spaces = createSpaces({
+      apiUrl: API_URL,
+      fetch: () => Promise.reject(new TypeError("Failed to fetch")),
+    });
+
+    expect(await spaces.startCheckout({ spaceId: SPACE_ID })).toEqual(err("unavailable"));
+  });
+});

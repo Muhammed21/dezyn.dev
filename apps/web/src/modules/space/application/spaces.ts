@@ -4,6 +4,8 @@ import { err, type Result } from "@repo/result";
 import type {
   AssignableRole,
   ChangedRole,
+  Checkout,
+  CheckoutFailure,
   InvitationFailure,
   MembersFailure,
   RemovalFailure,
@@ -50,6 +52,12 @@ export const spaceUseCases = ({ gateway }: { readonly gateway: SpaceGateway }) =
     Uuid.safeParse(spaceId).success && Uuid.safeParse(memberId).success
       ? gateway.changeRole({ spaceId, memberId, role })
       : err("not_found"),
+  startCheckout: async ({
+    spaceId,
+  }: {
+    readonly spaceId: string;
+  }): Promise<Result<Checkout, CheckoutFailure>> =>
+    Uuid.safeParse(spaceId).success ? gateway.startCheckout({ spaceId }) : err("not_found"),
   removeMember: async ({
     spaceId,
     memberId,

@@ -9,6 +9,7 @@ export const ACTIONS = [
   "token.create",
   "token.declareFigmaState",
   "proposal.review",
+  "subscription.checkout",
 ] as const;
 
 export type Action = (typeof ACTIONS)[number];
@@ -29,6 +30,7 @@ const PERMISSIONS: Readonly<Record<Role, ReadonlySet<Action>>> = {
     "token.create",
     "token.declareFigmaState",
     "proposal.review",
+    "subscription.checkout",
   ]),
   editor: new Set([
     "space.read",
