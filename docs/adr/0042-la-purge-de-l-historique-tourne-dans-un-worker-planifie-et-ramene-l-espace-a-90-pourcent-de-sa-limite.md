@@ -1,6 +1,6 @@
 # 0042 — La purge de l'historique tourne dans un Worker planifié et ramène l'espace à 90 % de sa limite
 
-- Statut : Accepté — §2, §7 et dépendance au plan Workers Paid amendés par [0043](0043-le-worker-de-purge-verifie-le-schema-et-se-deploie-sans-attendre-le-plan-workers-paid.md) ; §7 amendé par [0048](0048-history-maintainer-purge-aussi-les-cles-d-idempotence-de-plus-de-24-heures.md) ; §2 et §4 amendés par [0049](0049-une-entree-d-historique-porte-sa-taille-et-le-worker-de-purge-a-10-secondes-par-requete.md) ; §3 (limite Team pour un espace gelé) amendé par [0050](0050-polar-en-merchant-of-record-un-abonnement-par-espace-et-un-espace-gele-sans-perte-au-retour-en-free.md)
+- Statut : Accepté — §2, §7 et dépendance au plan Workers Paid amendés par [0043](0043-le-worker-de-purge-verifie-le-schema-et-se-deploie-sans-attendre-le-plan-workers-paid.md) ; §7 amendé par [0048](0048-history-maintainer-purge-aussi-les-cles-d-idempotence-de-plus-de-24-heures.md) ; §2 et §4 amendés par [0049](0049-une-entree-d-historique-porte-sa-taille-et-le-worker-de-purge-a-10-secondes-par-requete.md) ; §3 (limite d'un espace gelé : son stockage à la fin de l'abonnement, au plus 20 Go) amendé par [0050](0050-polar-en-merchant-of-record-un-abonnement-par-espace-et-un-espace-gele-sans-perte-au-retour-en-free.md)
 - Date : 2026-11-10
 - Décideurs : Muhammed Cavus
 - Amende : ADR 0019 (droits du rôle `history_maintainer`, §2)

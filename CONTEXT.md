@@ -37,7 +37,7 @@ L'utilisateur qui paie l'abonnement d'un espace, client de Polar ; c'est un prop
 _À éviter_ : client, acheteur, titulaire, owner
 
 **Espace gelé** :
-Un espace Free qui dépasse au moins une limite Free (projets, stockage ou membres), le plus souvent après la fin de son abonnement. Rien n'y est supprimé ; ses éditeurs sont suspendus, son propriétaire continue de travailler. Le gel se lève seul quand l'espace repasse Team ou revient sous les limites Free.
+Un espace dont l'abonnement est terminé et qui dépasse au moins une limite Free (projets, stockage ou membres). Rien n'y est supprimé ; ses éditeurs sont suspendus, son propriétaire continue de travailler, et son stockage reste borné à celui de la fin de l'abonnement. Un espace Free qui n'a jamais payé ne gèle pas. Le gel se lève seul quand l'espace repasse Team ou revient sous les limites Free.
 _À éviter_ : espace suspendu, bloqué, archivé, verrouillé
 
 **Projet** :

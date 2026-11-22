@@ -3,7 +3,7 @@
 - Statut : Accepté
 - Date : 2026-11-22
 - Décideurs : Muhammed Cavus
-- Amende : ADR 0006 (§1, prix HT et abonnement par espace ; §4, pas de purge à la limite Free pour un espace gelé), ADR 0011 (§4, un espace gelé garde ses éditeurs, suspendus), ADR 0042 (§3, la limite d'un espace gelé est celle du plan Team)
+- Amende : ADR 0006 (§1, prix HT et abonnement par espace ; §4, pas de purge à la limite Free pour un espace gelé), ADR 0011 (§4, un espace gelé garde ses éditeurs, suspendus), ADR 0042 (§3, la limite d'un espace gelé est son stockage à la fin de son abonnement, plafonné à 20 Go)
 
 ## Contexte et problématique
 
@@ -69,8 +69,8 @@ Problématique : par quel prestataire et sous quelle forme un espace souscrit-il
 
 - Avantage : rien n'est perdu, et l'espace repart tel quel au retour du plan Team.
 - Avantage : le propriétaire continue de travailler, MCP compris.
-- Inconvénient : un espace gelé garde jusqu'à 20 Go sans payer.
-- **Retenue.**
+- Inconvénient : sans borne, un espace gelé garderait sans payer ce qu'il a accumulé en Team (voir le stockage d'un espace gelé).
+- **Retenue**, pour un espace qui sort d'un abonnement seulement : un espace Free qui n'a jamais payé ne gèle pas, il est purgé à 500 Mo comme avant.
 
 ### Le stockage d'un espace gelé
 
@@ -85,7 +85,13 @@ Problématique : par quel prestataire et sous quelle forme un espace souscrit-il
 
 #### Option C — Purger à la limite Team (20 Go)
 
-- Avantage : le stockage reste borné, à la valeur que l'espace atteignait déjà en Team.
+- Inconvénient : n'importe quel espace Free au-dessus de 500 Mo serait gelé, puis grandirait jusqu'à 20 Go sans payer ; payer un mois puis résilier donnerait 20 Go gratuits pour toujours.
+- **Écartée.**
+
+#### Option D — Purger au stockage atteint à la fin de l'abonnement, plafonné à 20 Go
+
+- Avantage : rien n'est supprimé au gel, et l'espace ne grandit plus sans payer : ses nouvelles écritures font purger son historique le plus ancien au-delà de ce niveau.
+- Avantage : un espace Free qui n'a jamais payé garde la limite de 500 Mo.
 - **Retenue.**
 
 ### L'intégration dans le Worker de l'API
@@ -159,9 +165,9 @@ Un seul produit Polar, « Team » : mensuel, prix fixe de 34,99 € HT par espac
 
 Chaque événement porte l'état complet de l'abonnement. Le traitement est idempotent, et il n'applique pas un état plus ancien que celui enregistré, d'après le `modified_at` de Polar. Un événement pour un espace inconnu est journalisé et accusé en 200.
 
-### 5. Un espace Free au-dessus d'une limite Free est gelé, sans rien perdre
+### 5. Un espace qui sort d'un abonnement au-dessus d'une limite Free est gelé, sans rien perdre
 
-Un espace est **gelé** quand son plan est Free et qu'il dépasse au moins une limite Free : plus de 3 projets, plus de 500 Mo, ou plus d'un membre. Le gel est une règle pure du domaine, calculée à partir du plan, du nombre de projets, du stockage et du nombre de membres. Il n'est pas stocké.
+Un espace est **gelé** quand son plan est Free, qu'il a un abonnement terminé, et qu'il dépasse au moins une limite Free : plus de 3 projets, plus de 500 Mo, ou plus d'un membre. Un espace Free qui n'a jamais eu d'abonnement ne gèle jamais : les limites Free et la purge à 500 Mo s'appliquent à lui comme avant (ADR 0006 §4). Le gel est une règle pure du domaine, calculée à partir du plan, de l'abonnement, du nombre de projets, du stockage et du nombre de membres. Il n'est pas stocké.
 
 Dans un espace gelé :
 
@@ -174,9 +180,9 @@ Le gel se lève seul dès que l'espace repasse Team ou revient sous toutes les l
 
 Ce volet amende l'ADR 0011 §4 : un espace Free gelé garde ses éditeurs, suspendus, jusqu'à la levée du gel.
 
-### 6. La purge d'un espace gelé applique la limite Team
+### 6. La purge d'un espace gelé applique son stockage à la fin de l'abonnement
 
-La purge ne ramène pas un espace gelé à la limite Free. Elle lui applique la limite du plan Team, 20 Go. Un espace gelé qui atteint 20 Go est purgé jusqu'à 90 % de cette limite (ADR 0042 §3), dans l'ordre des ADR 0016 et 0042 §1. Un espace Free qui n'est pas gelé reste sous 500 Mo par définition, et la purge à 500 Mo ne le concerne jamais.
+Quand un abonnement se termine, l'abonnement de l'espace enregistre le stockage de l'espace à cet instant. La limite de purge d'un espace gelé est ce stockage, au moins 500 Mo et au plus 20 Go. Rien n'est supprimé au gel ; ensuite, un espace gelé qui dépasse cette limite est purgé jusqu'à 90 % de celle-ci (ADR 0042 §3), dans l'ordre des ADR 0016 et 0042 §1. Un espace gelé ne grandit donc plus sans payer, et un espace Free qui n'est pas gelé reste purgé à 500 Mo.
 
 Ce volet amende l'ADR 0006 §4 et l'ADR 0042 §3 pour les espaces gelés.
 
@@ -201,7 +207,7 @@ Ce volet amende l'ADR 0006 §4 et l'ADR 0042 §3 pour les espaces gelés.
 ### Négatives
 
 - La commission de Polar, environ 4 % + 0,40 $ par paiement, porte sur le montant TTC.
-- Un espace gelé garde jusqu'à 20 Go sans payer.
+- Un espace gelé garde sans payer le stockage atteint à la fin de son abonnement (au plus 20 Go), et ses nouvelles écritures purgent son historique le plus ancien au-delà.
 - dezyn écrit et teste lui-même la route de webhook, la correspondance des statuts et l'ordre des événements, que le plugin aurait fournis en partie.
 - Le transfert d'un abonnement à un autre propriétaire n'existe pas : au départ du payeur, l'espace redevient Free en fin de période, puis gelé s'il dépasse les limites Free.
 - Les éditeurs d'un espace gelé perdent l'accès, sans y pouvoir rien.
@@ -214,7 +220,8 @@ Ce volet amende l'ADR 0006 §4 et l'ADR 0042 §3 pour les espaces gelés.
 - **Polar change le format d'un événement** : la version est figée par l'import et par l'endpoint (§7). Le SDK ne valide pas la forme du corps, donc dezyn lit l'abonnement par un schéma à la frontière, limité aux champs qu'il utilise.
 - **Le secret de webhook ou la clé de signature diffèrent de ce que le spike a vérifié** : `validateEvent` accepte le secret Standard Webhooks sous ses deux formes. Le premier événement reçu par une preview le confirme (spike, non vérifié).
 - **Un propriétaire lance un checkout pour un espace qui n'est pas le sien** : la route `/v1` vérifie le rôle avant d'appeler le port (§7).
-- **Un espace gelé reste gelé indéfiniment** : son stockage est borné à 20 Go (§6), et son propriétaire voit un bandeau qui explique le gel.
+- **Un espace gelé reste gelé indéfiniment** : son stockage est borné à celui de la fin de son abonnement, au plus 20 Go (§6), et son propriétaire voit un bandeau qui explique le gel.
+- **Un espace Free contourne la limite de 500 Mo** : seul un espace qui sort d'un abonnement gèle (§5), et sa limite est figée à la fin de cet abonnement (§6) ; payer un mois puis résilier ne garde que ce qui existait alors.
 
 ## Notes d'implémentation
 
@@ -235,17 +242,17 @@ Ce volet amende l'ADR 0006 §4 et l'ADR 0042 §3 pour les espaces gelés.
 
 5. Route `POST /webhooks/polar`. Le wizard de #344 et le runbook d'hébergement visent cette URL.
 6. Routes `/v1` du checkout et du portail, `SpaceOutput` avec `subscription` (propriétaires seuls) et `frozen`.
-7. Gel : refus `space-frozen` des éditeurs en HTTP et en MCP. La purge lit la limite Team pour un espace gelé : `history_maintainer` lit déjà `space`, `project` et `space_member` (ADR 0042 §7).
+7. Gel : refus `space-frozen` des éditeurs en HTTP et en MCP. L'abonnement enregistre le stockage de l'espace à sa fin ; la purge lit cette limite pour un espace gelé : `history_maintainer` lit déjà `space`, `project` et `space_member` (ADR 0042 §7).
 8. App web : page « Plan », retour du checkout, liens `plan_required`, bandeaux de retard de paiement et d'espace gelé.
 
 ## Liens
 
-- [ADR 0006](0006-plans-free-et-team-mcp-complet-dans-tous-les-plans.md) — les plans Free et Team ; le §1 prend le prix HT par espace, le §4 ne purge pas un espace gelé à 500 Mo.
+- [ADR 0006](0006-plans-free-et-team-mcp-complet-dans-tous-les-plans.md) — les plans Free et Team ; le §1 prend le prix HT par espace, le §4 ne purge pas à 500 Mo un espace gelé, qui sort d'un abonnement.
 - [ADR 0008](0008-hono-pour-le-backend-better-auth-pour-l-authentification.md) — better-auth reste l'authentification, sans plugin Polar.
 - [ADR 0011](0011-l-espace-possede-les-projets-et-porte-le-plan.md) — l'espace porte le plan ; le §4 garde les éditeurs d'un espace gelé, suspendus.
 - [ADR 0016](0016-la-purge-d-un-espace-commence-par-le-projet-qui-consomme-le-plus.md) — l'ordre de la purge, inchangé pour un espace gelé.
 - [ADR 0022](0022-architecture-hexagonale-a-coeur-fonctionnel-pour-le-backend.md) — le Merchant of Record derrière un port.
 - [ADR 0023](0023-reponses-ouvertes-enums-ouverts-et-unions-extensibles-dans-les-contrats.md) — le statut Polar, enum ouvert.
 - [ADR 0034](0034-l-api-est-servie-par-un-worker-cloudflare.md) — le Worker de l'API, où tourne le SDK.
-- [ADR 0042](0042-la-purge-de-l-historique-tourne-dans-un-worker-planifie-et-ramene-l-espace-a-90-pourcent-de-sa-limite.md) — la purge à 90 % ; le §3 prend la limite Team pour un espace gelé.
+- [ADR 0042](0042-la-purge-de-l-historique-tourne-dans-un-worker-planifie-et-ramene-l-espace-a-90-pourcent-de-sa-limite.md) — la purge à 90 % ; le §3 prend, pour un espace gelé, son stockage à la fin de l'abonnement, plafonné à 20 Go.
 - [Spike du 2026-11-22](../spikes/2026-11-22-polar-dans-le-worker-de-l-api.md) — le SDK et le plugin dans workerd, la version 2027-01, la taille du bundle.
