@@ -65,19 +65,21 @@ pnpm prod:github
 pnpm preview:github
 ```
 
-| Ressource                              | Où                         | Posée par                                                          |
-| -------------------------------------- | -------------------------- | ------------------------------------------------------------------ |
-| Environnement `production`             | GitHub, réservé à `main`   | `prod:github`                                                      |
-| `DEPLOY_ENABLED`                       | variable de dépôt          | `prod:github`, seulement si elle manque                            |
-| `PURGE_DEPLOY_ENABLED`                 | variable de dépôt          | à la main, à l'étape 5                                             |
-| `CLOUDFLARE_API_TOKEN` (production)    | environnement `production` | `prod:github`, saisi masqué                                        |
-| `DATABASE_URL_MIGRATOR`                | environnement `production` | `prod:db` à la création du rôle, ou `prod:github`                  |
-| Environnement `preview`                | GitHub, réservé à `main`   | `preview:github`                                                   |
-| `WORKERS_SUBDOMAIN`, `NEON_PROJECT_ID` | variables de `preview`     | `preview:github`                                                   |
-| `CLOUDFLARE_API_TOKEN` (preview)       | environnement `preview`    | `preview:github`, saisi masqué                                     |
-| `NEON_API_KEY`                         | environnement `preview`    | `preview:github`, saisi masqué ; clé limitée au projet si possible |
-| `PREVIEW_BETTER_AUTH_SECRET`           | environnement `preview`    | `preview:github`, tiré par `openssl`                               |
-| `CLAUDE_CODE_OAUTH_TOKEN`              | secret de dépôt            | à la main, depuis `claude setup-token` ; lu par la revue des PR    |
+| Ressource                                    | Où                         | Posée par                                                          |
+| -------------------------------------------- | -------------------------- | ------------------------------------------------------------------ |
+| Environnement `production`                   | GitHub, réservé à `main`   | `prod:github`                                                      |
+| `DEPLOY_ENABLED`                             | variable de dépôt          | `prod:github`, seulement si elle manque                            |
+| `PURGE_DEPLOY_ENABLED`                       | variable de dépôt          | à la main, à l'étape 5                                             |
+| `CLOUDFLARE_API_TOKEN` (production)          | environnement `production` | `prod:github`, saisi masqué                                        |
+| `DATABASE_URL_MIGRATOR`                      | environnement `production` | `prod:db` à la création du rôle, ou `prod:github`                  |
+| Environnement `preview`                      | GitHub, réservé à `main`   | `preview:github`                                                   |
+| `WORKERS_SUBDOMAIN`, `NEON_PROJECT_ID`       | variables de `preview`     | `preview:github`                                                   |
+| `CLOUDFLARE_API_TOKEN` (preview)             | environnement `preview`    | `preview:github`, saisi masqué                                     |
+| `NEON_API_KEY`                               | environnement `preview`    | `preview:github`, saisi masqué ; clé limitée au projet si possible |
+| `PREVIEW_BETTER_AUTH_SECRET`                 | environnement `preview`    | `preview:github`, tiré par `openssl`                               |
+| `POLAR_ACCESS_TOKEN`, `POLAR_WEBHOOK_SECRET` | environnement `preview`    | `polar:sandbox`, saisis masqués (section 6)                        |
+| `POLAR_TEAM_PRODUCT_ID`, `POLAR_SERVER`      | variables de `preview`     | `polar:sandbox` (section 6)                                        |
+| `CLAUDE_CODE_OAUTH_TOKEN`                    | secret de dépôt            | à la main, depuis `claude setup-token` ; lu par la revue des PR    |
 
 `prod:github` reconstruit `DATABASE_URL_MIGRATOR` depuis le rôle `migrator` de la branche `production`, sans changer son mot de passe : Neon rend le mot de passe d'un rôle créé en SQL.
 
@@ -154,6 +156,14 @@ La commande crée la branche Neon `preview` en schéma seul si elle manque, ses 
 ```
 npx neonctl@2.47.0 branches delete pr-<N> --project-id <projet>
 ```
+
+**Le sandbox Polar.** Le développement et les previews paient le plan Team sur le sandbox de Polar :
+
+```
+pnpm polar:sandbox
+```
+
+Le wizard guide la création de l'organisation sandbox, du produit Team (mensuel, 34,99 € HT), du jeton d'accès et du webhook, puis écrit les valeurs dans `.env` et dans l'environnement GitHub `preview`. Leur passage au Worker de preview par `preview.yml` arrive avec le paiement du plan Team (#346). Le webhook vise `https://pr-<N>-api-preview.dezyn.dev/auth/polar/webhooks`, la preview de la PR qui teste le paiement ; pour une autre PR, modifier l'URL de l'endpoint dans Polar, son secret ne change pas.
 
 ## 7. Vérifier
 

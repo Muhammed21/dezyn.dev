@@ -26,6 +26,7 @@
     "preview:github": "./scripts/env/preview-github.sh",
     "preview:db": "./scripts/env/preview-db.sh",
     "preview:clean": "./scripts/env/preview-clean.sh",
+    "polar:sandbox": "./scripts/env/polar-sandbox.sh",
     "roles:replace": "./scripts/env/roles-replace.sh",
     "prod:check": "./scripts/env/prod-check.sh",
     "prod:github": "./scripts/env/prod-github.sh",
