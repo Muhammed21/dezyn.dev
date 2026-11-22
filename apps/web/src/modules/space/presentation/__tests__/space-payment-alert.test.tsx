@@ -24,9 +24,16 @@ const OWNER_RIGHTS = { role: "owner", allowedActions: ["space.read", "member.man
 
 const EDITOR_RIGHTS = { role: "editor", allowedActions: ["space.read"] } as const;
 
-const PAST_DUE_SUBSCRIPTION: SpaceSubscription = { status: "past_due" };
+const makeSubscription = (overrides: Partial<SpaceSubscription> = {}): SpaceSubscription => ({
+  status: "active",
+  currentPeriodEnd: new Date("2026-12-22T10:00:00.000Z"),
+  payer: { name: "Ada Lovelace", email: "ada@dezyn.test", you: true },
+  ...overrides,
+});
 
-const ACTIVE_SUBSCRIPTION: SpaceSubscription = { status: "active" };
+const PAST_DUE_SUBSCRIPTION = makeSubscription({ status: "past_due" });
+
+const ACTIVE_SUBSCRIPTION = makeSubscription({ status: "active" });
 
 const makeSpace = (overrides: Partial<SpaceWithStorage> = {}): SpaceWithStorage => ({
   id: SPACE_ID,
