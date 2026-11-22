@@ -11,7 +11,7 @@ import { leaveSpace } from "./application/leave-space.ts";
 import { listMembers } from "./application/list-members.ts";
 import { changeRole, removeMember } from "./application/manage-members.ts";
 import { projectAccess } from "./application/project-access.ts";
-import { readSpace } from "./application/read-space.ts";
+import { readSpace, type SpaceSubscriptions } from "./application/read-space.ts";
 import { spaceAccess } from "./application/space-access.ts";
 import { createPersonalSpace, listMySpaces } from "./application/spaces.ts";
 import type { ProjectLocator } from "./domain/project-access.ts";
@@ -37,11 +37,13 @@ export const spaceModule = ({
   mailer,
   webUrl,
   log,
+  subscriptions,
 }: {
   readonly db: PostgresDatabase;
   readonly mailer: Mailer;
   readonly webUrl: string;
   readonly log: LogSink;
+  readonly subscriptions: SpaceSubscriptions;
 }) => {
   const store = postgresSpaceStore(db);
   const memberships = postgresMembershipReader(db);
@@ -54,7 +56,7 @@ export const spaceModule = ({
     storageAlertOn: (tx: PostgresTransaction) =>
       decideStorageAlert({ alerts: postgresStorageAlerts(tx), now }),
     sendStorageAlert: sendStorageAlert({ mailer, log }),
-    readSpace: readSpace({ memberships, spaces: store }),
+    readSpace: readSpace({ memberships, spaces: store, subscriptions }),
     listMembers: listMembers({ memberships, members: postgresMemberList(db) }),
     inviteMember: inviteMember({
       memberships,

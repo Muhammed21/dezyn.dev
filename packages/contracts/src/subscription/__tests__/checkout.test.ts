@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { ACTIONS, AlreadyTeamProblem, checkOutputSchema, CheckoutOutput } from "../../index.ts";
+import {
+  ACTIONS,
+  AlreadyTeamProblem,
+  checkOutputSchema,
+  CheckoutOutput,
+  PortalOutput,
+} from "../../index.ts";
 
 describe("sortie du checkout du plan Team (ADR 0050 §7)", () => {
   it("lit l'URL du checkout, et garde une clé ajoutée plus tard par le serveur (ADR 0023 §1)", () => {
@@ -15,6 +21,22 @@ describe("sortie du checkout du plan Team (ADR 0050 §7)", () => {
 
   it("suit les conventions des sorties de l'API", () => {
     expect(checkOutputSchema("CheckoutOutput", CheckoutOutput)).toEqual([]);
+  });
+});
+
+describe("sortie du portail client du payeur (ADR 0050 §7)", () => {
+  it("lit l'URL du portail, et garde une clé ajoutée plus tard par le serveur (ADR 0023 §1)", () => {
+    const later = { url: "https://sandbox.polar.sh/dezyn/portal", expiresAt: "plus tard" };
+
+    expect(PortalOutput.parse(later)).toEqual(later);
+  });
+
+  it.each(["pas-une-url", "ftp://polar.sh/portal"])("refuse l'URL %s", (url) => {
+    expect(PortalOutput.safeParse({ url }).success).toBe(false);
+  });
+
+  it("suit les conventions des sorties de l'API", () => {
+    expect(checkOutputSchema("PortalOutput", PortalOutput)).toEqual([]);
   });
 });
 

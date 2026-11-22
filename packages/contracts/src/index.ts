@@ -11,6 +11,7 @@ export {
 export { CreatedProjectOutput, CreateProjectInput } from "./project/create-project.ts";
 export { PlanRequiredProblem } from "./space/plan-required.ts";
 export { AlreadyTeamProblem, CheckoutOutput } from "./subscription/checkout.ts";
+export { PortalOutput } from "./subscription/portal.ts";
 export {
   AlreadyMemberProblem,
   ChangedRoleOutput,

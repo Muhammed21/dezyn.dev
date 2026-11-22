@@ -138,3 +138,69 @@ describe("le checkout Polar du produit Team (ADR 0050 §3, §7)", () => {
       }),
   );
 });
+
+const PORTAL_URL = "https://sandbox.polar.sh/dezyn/portal?customer_session_token=polar_cst_1";
+const RETURN_URL = `https://dezyn.dev/espaces/${SPACE_ID}/plan`;
+
+describe("le portail client Polar du payeur (ADR 0050 §3, §7)", () => {
+  it("ouvre une session client du payeur, avec un retour vers la page « Plan »", () =>
+    withFakePolar(
+      { status: 201, answer: { customer_portal_url: PORTAL_URL } },
+      async ({ baseUrl, received }) => {
+        await merchantAt(baseUrl).createPortal({
+          spaceId: SPACE_ID,
+          payerId: PAYER_ID,
+          returnUrl: RETURN_URL,
+        });
+
+        expect(received).toEqual([
+          expect.objectContaining({
+            method: "POST",
+            path: "/v1/customer-sessions/",
+            body: { external_customer_id: PAYER_ID, return_url: RETURN_URL },
+          }),
+        ]);
+        expect(received[0]?.headers).toMatchObject({
+          authorization: "Bearer polar_oat_jeton-de-test",
+          "polar-version": "2027-01",
+        });
+      },
+    ));
+
+  it("rend l'URL du portail renvoyée par Polar", () =>
+    withFakePolar(
+      { status: 201, answer: { customer_portal_url: PORTAL_URL } },
+      async ({ baseUrl }) => {
+        const portal = await merchantAt(baseUrl).createPortal({
+          spaceId: SPACE_ID,
+          payerId: PAYER_ID,
+          returnUrl: RETURN_URL,
+        });
+
+        expect(portal).toEqual({ ok: true, value: { url: PORTAL_URL } });
+      },
+    ));
+
+  it.each([500, 404])(
+    "une réponse %i de Polar rend le portail indisponible, et se journalise",
+    (status) =>
+      withFakePolar({ status, answer: { detail: [] } }, async ({ baseUrl }) => {
+        const records: LogRecord[] = [];
+
+        const portal = await merchantAt(baseUrl, (record) => records.push(record)).createPortal({
+          spaceId: SPACE_ID,
+          payerId: PAYER_ID,
+          returnUrl: RETURN_URL,
+        });
+
+        expect(portal).toEqual({ ok: false, error: "unavailable" });
+        expect(records).toEqual([
+          expect.objectContaining({
+            level: "error",
+            msg: "polar customer portal failed",
+            spaceId: SPACE_ID,
+          }),
+        ]);
+      }),
+  );
+});

@@ -18,6 +18,14 @@ export const ACTIONS = [
   "subscription.checkout",
 ] as const;
 
+const SUBSCRIPTION_STATUSES = ["active", "canceling", "past_due", "ended"] as const;
+
+const SpaceSubscriptionOutput = z.looseObject({
+  status: openEnum(SUBSCRIPTION_STATUSES),
+  currentPeriodEnd: z.iso.datetime().nullable(),
+  payer: z.looseObject({ name: z.string(), email: z.string(), you: z.boolean() }),
+});
+
 export const MySpaceOutput = z.looseObject({
   id: Uuid,
   name: z.string(),
@@ -32,6 +40,7 @@ export const SpaceOutput = MySpaceOutput.extend({
     limitBytes: z.int().nonnegative(),
     alertReached: z.boolean(),
   }),
+  subscription: SpaceSubscriptionOutput.optional(),
 });
 
 export const MySpacesOutput = z.looseObject({

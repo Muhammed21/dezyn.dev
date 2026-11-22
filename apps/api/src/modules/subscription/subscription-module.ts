@@ -5,6 +5,7 @@ import type { Clock } from "#platform/clock.ts";
 import type { LogSink } from "#platform/logging.ts";
 
 import type { MerchantOfRecord } from "./application/merchant-of-record.ts";
+import { openPortal } from "./application/open-portal.ts";
 import { receiveNotification } from "./application/receive-notification.ts";
 import { startCheckout } from "./application/start-checkout.ts";
 import type { SubscriptionUseCases } from "./application/subscription-use-cases.ts";
@@ -15,9 +16,13 @@ import {
   unavailableNotificationReader,
 } from "./infrastructure/polar.ts";
 import {
+  postgresSpacePayers,
   postgresSpacePlans,
+  postgresSpaceSubscriptions,
   postgresSubscriptionUnitOfWork,
 } from "./infrastructure/postgres-subscriptions.ts";
+
+export const spaceSubscriptionsOf = postgresSpaceSubscriptions;
 
 export type Billing = {
   readonly merchant: MerchantOfRecord;
@@ -53,6 +58,12 @@ export const subscriptionModule = ({
   startCheckout: startCheckout({
     memberships,
     plans: postgresSpacePlans(db),
+    merchant: billing?.merchant ?? unavailableMerchantOfRecord,
+    webUrl,
+  }),
+  openPortal: openPortal({
+    memberships,
+    payers: postgresSpacePayers(db),
     merchant: billing?.merchant ?? unavailableMerchantOfRecord,
     webUrl,
   }),

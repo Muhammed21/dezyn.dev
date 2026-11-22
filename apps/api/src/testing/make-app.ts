@@ -47,6 +47,7 @@ export const makeSpaces = (): SpaceUseCases => ({
 
 export const makeSubscriptions = (): SubscriptionUseCases => ({
   startCheckout: () => Promise.resolve(err("not_found")),
+  openPortal: () => Promise.resolve(err("not_found")),
   receiveNotification: () => Promise.resolve(err("unavailable")),
 });
 

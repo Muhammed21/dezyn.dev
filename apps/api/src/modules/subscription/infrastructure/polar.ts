@@ -1,5 +1,6 @@
 import { createPolarCore, webhooks } from "@polar-sh/sdk/2027-01";
 import { createCheckouts } from "@polar-sh/sdk/2027-01/services/checkouts";
+import { createCustomerSessions } from "@polar-sh/sdk/2027-01/services/customer_sessions";
 import { z } from "zod";
 
 import { errorDetails, type LogSink } from "#platform/logging.ts";
@@ -109,11 +110,29 @@ export const polarMerchantOfRecord = ({
         return err("unavailable");
       }
     },
+    createPortal: async ({ spaceId, payerId, returnUrl }) => {
+      try {
+        const session = await createCustomerSessions(client)({
+          external_customer_id: payerId,
+          return_url: returnUrl,
+        });
+        return ok({ url: session.customer_portal_url });
+      } catch (error) {
+        log({
+          level: "error",
+          msg: "polar customer portal failed",
+          spaceId,
+          ...errorDetails(error),
+        });
+        return err("unavailable");
+      }
+    },
   };
 };
 
 export const unavailableMerchantOfRecord: MerchantOfRecord = {
   createCheckout: async () => err("unavailable"),
+  createPortal: async () => err("unavailable"),
 };
 
 export const unavailableNotificationReader: NotificationReader = {

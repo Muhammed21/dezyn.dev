@@ -39,6 +39,10 @@ const seedFreeSpace = async (app: App, db: Parameters<typeof personalSpaceOf>[0]
   return { ...owner, spaceId: await personalSpaceOf(db, owner.userId) };
 };
 
+const SUBSCRIPTION_A = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
+
+const SUBSCRIPTION_B = "9f8e7d6c-5b4a-4392-8170-6f5e4d3c2b1a";
+
 const secondsAfter = (date: Date, seconds: number) => new Date(date.getTime() + seconds * 1000);
 
 const withSubscriptionData = (
@@ -186,6 +190,77 @@ describe("le webhook « abonnement actif » de Polar passe l'espace en Team (ADR
       expect(await planChangesOf(db, spaceId)).toHaveLength(1);
     }));
 
+  it("un second abonnement payé pour l'espace ne remplace pas le premier, et se journalise", () => {
+    const { records, log } = makeLog();
+    return withIdentityApp(
+      async (app, db) => {
+        const { userId, spaceId } = await seedFreeSpace(app, db);
+        await postPolarWebhook(app, {
+          event: makeSubscriptionEvent({
+            spaceId,
+            payerId: userId,
+            subscriptionId: SUBSCRIPTION_A,
+          }),
+        });
+
+        const response = await postPolarWebhook(app, {
+          event: makeSubscriptionEvent({
+            spaceId,
+            payerId: userId,
+            subscriptionId: SUBSCRIPTION_B,
+            modifiedAt: secondsAfter(MODIFIED_AT, 60),
+            currentPeriodEnd: new Date("2027-01-22T10:00:00.000Z"),
+          }),
+        });
+
+        expect(response.status).toBe(200);
+        expect(await subscriptionOf(db, spaceId)).toMatchObject({
+          polarSubscriptionId: SUBSCRIPTION_A,
+          currentPeriodEnd: PERIOD_END,
+          polarModifiedAt: MODIFIED_AT,
+        });
+        expect(await planChangesOf(db, spaceId)).toEqual([
+          expect.objectContaining({ polarSubscriptionId: SUBSCRIPTION_A }),
+        ]);
+        expect(records).toContainEqual(
+          expect.objectContaining({
+            level: "warn",
+            msg: "polar event for another subscription of the space",
+            event: "subscription.active",
+            spaceId,
+            storedSubscriptionId: SUBSCRIPTION_A,
+            subscriptionId: SUBSCRIPTION_B,
+          }),
+        );
+      },
+      { log },
+    );
+  });
+
+  it("le premier abonnement continue d'évoluer après le refus d'un second", () =>
+    withIdentityApp(async (app, db) => {
+      const { userId, spaceId } = await seedFreeSpace(app, db);
+      const event = (subscriptionId: string, seconds: number, cancelAtPeriodEnd = false) =>
+        makeSubscriptionEvent({
+          spaceId,
+          payerId: userId,
+          subscriptionId,
+          cancelAtPeriodEnd,
+          modifiedAt: secondsAfter(MODIFIED_AT, seconds),
+        });
+      await postPolarWebhook(app, { event: event(SUBSCRIPTION_A, 0) });
+      await postPolarWebhook(app, { event: event(SUBSCRIPTION_B, 60) });
+
+      await postPolarWebhook(app, { event: event(SUBSCRIPTION_A, 30, true) });
+      await postPolarWebhook(app, { event: event(SUBSCRIPTION_B, 120) });
+
+      expect(await subscriptionOf(db, spaceId)).toMatchObject({
+        polarSubscriptionId: SUBSCRIPTION_A,
+        status: "canceling",
+        polarModifiedAt: secondsAfter(MODIFIED_AT, 30),
+      });
+    }));
+
   it("un état plus ancien reçu après un plus récent est ignoré", () =>
     withIdentityApp(async (app, db) => {
       const { userId, spaceId } = await seedFreeSpace(app, db);
@@ -239,6 +314,203 @@ describe("le webhook « abonnement actif » de Polar passe l'espace en Team (ADR
 
       expect((await readSpace(app, { accessToken, spaceId })).plan).toBe("team");
       expect(await subscriptionOf(db, spaceId)).toMatchObject({ status: "canceling" });
+    }));
+});
+
+const seedTeamSpace = async (app: App, db: Parameters<typeof personalSpaceOf>[0]) => {
+  const owner = await seedFreeSpace(app, db);
+  await seedSubscription(db, { spaceId: owner.spaceId, payerId: owner.userId });
+  return owner;
+};
+
+const CANCELING_STATE = { status: "active", cancelAtPeriodEnd: true } as const;
+
+const REVOKED_STATE = { status: "canceled", cancelAtPeriodEnd: true } as const;
+
+describe("les webhooks de résiliation de Polar gardent l'espace en Team jusqu'à la fin de la période (ADR 0050 §4)", () => {
+  it.each(["subscription.canceled", "subscription.updated"])(
+    "un événement %s résilié en fin de période garde l'espace en Team et enregistre la date de fin",
+    (type) =>
+      withIdentityApp(async (app, db) => {
+        const { accessToken, userId, spaceId } = await seedTeamSpace(app, db);
+        const endsAt = new Date("2027-01-22T10:00:00.000Z");
+
+        const response = await postPolarWebhook(app, {
+          event: makeSubscriptionEvent({
+            type,
+            spaceId,
+            payerId: userId,
+            ...CANCELING_STATE,
+            currentPeriodEnd: endsAt,
+            modifiedAt: secondsAfter(MODIFIED_AT, 60),
+          }),
+        });
+
+        expect(response.status).toBe(200);
+        expect((await readSpace(app, { accessToken, spaceId })).plan).toBe("team");
+        expect(await subscriptionOf(db, spaceId)).toMatchObject({
+          status: "canceling",
+          currentPeriodEnd: endsAt,
+        });
+        expect(await planChangesOf(db, spaceId)).toEqual([]);
+      }),
+  );
+
+  it("une annulation de résiliation remet l'abonnement actif, toujours en Team", () =>
+    withIdentityApp(async (app, db) => {
+      const { accessToken, userId, spaceId } = await seedTeamSpace(app, db);
+      await postPolarWebhook(app, {
+        event: makeSubscriptionEvent({
+          type: "subscription.canceled",
+          spaceId,
+          payerId: userId,
+          ...CANCELING_STATE,
+          modifiedAt: secondsAfter(MODIFIED_AT, 60),
+        }),
+      });
+
+      await postPolarWebhook(app, {
+        event: makeSubscriptionEvent({
+          type: "subscription.uncanceled",
+          spaceId,
+          payerId: userId,
+          modifiedAt: secondsAfter(MODIFIED_AT, 120),
+        }),
+      });
+
+      expect((await readSpace(app, { accessToken, spaceId })).plan).toBe("team");
+      expect(await subscriptionOf(db, spaceId)).toMatchObject({ status: "active" });
+      expect(await planChangesOf(db, spaceId)).toEqual([]);
+    }));
+});
+
+describe("le webhook de révocation de Polar rend l'espace Free, avec une ligne d'audit (ADR 0050 §3, §4)", () => {
+  it("une révocation rend l'espace Free, avec la limite de stockage Free", () =>
+    withIdentityApp(async (app, db) => {
+      const { accessToken, userId, spaceId } = await seedTeamSpace(app, db);
+
+      const response = await postPolarWebhook(app, {
+        event: makeSubscriptionEvent({
+          type: "subscription.revoked",
+          spaceId,
+          payerId: userId,
+          ...REVOKED_STATE,
+          modifiedAt: secondsAfter(MODIFIED_AT, 60),
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      expect(await readSpace(app, { accessToken, spaceId })).toMatchObject({
+        plan: "free",
+        storage: { limitBytes: 500_000_000 },
+      });
+      expect(await subscriptionOf(db, spaceId)).toMatchObject({ status: "ended" });
+    }));
+
+  it("trace la révocation : événement Polar, abonnement, plan Team avant et Free après", () =>
+    withIdentityApp(async (app, db) => {
+      const { userId, spaceId } = await seedTeamSpace(app, db);
+
+      await postPolarWebhook(app, {
+        event: makeSubscriptionEvent({
+          type: "subscription.revoked",
+          spaceId,
+          payerId: userId,
+          subscriptionId: "0d3f6a2b-7c1e-4b8a-9f2d-5e6a7b8c9d0e",
+          ...REVOKED_STATE,
+          modifiedAt: secondsAfter(MODIFIED_AT, 60),
+        }),
+      });
+
+      expect(await planChangesOf(db, spaceId)).toEqual([
+        {
+          polarSubscriptionId: "0d3f6a2b-7c1e-4b8a-9f2d-5e6a7b8c9d0e",
+          polarEvent: "subscription.revoked",
+          planBefore: "team",
+          planAfter: "free",
+        },
+      ]);
+    }));
+
+  it("la même révocation reçue deux fois ne trace qu'un changement de plan", () =>
+    withIdentityApp(async (app, db) => {
+      const { userId, spaceId } = await seedTeamSpace(app, db);
+      const event = makeSubscriptionEvent({
+        type: "subscription.revoked",
+        spaceId,
+        payerId: userId,
+        ...REVOKED_STATE,
+        modifiedAt: secondsAfter(MODIFIED_AT, 60),
+      });
+
+      await postPolarWebhook(app, { event });
+      await postPolarWebhook(app, { event });
+
+      expect(await planChangesOf(db, spaceId)).toHaveLength(1);
+    }));
+
+  it("après la révocation, un nouvel abonnement de l'espace s'enregistre et repasse l'espace en Team", () =>
+    withIdentityApp(async (app, db) => {
+      const { accessToken, userId, spaceId } = await seedTeamSpace(app, db);
+      await postPolarWebhook(app, {
+        event: makeSubscriptionEvent({
+          type: "subscription.revoked",
+          spaceId,
+          payerId: userId,
+          ...REVOKED_STATE,
+          modifiedAt: secondsAfter(MODIFIED_AT, 60),
+        }),
+      });
+
+      await postPolarWebhook(app, {
+        event: makeSubscriptionEvent({
+          spaceId,
+          payerId: userId,
+          subscriptionId: "4c5d6e7f-8a9b-4c0d-9e1f-2a3b4c5d6e7f",
+          modifiedAt: secondsAfter(MODIFIED_AT, 120),
+        }),
+      });
+
+      expect((await readSpace(app, { accessToken, spaceId })).plan).toBe("team");
+      expect(await subscriptionOf(db, spaceId)).toMatchObject({
+        polarSubscriptionId: "4c5d6e7f-8a9b-4c0d-9e1f-2a3b4c5d6e7f",
+        status: "active",
+      });
+      const changes = await planChangesOf(db, spaceId);
+      expect(changes).toHaveLength(2);
+      expect(changes).toContainEqual({
+        polarSubscriptionId: "4c5d6e7f-8a9b-4c0d-9e1f-2a3b4c5d6e7f",
+        polarEvent: "subscription.active",
+        planBefore: "free",
+        planAfter: "team",
+      });
+    }));
+
+  it("une résiliation plus ancienne reçue après la révocation laisse l'espace Free", () =>
+    withIdentityApp(async (app, db) => {
+      const { accessToken, userId, spaceId } = await seedTeamSpace(app, db);
+      await postPolarWebhook(app, {
+        event: makeSubscriptionEvent({
+          type: "subscription.revoked",
+          spaceId,
+          payerId: userId,
+          ...REVOKED_STATE,
+          modifiedAt: secondsAfter(MODIFIED_AT, 120),
+        }),
+      });
+
+      await postPolarWebhook(app, {
+        event: makeSubscriptionEvent({
+          type: "subscription.canceled",
+          spaceId,
+          payerId: userId,
+          ...CANCELING_STATE,
+          modifiedAt: secondsAfter(MODIFIED_AT, 60),
+        }),
+      });
+
+      expect((await readSpace(app, { accessToken, spaceId })).plan).toBe("free");
+      expect(await subscriptionOf(db, spaceId)).toMatchObject({ status: "ended" });
     }));
 });
 
@@ -430,7 +702,7 @@ describe("le webhook de Polar accuse en 200 ce qu'il ne traite pas, et le journa
     );
   });
 
-  it.each(["subscription.updated", "order.paid"])(
+  it.each(["order.paid"])(
     "un événement %s, pas encore traité, reçoit 200 et se journalise sans changer le plan",
     (type) => {
       const { records, log } = makeLog();

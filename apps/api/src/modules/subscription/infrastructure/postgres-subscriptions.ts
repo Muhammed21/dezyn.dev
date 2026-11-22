@@ -7,6 +7,7 @@ import type { PostgresDatabase } from "#db";
 import { PLANS } from "#modules/space/contracts/plan.ts";
 import { schema } from "@repo/db";
 
+import type { SpacePayers } from "../application/open-portal.ts";
 import type { SubscriptionUnitOfWork } from "../application/receive-notification.ts";
 import type { SpacePlans } from "../application/start-checkout.ts";
 import { SUBSCRIPTION_STATUSES } from "../domain/subscription.ts";
@@ -35,6 +36,42 @@ export const postgresSpacePlans = (db: PostgresDatabase): SpacePlans => ({
       .from(space)
       .where(eq(space.id, spaceId));
     return StoredPlan.parse(row?.plan);
+  },
+});
+
+const ReadSubscription = z
+  .object({
+    status: z.enum(SUBSCRIPTION_STATUSES),
+    currentPeriodEnd: z.date().nullable(),
+    payer: z.object({ id: z.string(), name: z.string(), email: z.string() }),
+  })
+  .transform(({ currentPeriodEnd, ...subscription }) => ({
+    ...subscription,
+    currentPeriodEnd: currentPeriodEnd ?? undefined,
+  }));
+
+export const postgresSpaceSubscriptions = (db: PostgresDatabase) => ({
+  subscriptionOf: async (spaceId: string) => {
+    const [row] = await db.orm
+      .select({
+        status: spaceSubscription.status,
+        currentPeriodEnd: spaceSubscription.currentPeriodEnd,
+        payer: { id: identityUser.id, name: identityUser.name, email: identityUser.email },
+      })
+      .from(spaceSubscription)
+      .innerJoin(identityUser, eq(identityUser.id, spaceSubscription.payerId))
+      .where(eq(spaceSubscription.spaceId, spaceId));
+    return row === undefined ? undefined : ReadSubscription.parse(row);
+  },
+});
+
+export const postgresSpacePayers = (db: PostgresDatabase): SpacePayers => ({
+  payerOf: async (spaceId) => {
+    const [row] = await db.orm
+      .select({ payerId: spaceSubscription.payerId })
+      .from(spaceSubscription)
+      .where(eq(spaceSubscription.spaceId, spaceId));
+    return row?.payerId;
   },
 });
 
