@@ -18,7 +18,17 @@ import { migrate, schema } from "@repo/db";
 import { withThrowawayDatabase } from "@repo/db/testing";
 import { err, ok } from "@repo/result";
 
-const { historyAuthor, historyEntry, identityUser, project, space, spaceMember } = schema;
+const {
+  historyAuthor,
+  historyEntry,
+  identityUser,
+  project,
+  space,
+  spaceMember,
+  spaceSubscription,
+} = schema;
+
+const FROZEN_STORAGE = 3_000_000_000;
 
 const FREE_LIMIT = 500_000_000;
 
@@ -98,8 +108,22 @@ const seedSpace = async (app: PostgresDatabase) => {
     .insert(space)
     .values({ id: spaceId, name: "Studio Ada", plan: "free", createdAt: new Date() });
   await app.orm.insert(historyAuthor).values({ id: authorId, spaceId, userId });
-  return { spaceId, authorId };
+  return { spaceId, authorId, userId };
 };
+
+const seedEndedSubscriptionOf = (
+  app: PostgresDatabase,
+  { spaceId, userId }: { readonly spaceId: string; readonly userId: string },
+) =>
+  app.orm.insert(spaceSubscription).values({
+    spaceId,
+    polarSubscriptionId: randomUUID(),
+    payerId: userId,
+    status: "ended",
+    currentPeriodEnd: STARTED_AT,
+    polarModifiedAt: STARTED_AT,
+    storedBytesAtEnd: FROZEN_STORAGE,
+  });
 
 const seedProjectIn = async (
   app: PostgresDatabase,
@@ -229,6 +253,70 @@ describe("un espace sous sa limite n'est pas purgé", () => {
       expect(await remainingIdsOf(app, projectId)).toEqual(idsOf(entries));
       expect(await storedBytesOf(app, projectId)).toBe(FREE_LIMIT - 1);
       expect(await traceOf(app, projectId)).toEqual({ purgedBefore: null, purgedAt: null });
+    }));
+});
+
+describe("un espace gelé n'est pas purgé, en attendant la limite de son abonnement terminé (ADR 0050 §5, §6)", () => {
+  it("un espace Free gelé à 3 Go ne perd aucune entrée", () =>
+    withDatabases(async ({ app, maintainer }) => {
+      const seeded = await seedSpace(app);
+      await seedEndedSubscriptionOf(app, seeded);
+      const projectId = await seedProjectIn(app, {
+        spaceId: seeded.spaceId,
+        storedBytes: FROZEN_STORAGE,
+      });
+      const entries = await seedEntries(app, seeded, { projectId, count: 3 });
+
+      expect(await purgeOf(maintainer)()).toEqual([]);
+
+      expect(await remainingIdsOf(app, projectId)).toEqual(idsOf(entries));
+      expect(await storedBytesOf(app, projectId)).toBe(FROZEN_STORAGE);
+    }));
+
+  it("un espace Free jamais abonné à 3 Go est toujours purgé", () =>
+    withDatabases(async ({ app, maintainer }) => {
+      const seeded = await seedSpace(app);
+      const projectId = await seedProjectIn(app, {
+        spaceId: seeded.spaceId,
+        storedBytes: FROZEN_STORAGE,
+      });
+      await seedEntries(app, seeded, { projectId, count: 3 });
+
+      const purged = await purgeOf(maintainer)();
+
+      expect(purged).toEqual([expect.objectContaining({ spaceId: seeded.spaceId })]);
+      expect(await remainingIdsOf(app, projectId)).toEqual([]);
+    }));
+
+  it("un espace Free sorti d'un abonnement, pile à 500 Mo, n'est pas gelé et reste purgé", () =>
+    withDatabases(async ({ app, maintainer }) => {
+      const seeded = await seedSpace(app);
+      await seedEndedSubscriptionOf(app, seeded);
+      const projectId = await seedProjectIn(app, {
+        spaceId: seeded.spaceId,
+        storedBytes: FREE_LIMIT,
+      });
+      await seedEntries(app, seeded, { projectId, count: 3 });
+
+      const purged = await purgeOf(maintainer)();
+
+      expect(purged).toEqual([expect.objectContaining({ spaceId: seeded.spaceId })]);
+    }));
+
+  it("un espace Free sorti d'un abonnement, gelé par ses membres seuls, n'est pas purgé", () =>
+    withDatabases(async ({ app, maintainer }) => {
+      const seeded = await seedSpace(app);
+      await seedEndedSubscriptionOf(app, seeded);
+      await seedMember(app, { spaceId: seeded.spaceId, role: "owner" });
+      await seedMember(app, { spaceId: seeded.spaceId, role: "editor" });
+      const projectId = await seedProjectIn(app, {
+        spaceId: seeded.spaceId,
+        storedBytes: FREE_LIMIT,
+      });
+      const entries = await seedEntries(app, seeded, { projectId, count: 3 });
+
+      expect(await purgeOf(maintainer)()).toEqual([]);
+      expect(await remainingIdsOf(app, projectId)).toEqual(idsOf(entries));
     }));
 });
 

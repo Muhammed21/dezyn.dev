@@ -2,6 +2,7 @@ export { extensibleUnion, openEnum, Uuid } from "./conventions/schemas.ts";
 export { checkOutputSchema, type ConventionViolation } from "./conventions/check-output.ts";
 export {
   ACTIONS,
+  FREE_LIMITS,
   MySpaceOutput,
   MySpacesOutput,
   PLANS,
@@ -10,6 +11,7 @@ export {
 } from "./space/my-spaces.ts";
 export { CreatedProjectOutput, CreateProjectInput } from "./project/create-project.ts";
 export { PlanRequiredProblem } from "./space/plan-required.ts";
+export { SpaceFrozenProblem } from "./space/space-frozen.ts";
 export { AlreadyTeamProblem, CheckoutOutput } from "./subscription/checkout.ts";
 export { PortalOutput } from "./subscription/portal.ts";
 export {

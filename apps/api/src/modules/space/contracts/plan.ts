@@ -1,7 +1,13 @@
 import type { PlanRequired } from "../domain/invitation.ts";
 
 export { type Plan, PLANS } from "../domain/space.ts";
-export { exceedsFreeLimits, type SpaceUsage } from "../domain/free-limits.ts";
+export {
+  FREE_LIMITS,
+  type FreeLimit,
+  type Freeze,
+  freezeOf,
+  type SpaceUsage,
+} from "../domain/free-limits.ts";
 export { type ProjectLimitReached, projectLimitRefusal } from "../domain/project-limit.ts";
 
 export type PlanRequiredProblem = {

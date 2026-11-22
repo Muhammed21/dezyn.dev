@@ -6,6 +6,7 @@ import type { Mailer } from "#platform/mailer.ts";
 
 import { acceptInvitation, invitedSpaceOf } from "./application/accept-invitation.ts";
 import { decideStorageAlert, sendStorageAlert } from "./application/alert-storage.ts";
+import { guardFrozenSpaces } from "./application/frozen-space-guard.ts";
 import { inviteMember } from "./application/invite-member.ts";
 import { leaveSpace } from "./application/leave-space.ts";
 import { listMembers } from "./application/list-members.ts";
@@ -23,6 +24,7 @@ import { postgresMemberDirectory } from "./infrastructure/postgres-member-direct
 import { postgresMemberList } from "./infrastructure/postgres-member-list.ts";
 import { postgresMemberManagement } from "./infrastructure/postgres-member-management.ts";
 import { postgresMembershipReader } from "./infrastructure/postgres-membership-reader.ts";
+import { postgresSpaceFreezes } from "./infrastructure/postgres-space-freezes.ts";
 import { postgresSpaceStore } from "./infrastructure/postgres-space-store.ts";
 import { postgresStorageAlerts } from "./infrastructure/postgres-storage-alerts.ts";
 
@@ -46,7 +48,8 @@ export const spaceModule = ({
   readonly subscriptions: SpaceSubscriptions;
 }) => {
   const store = postgresSpaceStore(db);
-  const memberships = postgresMembershipReader(db);
+  const freezes = postgresSpaceFreezes(db);
+  const memberships = guardFrozenSpaces({ memberships: postgresMembershipReader(db), freezes });
   return {
     memberships,
     allowedInSpace: spaceAccess({ memberships }),
@@ -56,7 +59,7 @@ export const spaceModule = ({
     storageAlertOn: (tx: PostgresTransaction) =>
       decideStorageAlert({ alerts: postgresStorageAlerts(tx), now }),
     sendStorageAlert: sendStorageAlert({ mailer, log }),
-    readSpace: readSpace({ memberships, spaces: store, subscriptions }),
+    readSpace: readSpace({ memberships, spaces: store, subscriptions, freezes }),
     listMembers: listMembers({ memberships, members: postgresMemberList(db) }),
     inviteMember: inviteMember({
       memberships,

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { count, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import type { PostgresDatabase } from "#db";
@@ -12,7 +12,7 @@ import type { SubscriptionUnitOfWork } from "../application/receive-notification
 import type { SpacePlans } from "../application/start-checkout.ts";
 import { SUBSCRIPTION_STATUSES } from "../domain/subscription.ts";
 
-const { identityUser, project, space, spaceMember, spacePlanChange, spaceSubscription } = schema;
+const { identityUser, project, space, spacePlanChange, spaceSubscription } = schema;
 
 const StoredPlan = z.enum(PLANS);
 
@@ -23,17 +23,15 @@ const StoredSubscription = z
     status: z.enum(SUBSCRIPTION_STATUSES),
     currentPeriodEnd: z.date().nullable(),
     modifiedAt: z.date(),
+    storedBytesAtEnd: z.number().nullable(),
   })
-  .transform(({ currentPeriodEnd, ...subscription }) => ({
+  .transform(({ currentPeriodEnd, storedBytesAtEnd, ...subscription }) => ({
     ...subscription,
     currentPeriodEnd: currentPeriodEnd ?? undefined,
+    storedBytesAtEnd: storedBytesAtEnd ?? undefined,
   }));
 
-const StoredUsage = z.object({
-  projects: z.number(),
-  storedBytes: z.coerce.number(),
-  members: z.coerce.number(),
-});
+const StoredBytes = z.object({ storedBytes: z.coerce.number() });
 
 export const postgresSpacePlans = (db: PostgresDatabase): SpacePlans => ({
   planOf: async (spaceId) => {
@@ -100,16 +98,12 @@ export const postgresSubscriptionUnitOfWork = (db: PostgresDatabase): Subscripti
             .where(eq(identityUser.id, userId));
           return user !== undefined;
         },
-        usageOf: async (spaceId) => {
+        storedBytesOf: async (spaceId) => {
           const [stored] = await tx
-            .select({
-              projects: count(),
-              storedBytes: sql`coalesce(sum(${project.storedBytes}), 0)`,
-              members: sql`(select count(*) from ${spaceMember} where ${spaceMember.spaceId} = ${spaceId} and ${spaceMember.closedAt} is null)`,
-            })
+            .select({ storedBytes: sql`coalesce(sum(${project.storedBytes}), 0)` })
             .from(project)
             .where(eq(project.spaceId, spaceId));
-          return StoredUsage.parse(stored);
+          return StoredBytes.parse(stored).storedBytes;
         },
         subscriptionOf: async (spaceId) => {
           const [row] = await tx
@@ -119,6 +113,7 @@ export const postgresSubscriptionUnitOfWork = (db: PostgresDatabase): Subscripti
               status: spaceSubscription.status,
               currentPeriodEnd: spaceSubscription.currentPeriodEnd,
               modifiedAt: spaceSubscription.polarModifiedAt,
+              storedBytesAtEnd: spaceSubscription.storedBytesAtEnd,
             })
             .from(spaceSubscription)
             .where(eq(spaceSubscription.spaceId, spaceId));
@@ -131,6 +126,7 @@ export const postgresSubscriptionUnitOfWork = (db: PostgresDatabase): Subscripti
             status: subscription.status,
             currentPeriodEnd: subscription.currentPeriodEnd ?? null,
             polarModifiedAt: subscription.modifiedAt,
+            storedBytesAtEnd: subscription.storedBytesAtEnd ?? null,
           };
           await tx
             .insert(spaceSubscription)

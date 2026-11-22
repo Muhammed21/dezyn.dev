@@ -14,6 +14,7 @@ import type {
   SpaceSubscription,
   SpaceWithStorage,
 } from "../domain/space.ts";
+import { SUSPENDED_EDITOR_ACCESS } from "./space-frozen-alert.tsx";
 
 type ReadSpace = (space: {
   readonly spaceId: string;
@@ -49,6 +50,7 @@ const PLAN_NAMES: Readonly<Record<Plan, string>> = {
 
 const READ_MESSAGES: Readonly<Record<Exclude<SpaceFailure, "unauthenticated">, string>> = {
   not_found: UNKNOWN_SPACE,
+  frozen: SUSPENDED_EDITOR_ACCESS,
   unavailable: PLAN_UNAVAILABLE,
   invalid_response: PLAN_UNAVAILABLE,
 };

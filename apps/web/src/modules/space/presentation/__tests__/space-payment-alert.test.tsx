@@ -41,6 +41,8 @@ const makeSpace = (overrides: Partial<SpaceWithStorage> = {}): SpaceWithStorage 
   plan: "team",
   ...OWNER_RIGHTS,
   storage: { usedBytes: 0, limitBytes: 20_000_000_000, alertReached: false },
+  frozen: false,
+  exceededFreeLimits: [],
   ...overrides,
 });
 

@@ -47,6 +47,8 @@ const makeSpace = (overrides: Partial<SpaceWithStorage> = {}): SpaceWithStorage 
   plan: "free",
   ...OWNER_RIGHTS,
   storage: { usedBytes: 0, limitBytes: 500_000_000, alertReached: false },
+  frozen: false,
+  exceededFreeLimits: [],
   ...overrides,
 });
 
@@ -280,6 +282,10 @@ describe("page « Plan » d'un espace (ADR 0050 §2, spec #343)", () => {
 
   it.each([
     ["not_found", "Cet espace est introuvable."],
+    [
+      "frozen",
+      "Votre accès à cet espace est suspendu : il est gelé jusqu'à son retour au plan Team.",
+    ],
     ["unavailable", "Le plan de l'espace est indisponible pour le moment."],
     ["invalid_response", "Le plan de l'espace est indisponible pour le moment."],
   ] as const)("annonce l'échec %s de la lecture de l'espace", async (failure, message) => {

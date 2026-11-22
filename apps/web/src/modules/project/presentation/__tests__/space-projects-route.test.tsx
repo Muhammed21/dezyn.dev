@@ -86,6 +86,10 @@ const SpacePaymentAlertStub = ({ spaceId }: { readonly spaceId: string }) => (
   <p>Paiement de l'espace {spaceId}</p>
 );
 
+const SpaceFrozenAlertStub = ({ spaceId }: { readonly spaceId: string }) => (
+  <p>Gel de l'espace {spaceId}</p>
+);
+
 const renderSpaceProjects = ({
   listProjects = listing([]),
   createProject = refusing("unavailable"),
@@ -131,6 +135,7 @@ const renderSpaceProjects = ({
         SpaceMembers: SpaceMembersStub,
         SpaceStorageAlert: SpaceStorageAlertStub,
         SpacePaymentAlert: SpacePaymentAlertStub,
+        SpaceFrozenAlert: SpaceFrozenAlertStub,
         clock,
       }),
       signIn,
@@ -516,6 +521,34 @@ describe("retard de paiement sur la page de l'espace (ADR 0050 §4, #348)", () =
         .compareDocumentPosition(screen.getByRole("list", { name: "Projets" }).element()) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+  });
+});
+
+describe("espace gelé sur la page de l'espace (ADR 0050 §5, #349)", () => {
+  it("place le bandeau du gel de l'espace de l'adresse au-dessus des projets", async () => {
+    const screen = await renderSpaceProjects({ listProjects: listing([makeProject()]) });
+
+    const alert = screen.getByText(`Gel de l'espace ${SPACE_ID}`);
+    await expect.element(alert).toBeVisible();
+    expect(
+      alert
+        .element()
+        .compareDocumentPosition(screen.getByRole("list", { name: "Projets" }).element()) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("montre à l'éditeur suspendu le seul bandeau du gel, sans l'échec de la liste des projets", async () => {
+    const screen = await renderSpaceProjects({
+      listProjects: () => Promise.resolve(err("invalid_response")),
+      readSpace: () => Promise.resolve(err("frozen")),
+    });
+
+    await expect.element(screen.getByText(`Gel de l'espace ${SPACE_ID}`)).toBeVisible();
+    await expect.element(screen.getByRole("alert")).not.toBeInTheDocument();
+    await expect
+      .element(screen.getByText(`Membres de l'espace ${SPACE_ID}`))
+      .not.toBeInTheDocument();
   });
 });
 

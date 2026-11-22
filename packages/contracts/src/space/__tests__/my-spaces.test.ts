@@ -87,6 +87,8 @@ describe("sortie de la liste de mes espaces", () => {
   });
 });
 
+const NOT_FROZEN = { frozen: false, exceededFreeLimits: [] } as const;
+
 const makeStorage = (overrides: Readonly<Record<string, unknown>> = {}) => ({
   usedBytes: 400_000_000,
   limitBytes: 500_000_000,
@@ -96,7 +98,7 @@ const makeStorage = (overrides: Readonly<Record<string, unknown>> = {}) => ({
 
 describe("sortie de la lecture d'un espace, avec son stockage (ADR 0032)", () => {
   it("lit l'espace, son stockage utilisé, la limite de son plan et l'alerte à 80 %", () => {
-    const read = makeSpace({ storage: makeStorage() });
+    const read = makeSpace({ ...NOT_FROZEN, storage: makeStorage() });
 
     expect(SpaceOutput.parse(read)).toEqual(read);
   });
@@ -110,11 +112,13 @@ describe("sortie de la lecture d'un espace, avec son stockage (ADR 0032)", () =>
     ["une limite fractionnaire", { limitBytes: 1.5 }],
     ["une alerte qui n'est pas un booléen", { alertReached: "oui" }],
   ])("refuse %s", (_case, storage) => {
-    expect(SpaceOutput.safeParse(makeSpace({ storage: makeStorage(storage) })).success).toBe(false);
+    expect(
+      SpaceOutput.safeParse(makeSpace({ ...NOT_FROZEN, storage: makeStorage(storage) })).success,
+    ).toBe(false);
   });
 
   it("garde une clé de stockage ajoutée plus tard par le serveur (ADR 0023 §1)", () => {
-    const later = makeSpace({ storage: makeStorage({ purgeAt: "2026-12-01" }) });
+    const later = makeSpace({ ...NOT_FROZEN, storage: makeStorage({ purgeAt: "2026-12-01" }) });
 
     expect(SpaceOutput.parse(later)).toEqual(later);
   });
@@ -129,19 +133,24 @@ const makeSubscription = (overrides: Readonly<Record<string, unknown>> = {}) => 
 
 describe("sortie de l'abonnement d'un espace, lu par ses propriétaires (ADR 0050 §3)", () => {
   it("lit le statut, la fin de la période en cours et le payeur", () => {
-    const read = makeSpace({ storage: makeStorage(), subscription: makeSubscription() });
+    const read = makeSpace({
+      ...NOT_FROZEN,
+      storage: makeStorage(),
+      subscription: makeSubscription(),
+    });
 
     expect(SpaceOutput.parse(read)).toEqual(read);
   });
 
   it("lit un espace sans abonnement", () => {
-    const read = makeSpace({ storage: makeStorage() });
+    const read = makeSpace({ ...NOT_FROZEN, storage: makeStorage() });
 
     expect(SpaceOutput.parse(read)).toEqual(read);
   });
 
   it("lit un abonnement sans fin de période", () => {
     const read = makeSpace({
+      ...NOT_FROZEN,
       storage: makeStorage(),
       subscription: makeSubscription({ currentPeriodEnd: null }),
     });
@@ -151,6 +160,7 @@ describe("sortie de l'abonnement d'un espace, lu par ses propriétaires (ADR 005
 
   it("garde un statut ajouté plus tard par le serveur (ADR 0023 §2)", () => {
     const later = makeSpace({
+      ...NOT_FROZEN,
       storage: makeStorage(),
       subscription: makeSubscription({ status: "paused" }),
     });
@@ -165,8 +175,45 @@ describe("sortie de l'abonnement d'un espace, lu par ses propriétaires (ADR 005
   ])("refuse %s", (_case, subscription) => {
     expect(
       SpaceOutput.safeParse(
-        makeSpace({ storage: makeStorage(), subscription: makeSubscription(subscription) }),
+        makeSpace({
+          ...NOT_FROZEN,
+          storage: makeStorage(),
+          subscription: makeSubscription(subscription),
+        }),
       ).success,
+    ).toBe(false);
+  });
+});
+
+describe("sortie du gel d'un espace, avec les limites Free dépassées (ADR 0050 §5)", () => {
+  it("lit un espace gelé et les limites Free qu'il dépasse", () => {
+    const read = makeSpace({
+      storage: makeStorage(),
+      frozen: true,
+      exceededFreeLimits: ["projects", "storage", "members"],
+    });
+
+    expect(SpaceOutput.parse(read)).toEqual(read);
+  });
+
+  it("garde une limite ajoutée plus tard par le serveur (ADR 0023 §2)", () => {
+    const later = makeSpace({
+      storage: makeStorage(),
+      frozen: true,
+      exceededFreeLimits: ["components"],
+    });
+
+    expect(SpaceOutput.parse(later)).toEqual(later);
+  });
+
+  it.each([
+    ["un espace lu sans son gel", { frozen: undefined }],
+    ["un gel qui n'est pas un booléen", { frozen: "oui" }],
+    ["un espace lu sans ses limites dépassées", { exceededFreeLimits: undefined }],
+  ])("refuse %s", (_case, overrides) => {
+    expect(
+      SpaceOutput.safeParse(makeSpace({ ...NOT_FROZEN, storage: makeStorage(), ...overrides }))
+        .success,
     ).toBe(false);
   });
 });

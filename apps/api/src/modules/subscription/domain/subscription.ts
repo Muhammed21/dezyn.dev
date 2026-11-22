@@ -1,4 +1,4 @@
-import { exceedsFreeLimits, type Plan, type SpaceUsage } from "#modules/space/contracts/plan.ts";
+import type { Plan } from "#modules/space/contracts/plan.ts";
 
 export const SUBSCRIPTION_STATUSES = ["active", "canceling", "past_due", "ended"] as const;
 
@@ -12,15 +12,18 @@ export type SpaceSubscription = {
   readonly modifiedAt: Date;
 };
 
+export type RecordedSubscription = SpaceSubscription & {
+  readonly storedBytesAtEnd: number | undefined;
+};
+
 export type PlanChange = { readonly before: Plan; readonly after: Plan };
 
 export type SubscriptionChange =
   | { readonly kind: "stale" }
   | { readonly kind: "other_subscription"; readonly storedId: string }
-  | { readonly kind: "above_free_limits"; readonly subscription: SpaceSubscription }
   | {
       readonly kind: "applied";
-      readonly subscription: SpaceSubscription;
+      readonly subscription: RecordedSubscription;
       readonly planChange: PlanChange | undefined;
     };
 
@@ -46,16 +49,33 @@ export const subscriptionStatusOf = ({
 export const planOfSubscription = (status: SubscriptionStatus): Plan =>
   status === "ended" ? "free" : "team";
 
+const storedBytesAtEndOf = ({
+  stored,
+  incoming,
+  storedBytes,
+}: {
+  readonly stored: RecordedSubscription | undefined;
+  readonly incoming: SpaceSubscription;
+  readonly storedBytes: number;
+}): number | undefined => {
+  if (incoming.status !== "ended") {
+    return undefined;
+  }
+  return stored?.id === incoming.id && stored.status === "ended"
+    ? stored.storedBytesAtEnd
+    : storedBytes;
+};
+
 export const subscriptionChangeOf = ({
   stored,
   incoming,
   plan,
-  usage,
+  storedBytes,
 }: {
-  readonly stored: SpaceSubscription | undefined;
+  readonly stored: RecordedSubscription | undefined;
   readonly incoming: SpaceSubscription;
   readonly plan: Plan;
-  readonly usage: SpaceUsage;
+  readonly storedBytes: number;
 }): SubscriptionChange => {
   if (stored !== undefined && stored.id !== incoming.id && stored.status !== "ended") {
     return { kind: "other_subscription", storedId: stored.id };
@@ -64,12 +84,12 @@ export const subscriptionChangeOf = ({
     return { kind: "stale" };
   }
   const after = planOfSubscription(incoming.status);
-  if (after === "free" && plan === "team" && exceedsFreeLimits(usage)) {
-    return { kind: "above_free_limits", subscription: incoming };
-  }
   return {
     kind: "applied",
-    subscription: incoming,
+    subscription: {
+      ...incoming,
+      storedBytesAtEnd: storedBytesAtEndOf({ stored, incoming, storedBytes }),
+    },
     planChange: after === plan ? undefined : { before: plan, after },
   };
 };

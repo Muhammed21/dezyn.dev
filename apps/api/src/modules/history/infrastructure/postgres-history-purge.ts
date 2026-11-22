@@ -9,7 +9,7 @@ import { schema } from "@repo/db";
 import type { PurgeNotices } from "../application/notify-purge.ts";
 import type { PurgeBatch, PurgeCandidates, PurgeUnitOfWork } from "../application/purge-history.ts";
 
-const { historyEntry, identityUser, project, space, spaceMember } = schema;
+const { historyEntry, identityUser, project, space, spaceMember, spaceSubscription } = schema;
 
 const StoredCandidate = z.object({
   spaceId: z.string(),
@@ -17,6 +17,8 @@ const StoredCandidate = z.object({
   storedBytes: z.coerce.number(),
   name: z.string(),
   projects: z.array(z.object({ id: z.string(), name: z.string() })),
+  subscriptionEnded: z.boolean(),
+  members: z.coerce.number(),
 });
 
 const LockTaken = z.object({ taken: z.boolean() });
@@ -38,10 +40,13 @@ const spaceStorage = (orm: Pick<PostgresTransaction, "select">) =>
       storedBytes: sql`sum(${project.storedBytes})`,
       name: space.name,
       projects: sql`json_agg(json_build_object('id', ${project.id}, 'name', ${project.name}) ORDER BY ${project.storedBytes} DESC, ${project.id})`,
+      subscriptionEnded: sql`coalesce(${spaceSubscription.status} = 'ended', false)`,
+      members: sql`(select count(*) from ${spaceMember} where ${spaceMember.spaceId} = ${space.id} and ${spaceMember.closedAt} is null)`,
     })
     .from(space)
     .innerJoin(project, eq(project.spaceId, space.id))
-    .groupBy(space.id)
+    .leftJoin(spaceSubscription, eq(spaceSubscription.spaceId, space.id))
+    .groupBy(space.id, spaceSubscription.status)
     .$dynamic();
 
 export const postgresPurgeCandidates = (db: PostgresDatabase): PurgeCandidates => ({

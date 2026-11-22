@@ -8,6 +8,10 @@ L'API REST de dezyn est servie sous `/v1`. Ses schémas partagés avec les clien
 
 Une erreur répond en `application/problem+json` (RFC 9457) : `type`, `title`, `status`, `instance` (le chemin de la requête) et `correlationId`. Un refus propre à dezyn a un `type` de la forme `https://dezyn.dev/problems/<nom>` ; les autres ont `about:blank`.
 
+### Espace gelé
+
+Toute requête d'un éditeur sur un espace gelé reçoit `https://dezyn.dev/problems/space-frozen` (403), et un outil MCP lui répond en erreur avec le code `space_frozen`. Le propriétaire n'est jamais refusé. La lecture d'un espace porte `frozen` et `exceededFreeLimits` (`projects`, `storage`, `members`) (ADR 0050 §5). Contrats : `SpaceFrozenProblem` et `SpaceOutput` dans `@repo/contracts`.
+
 ## Idempotence des écritures
 
 Un client qui renvoie une écriture après un timeout, sans savoir si la première est passée, joint l'en-tête `Idempotency-Key`. Tant que la même clé revient, dezyn rejoue la réponse de la première requête sans rien réécrire.
