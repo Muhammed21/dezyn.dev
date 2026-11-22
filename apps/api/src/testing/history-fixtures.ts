@@ -1,3 +1,7 @@
+import { randomUUID } from "node:crypto";
+
+import { eq } from "drizzle-orm";
+
 import type { PostgresDatabase } from "#db";
 import { storedSize } from "#modules/project/contracts/storage-meter.ts";
 import { schema } from "@repo/db";
@@ -28,6 +32,46 @@ export const makeStoredEntry = <Row extends Omit<StoredEntry, "storedSize">>(
 
 export const jsonSizeOfEntry = (row: StoredEntry): number =>
   storedSize(Object.fromEntries(Object.entries(row).filter(([key]) => key !== "storedSize")));
+
+const FREE_LIMIT = 500_000_000;
+
+export const seedSpaceAtItsLimit = async (app: PostgresDatabase) => {
+  const spaceId = randomUUID();
+  const ownerId = randomUUID();
+  const authorId = randomUUID();
+  const projectId = randomUUID();
+  const ownerEmail = `${ownerId}@dezyn.test`;
+  await app.orm.insert(schema.identityUser).values({ id: ownerId, name: "Ada", email: ownerEmail });
+  await app.orm
+    .insert(schema.space)
+    .values({ id: spaceId, name: "Studio Ada", plan: "free", createdAt: new Date() });
+  await app.orm
+    .insert(schema.spaceMember)
+    .values({ id: randomUUID(), spaceId, userId: ownerId, role: "owner", joinedAt: new Date() });
+  await app.orm
+    .insert(schema.project)
+    .values({ id: projectId, spaceId, name: "Site vitrine", createdAt: new Date() });
+  await app.orm
+    .update(schema.project)
+    .set({ storedBytes: FREE_LIMIT })
+    .where(eq(schema.project.id, projectId));
+  await app.orm.insert(schema.historyAuthor).values({ id: authorId, spaceId, userId: ownerId });
+  await app.orm.insert(schema.historyEntry).values(
+    makeStoredEntry({
+      id: randomUUID(),
+      spaceId,
+      projectId,
+      action: "project.created",
+      authorId,
+      clientId: null,
+      before: null,
+      after: { name: "Site vitrine" },
+      correlationId: "semis",
+      occurredAt: new Date("2026-01-01T00:00:00.000Z"),
+    }),
+  );
+  return { spaceId, projectId, ownerEmail };
+};
 
 const authorIdOf = async (db: PostgresDatabase) => {
   const [author] = await db.orm.select({ id: schema.historyAuthor.id }).from(schema.historyAuthor);

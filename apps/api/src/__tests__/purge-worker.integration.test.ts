@@ -6,54 +6,16 @@ import { createTestHarness } from "wrangler";
 
 import { createPostgresDatabase, type PostgresDatabase } from "#db";
 import type { LogRecord } from "#platform/logging.ts";
-import { makeStoredEntry } from "#testing/history-fixtures.ts";
+import { seedSpaceAtItsLimit } from "#testing/history-fixtures.ts";
 import { assertSchemaVersion, LATEST_MIGRATION } from "@repo/db";
 import { migrate, schema } from "@repo/db";
 import { withThrowawayDatabase } from "@repo/db/testing";
 
 import { createPurgeWorker } from "../purge-worker.ts";
 
-const { historyAuthor, historyEntry, idempotencyKey, identityUser, project, space, spaceMember } =
-  schema;
+const { historyEntry, idempotencyKey, identityUser } = schema;
 
 const HYPERDRIVE_LOCAL = "CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE";
-
-const FREE_LIMIT = 500_000_000;
-
-const seedSpaceAtItsLimit = async (app: PostgresDatabase) => {
-  const spaceId = randomUUID();
-  const ownerId = randomUUID();
-  const authorId = randomUUID();
-  const projectId = randomUUID();
-  const ownerEmail = `${ownerId}@dezyn.test`;
-  await app.orm.insert(identityUser).values({ id: ownerId, name: "Ada", email: ownerEmail });
-  await app.orm
-    .insert(space)
-    .values({ id: spaceId, name: "Studio Ada", plan: "free", createdAt: new Date() });
-  await app.orm
-    .insert(spaceMember)
-    .values({ id: randomUUID(), spaceId, userId: ownerId, role: "owner", joinedAt: new Date() });
-  await app.orm
-    .insert(project)
-    .values({ id: projectId, spaceId, name: "Site vitrine", createdAt: new Date() });
-  await app.orm.update(project).set({ storedBytes: FREE_LIMIT }).where(eq(project.id, projectId));
-  await app.orm.insert(historyAuthor).values({ id: authorId, spaceId, userId: ownerId });
-  await app.orm.insert(historyEntry).values(
-    makeStoredEntry({
-      id: randomUUID(),
-      spaceId,
-      projectId,
-      action: "project.created",
-      authorId,
-      clientId: null,
-      before: null,
-      after: { name: "Site vitrine" },
-      correlationId: "semis",
-      occurredAt: new Date("2026-01-01T00:00:00.000Z"),
-    }),
-  );
-  return { projectId, ownerEmail };
-};
 
 const KEY_LIFETIME_MINUTES = 24 * 60;
 
