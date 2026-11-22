@@ -31,6 +31,9 @@ export const subscriptionStatusOf = ({
   readonly status: string;
   readonly cancelAtPeriodEnd: boolean;
 }): SubscriptionStatus | undefined => {
+  if (status === "past_due") {
+    return "past_due";
+  }
   if (status === "canceled") {
     return "ended";
   }

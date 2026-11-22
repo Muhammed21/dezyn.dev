@@ -40,6 +40,13 @@ describe("le statut d'un abonnement selon Polar (ADR 0050 §4)", () => {
     },
   );
 
+  it.each([false, true])(
+    "un abonnement en retard de paiement est en retard de paiement (résiliation : %s)",
+    (cancelAtPeriodEnd) => {
+      expect(subscriptionStatusOf({ status: "past_due", cancelAtPeriodEnd })).toBe("past_due");
+    },
+  );
+
   it.each(["trialing", "incomplete", "paused", "un-statut-inconnu"])(
     "le statut %s n'est pas reconnu",
     (status) => {

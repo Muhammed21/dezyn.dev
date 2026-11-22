@@ -17,6 +17,7 @@ import type {
 
 const HANDLED_EVENTS: ReadonlySet<string> = new Set([
   "subscription.active",
+  "subscription.past_due",
   "subscription.updated",
   "subscription.canceled",
   "subscription.uncanceled",
