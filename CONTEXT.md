@@ -28,6 +28,18 @@ _À éviter_ : admin, owner
 Le membre qui modifie les projets d'un espace et valide ou rejette les données proposées.
 _À éviter_ : contributeur, designer (comme rôle)
 
+**Abonnement** :
+Ce qui fait passer un espace au plan Team : souscrit chez Polar pour un seul espace, avec un payeur, un statut (actif, résilié en fin de période, en retard de paiement, terminé) et la date de fin de sa période. L'espace est Team tant que son abonnement n'est pas terminé.
+_À éviter_ : licence, souscription (pour l'objet), forfait, plan (pour l'abonnement lui-même)
+
+**Payeur** :
+L'utilisateur qui paie l'abonnement d'un espace, client de Polar ; c'est un propriétaire de l'espace quand il souscrit. Lui seul ouvre le portail client de Polar pour cet espace ; les autres propriétaires voient qui paie. Un utilisateur peut payer plusieurs espaces, chacun par son propre abonnement.
+_À éviter_ : client, acheteur, titulaire, owner
+
+**Espace gelé** :
+Un espace dont l'abonnement est terminé et qui dépasse au moins une limite Free (projets, stockage ou membres). Rien n'y est supprimé ; ses éditeurs sont suspendus, son propriétaire continue de travailler, et son stockage reste borné à celui de la fin de l'abonnement. Un espace Free qui n'a jamais payé ne gèle pas. Le gel se lève seul quand l'espace repasse Team ou revient sous les limites Free.
+_À éviter_ : espace suspendu, bloqué, archivé, verrouillé
+
 **Projet** :
 Un design system complet (tokens, composants, décisions) qui appartient à un espace ; c'est l'unité que comptent les plans.
 _À éviter_ : DA, direction artistique, design system (pour désigner le conteneur)
