@@ -1,7 +1,6 @@
 import { z } from "zod";
 
 import { openEnum, Uuid } from "../conventions/schemas.ts";
-import { SpaceSubscriptionOutput } from "../subscription/space-subscription.ts";
 
 export const PLANS = ["free", "team"] as const;
 
@@ -18,6 +17,14 @@ export const ACTIONS = [
   "proposal.review",
   "subscription.checkout",
 ] as const;
+
+const SUBSCRIPTION_STATUSES = ["active", "canceling", "past_due", "ended"] as const;
+
+const SpaceSubscriptionOutput = z.looseObject({
+  status: openEnum(SUBSCRIPTION_STATUSES),
+  currentPeriodEnd: z.iso.datetime().nullable(),
+  payer: z.looseObject({ name: z.string(), email: z.string(), you: z.boolean() }),
+});
 
 export const MySpaceOutput = z.looseObject({
   id: Uuid,

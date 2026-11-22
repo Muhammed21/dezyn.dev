@@ -182,30 +182,6 @@ describe("lecture d'un espace du membre dans l'app web (ADR 0044 §5)", () => {
     expect(read.ok && read.value.storage).toEqual(storage);
   });
 
-  it("donne au propriétaire le retard de paiement de l'abonnement (ADR 0050 §4)", async () => {
-    const { spaces } = answering(json(makeReadSpace({ subscription: { status: "past_due" } })));
-
-    const read = await spaces.readSpace({ spaceId: SPACE_ID });
-
-    expect(read.ok && read.value.subscription).toEqual({ status: "past_due" });
-  });
-
-  it("donne un statut d'abonnement inconnu de l'app comme inconnu (ADR 0023 §2)", async () => {
-    const { spaces } = answering(json(makeReadSpace({ subscription: { status: "paused" } })));
-
-    const read = await spaces.readSpace({ spaceId: SPACE_ID });
-
-    expect(read.ok && read.value.subscription).toEqual({ status: "unknown" });
-  });
-
-  it("ne donne aucun abonnement quand l'API n'en rend pas", async () => {
-    const { spaces } = answering(json(makeReadSpace()));
-
-    const read = await spaces.readSpace({ spaceId: SPACE_ID });
-
-    expect(read.ok && read.value).not.toHaveProperty("subscription");
-  });
-
   it("ignore une action inconnue de l'app (ADR 0023 §2)", async () => {
     const { spaces } = answering(
       json(makeReadSpace({ allowedActions: ["space.archive", "project.create"] })),
@@ -754,5 +730,124 @@ describe("checkout du plan Team depuis l'app web (ADR 0050 §7)", () => {
     });
 
     expect(await spaces.startCheckout({ spaceId: SPACE_ID })).toEqual(err("unavailable"));
+  });
+});
+
+const makeSubscription = (overrides: Readonly<Record<string, unknown>> = {}) => ({
+  status: "active",
+  currentPeriodEnd: "2026-12-22T10:00:00.000Z",
+  payer: { name: "Ada Lovelace", email: "ada@dezyn.test", you: true },
+  ...overrides,
+});
+
+describe("abonnement d'un espace lu dans l'app web (ADR 0050 §3)", () => {
+  it("donne le statut, la date de fin de la période en cours et le payeur", async () => {
+    const { spaces } = answering(json(makeReadSpace({ subscription: makeSubscription() })));
+
+    const read = await spaces.readSpace({ spaceId: SPACE_ID });
+
+    expect(read.ok && read.value.subscription).toEqual({
+      status: "active",
+      currentPeriodEnd: new Date("2026-12-22T10:00:00.000Z"),
+      payer: { name: "Ada Lovelace", email: "ada@dezyn.test", you: true },
+    });
+  });
+
+  it.each(["active", "canceling", "past_due", "ended"])("lit le statut %s", async (status) => {
+    const { spaces } = answering(
+      json(makeReadSpace({ subscription: makeSubscription({ status }) })),
+    );
+
+    const read = await spaces.readSpace({ spaceId: SPACE_ID });
+
+    expect(read.ok && read.value.subscription?.status).toBe(status);
+  });
+
+  it("lit un statut inconnu de l'app comme inconnu (ADR 0023 §2)", async () => {
+    const { spaces } = answering(
+      json(makeReadSpace({ subscription: makeSubscription({ status: "paused" }) })),
+    );
+
+    const read = await spaces.readSpace({ spaceId: SPACE_ID });
+
+    expect(read.ok && read.value.subscription?.status).toBe("unknown");
+  });
+
+  it("lit un abonnement sans fin de période", async () => {
+    const { spaces } = answering(
+      json(makeReadSpace({ subscription: makeSubscription({ currentPeriodEnd: null }) })),
+    );
+
+    const read = await spaces.readSpace({ spaceId: SPACE_ID });
+
+    expect(read.ok && read.value.subscription?.currentPeriodEnd).toBeUndefined();
+  });
+
+  it("lit un espace sans abonnement", async () => {
+    const { spaces } = answering(json(makeReadSpace()));
+
+    const read = await spaces.readSpace({ spaceId: SPACE_ID });
+
+    expect(read.ok && read.value).not.toHaveProperty("subscription");
+  });
+});
+
+const PORTAL_URL = "https://sandbox.polar.sh/dezyn/portal?customer_session_token=polar_cst_1";
+
+describe("portail client du payeur depuis l'app web (ADR 0050 §7)", () => {
+  it("demande le portail de l'espace à l'API avec le cookie du navigateur", async () => {
+    const { spaces, calls } = answering(json({ url: PORTAL_URL }, 201));
+
+    await spaces.openPortal({ spaceId: SPACE_ID });
+
+    expect(calls).toEqual([
+      {
+        url: `${API_URL}/v1/spaces/${SPACE_ID}/portal`,
+        init: { method: "POST", credentials: "include" },
+      },
+    ]);
+  });
+
+  it("donne l'URL du portail sur un 201", async () => {
+    const { spaces } = answering(json({ url: PORTAL_URL }, 201));
+
+    expect(await spaces.openPortal({ spaceId: SPACE_ID })).toEqual(ok({ url: PORTAL_URL }));
+  });
+
+  it("donne not_found sans appeler l'API quand l'identifiant de l'espace n'est pas un UUID", async () => {
+    const { spaces, calls } = answering(json({ url: PORTAL_URL }, 201));
+
+    expect(await spaces.openPortal({ spaceId: "espace-1" })).toEqual(err("not_found"));
+    expect(calls).toEqual([]);
+  });
+
+  it.each([
+    ["unauthenticated", json({}, 401)],
+    ["not_found", problem({ type: "about:blank" }, 404)],
+    ["forbidden", problem({ type: "about:blank" }, 403)],
+    ["unavailable", json({}, 503)],
+  ] as const)("donne %s", async (failure, response) => {
+    const { spaces } = answering(response);
+
+    expect(await spaces.openPortal({ spaceId: SPACE_ID })).toEqual(err(failure));
+  });
+
+  it.each([
+    ["un 200 au lieu d'un 201", json({ url: PORTAL_URL }, 200)],
+    ["un 201 sans URL", json({}, 201)],
+    ["un 409", json({}, 409)],
+  ])("donne invalid_response sur %s", async (_case, response) => {
+    const { spaces } = answering(response);
+
+    expect(await spaces.openPortal({ spaceId: SPACE_ID })).toEqual(err("invalid_response"));
+  });
+
+  it("donne unavailable quand l'API est injoignable", async () => {
+    const spaces = createSpaces({
+      apiUrl: API_URL,
+      fetch: () => Promise.reject(new TypeError("Failed to fetch")),
+    });
+
+    expect(await spaces.openPortal({ spaceId: SPACE_ID })).toEqual(err("unavailable"));
   });
 });

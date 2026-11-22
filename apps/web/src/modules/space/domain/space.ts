@@ -38,7 +38,11 @@ export type SpaceStorage = {
   readonly alertReached: boolean;
 };
 
-export type SpaceSubscription = { readonly status: SubscriptionStatus };
+export type SpaceSubscription = {
+  readonly status: SubscriptionStatus;
+  readonly currentPeriodEnd: Date | undefined;
+  readonly payer: { readonly name: string; readonly email: string; readonly you: boolean };
+};
 
 export type SpaceWithStorage = Space & {
   readonly storage: SpaceStorage;
@@ -96,6 +100,15 @@ export type CheckoutFailure =
   | "not_found"
   | "forbidden"
   | "already_team"
+  | "unavailable"
+  | "invalid_response";
+
+export type Portal = { readonly url: string };
+
+export type PortalFailure =
+  | "unauthenticated"
+  | "not_found"
+  | "forbidden"
   | "unavailable"
   | "invalid_response";
 

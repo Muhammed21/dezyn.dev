@@ -8,8 +8,17 @@ export type CheckoutRequest = {
 
 export type Checkout = { readonly url: string };
 
+export type PortalRequest = {
+  readonly spaceId: string;
+  readonly payerId: string;
+  readonly returnUrl: string;
+};
+
+export type Portal = { readonly url: string };
+
 export interface MerchantOfRecord {
   createCheckout(request: CheckoutRequest): Promise<Result<Checkout, "unavailable">>;
+  createPortal(request: PortalRequest): Promise<Result<Portal, "unavailable">>;
 }
 
 export type SubscriptionEvent = {

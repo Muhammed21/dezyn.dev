@@ -11,6 +11,7 @@ import {
   MySpaceOutput,
   MySpacesOutput,
   PlanRequiredProblem,
+  PortalOutput,
   SelfRemovalProblem,
   SentInvitationOutput,
   SpaceOutput,
@@ -40,12 +41,24 @@ import {
   type InvitationFailure,
   knownActionsOf,
   planOf,
+  type PortalFailure,
   type RemovalFailure,
   type RoleChangeFailure,
   roleOf,
   type Space,
+  type SpaceSubscription,
   subscriptionStatusOf,
 } from "../domain/space.ts";
+
+const subscriptionOf = ({
+  status,
+  currentPeriodEnd,
+  payer,
+}: NonNullable<z.infer<typeof SpaceOutput>["subscription"]>): SpaceSubscription => ({
+  status: subscriptionStatusOf(status),
+  currentPeriodEnd: currentPeriodEnd === null ? undefined : new Date(currentPeriodEnd),
+  payer: { name: payer.name, email: payer.email, you: payer.you },
+});
 
 const spaceOf = ({
   id,
@@ -152,6 +165,16 @@ const checkoutRefusalOf = async (response: Response): Promise<CheckoutFailure> =
   return failureOf(response);
 };
 
+const portalRefusalOf = (response: Response): PortalFailure => {
+  if (response.status === UNAUTHORIZED) {
+    return "unauthenticated";
+  }
+  if (response.status === NOT_FOUND) {
+    return "not_found";
+  }
+  return response.status === FORBIDDEN ? "forbidden" : failureOf(response);
+};
+
 export const createHttpSpaceGateway = ({
   apiUrl,
   fetch,
@@ -200,7 +223,7 @@ export const createHttpSpaceGateway = ({
           },
           ...(body.value.subscription === undefined
             ? {}
-            : { subscription: { status: subscriptionStatusOf(body.value.subscription.status) } }),
+            : { subscription: subscriptionOf(body.value.subscription) }),
         })
       : body;
   },
@@ -293,6 +316,18 @@ export const createHttpSpaceGateway = ({
       return err(await checkoutRefusalOf(response));
     }
     const body = await parseJson(response, CheckoutOutput);
+    return body.ok ? ok({ url: body.value.url }) : body;
+  },
+  openPortal: async ({ spaceId }) => {
+    const sent = await send(fetch, `${apiUrl}/v1/spaces/${spaceId}/portal`, { method: "POST" });
+    if (!sent.ok) {
+      return sent;
+    }
+    const response = sent.value;
+    if (response.status !== CREATED) {
+      return err(portalRefusalOf(response));
+    }
+    const body = await parseJson(response, PortalOutput);
     return body.ok ? ok({ url: body.value.url }) : body;
   },
   removeMember: async ({ spaceId, memberId }) => {

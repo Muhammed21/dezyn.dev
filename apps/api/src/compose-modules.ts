@@ -17,7 +17,11 @@ import {
   proposalWriterOn,
 } from "#modules/proposal/proposal-module.ts";
 import { spaceModule } from "#modules/space/space-module.ts";
-import { type Billing, subscriptionModule } from "#modules/subscription/subscription-module.ts";
+import {
+  type Billing,
+  spaceSubscriptionsOf,
+  subscriptionModule,
+} from "#modules/subscription/subscription-module.ts";
 import {
   checkTokensOn,
   figmaStateOn,
@@ -61,7 +65,13 @@ export const composeModules = ({
   readonly signals?: ProjectSignals;
   readonly channel?: ProjectChannel;
 }) => {
-  const spaces = spaceModule({ db, mailer, webUrl, log });
+  const spaces = spaceModule({
+    db,
+    mailer,
+    webUrl,
+    log,
+    subscriptions: spaceSubscriptionsOf(db),
+  });
   const writerOn = (tx: PostgresTransaction) =>
     wrapHistoryWriter(historyWriterOn(tx, storageMeterOn(tx)));
   const projectsOnly = projectModule({

@@ -15,13 +15,14 @@ import type {
   SubscriptionEvent,
 } from "./merchant-of-record.ts";
 
-const HANDLED_EVENTS: Readonly<Record<string, (event: SubscriptionEvent) => boolean>> = {
-  "subscription.active": () => true,
-  "subscription.past_due": () => true,
-  "subscription.updated": (event) => event.status === "past_due",
-};
-
-const isHandled = (event: SubscriptionEvent) => HANDLED_EVENTS[event.type]?.(event) === true;
+const HANDLED_EVENTS: ReadonlySet<string> = new Set([
+  "subscription.active",
+  "subscription.past_due",
+  "subscription.updated",
+  "subscription.canceled",
+  "subscription.uncanceled",
+  "subscription.revoked",
+]);
 
 export interface SubscriptionStore {
   lockSpace(spaceId: string): Promise<Plan | undefined>;
@@ -44,7 +45,9 @@ export interface SubscriptionUnitOfWork {
   run<T>(work: (store: SubscriptionStore) => Promise<T>): Promise<T>;
 }
 
-type Recorded = "applied" | "stale" | "unknown_space" | "unknown_payer";
+type Recorded =
+  | { readonly kind: "applied" | "stale" | "unknown_space" | "unknown_payer" }
+  | { readonly kind: "other_subscription"; readonly storedId: string };
 
 const recordEvent = ({
   unitOfWork,
@@ -62,18 +65,18 @@ const recordEvent = ({
   unitOfWork.run(async (store) => {
     const plan = await store.lockSpace(spaceId);
     if (plan === undefined) {
-      return "unknown_space";
+      return { kind: "unknown_space" };
     }
     if (!(await store.isUser(subscription.payerId))) {
-      return "unknown_payer";
+      return { kind: "unknown_payer" };
     }
     const change = subscriptionChangeOf({
       stored: await store.subscriptionOf(spaceId),
       incoming: subscription,
       plan,
     });
-    if (change.kind === "stale") {
-      return "stale";
+    if (change.kind !== "applied") {
+      return change;
     }
     await store.save({ spaceId, subscription: change.subscription });
     if (change.planChange !== undefined) {
@@ -85,7 +88,7 @@ const recordEvent = ({
         at: now(),
       });
     }
-    return "applied";
+    return { kind: "applied" };
   });
 
 const handleSubscriptionEvent = async ({
@@ -121,9 +124,9 @@ const handleSubscriptionEvent = async ({
     return;
   }
   const payerId = Uuid.safeParse(event.payerId).data;
-  const recorded =
+  const recorded: Recorded =
     payerId === undefined
-      ? "unknown_payer"
+      ? { kind: "unknown_payer" }
       : await recordEvent({
           unitOfWork,
           event,
@@ -137,11 +140,20 @@ const handleSubscriptionEvent = async ({
           },
           now,
         });
-  if (recorded === "unknown_space") {
+  if (recorded.kind === "unknown_space") {
     log({ level: "warn", msg: "polar event for an unknown space", ...details, spaceId });
   }
-  if (recorded === "unknown_payer") {
+  if (recorded.kind === "unknown_payer") {
     log({ level: "warn", msg: "polar event for an unknown payer", ...details, spaceId });
+  }
+  if (recorded.kind === "other_subscription") {
+    log({
+      level: "warn",
+      msg: "polar event for another subscription of the space",
+      ...details,
+      spaceId,
+      storedSubscriptionId: recorded.storedId,
+    });
   }
 };
 
@@ -166,7 +178,7 @@ export const receiveNotification =
       return err(notification.error);
     }
     const { value } = notification;
-    if (value.kind === "other" || !isHandled(value.event)) {
+    if (value.kind === "other" || !HANDLED_EVENTS.has(value.event.type)) {
       log({
         level: "info",
         msg: "polar event ignored",

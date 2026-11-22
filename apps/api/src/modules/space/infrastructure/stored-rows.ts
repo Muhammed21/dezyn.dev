@@ -1,7 +1,5 @@
 import { z } from "zod";
 
-import { SUBSCRIPTION_STATUSES } from "#modules/subscription/contracts/subscription-status.ts";
-
 import { PLANS, ROLES } from "../domain/space.ts";
 
 const StoredPlan = z.enum(PLANS);
@@ -10,13 +8,7 @@ const StoredRole = z.enum(ROLES);
 
 export const StoredSpace = z.object({ id: z.string(), name: z.string(), plan: StoredPlan });
 
-export const StoredSpaceWithStorage = StoredSpace.extend({
-  storedBytes: z.coerce.number(),
-  subscriptionStatus: z
-    .enum(SUBSCRIPTION_STATUSES)
-    .nullable()
-    .transform((status) => status ?? undefined),
-});
+export const StoredSpaceWithStorage = StoredSpace.extend({ storedBytes: z.coerce.number() });
 
 export const StoredSpaceWithRole = StoredSpace.extend({ role: StoredRole });
 

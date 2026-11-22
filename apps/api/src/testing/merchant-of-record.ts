@@ -7,10 +7,13 @@ export const WEBHOOK_SECRET = `whsec_${WEBHOOK_KEY.toString("base64")}`;
 
 export type RequestedCheckout = Parameters<MerchantOfRecord["createCheckout"]>[0];
 
+export type RequestedPortal = Parameters<MerchantOfRecord["createPortal"]>[0];
+
 export const makeMerchantOfRecord = ({
   available = true,
 }: { readonly available?: boolean } = {}) => {
   const checkouts: RequestedCheckout[] = [];
+  const portals: RequestedPortal[] = [];
   const merchant: MerchantOfRecord = {
     createCheckout: async (checkout) => {
       checkouts.push(checkout);
@@ -18,6 +21,12 @@ export const makeMerchantOfRecord = ({
         ? ok({ url: `https://sandbox.polar.sh/checkout/polar_c_test?space=${checkout.spaceId}` })
         : err("unavailable");
     },
+    createPortal: async (portal) => {
+      portals.push(portal);
+      return available
+        ? ok({ url: `https://sandbox.polar.sh/dezyn/portal?customer=${portal.payerId}` })
+        : err("unavailable");
+    },
   };
-  return { checkouts, merchant };
+  return { checkouts, portals, merchant };
 };

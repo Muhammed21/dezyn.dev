@@ -120,6 +120,57 @@ describe("sortie de la lecture d'un espace, avec son stockage (ADR 0032)", () =>
   });
 });
 
+const makeSubscription = (overrides: Readonly<Record<string, unknown>> = {}) => ({
+  status: "active",
+  currentPeriodEnd: "2026-12-22T10:00:00.000Z",
+  payer: { name: "Ada Lovelace", email: "ada@dezyn.test", you: true },
+  ...overrides,
+});
+
+describe("sortie de l'abonnement d'un espace, lu par ses propriétaires (ADR 0050 §3)", () => {
+  it("lit le statut, la fin de la période en cours et le payeur", () => {
+    const read = makeSpace({ storage: makeStorage(), subscription: makeSubscription() });
+
+    expect(SpaceOutput.parse(read)).toEqual(read);
+  });
+
+  it("lit un espace sans abonnement", () => {
+    const read = makeSpace({ storage: makeStorage() });
+
+    expect(SpaceOutput.parse(read)).toEqual(read);
+  });
+
+  it("lit un abonnement sans fin de période", () => {
+    const read = makeSpace({
+      storage: makeStorage(),
+      subscription: makeSubscription({ currentPeriodEnd: null }),
+    });
+
+    expect(SpaceOutput.parse(read)).toEqual(read);
+  });
+
+  it("garde un statut ajouté plus tard par le serveur (ADR 0023 §2)", () => {
+    const later = makeSpace({
+      storage: makeStorage(),
+      subscription: makeSubscription({ status: "paused" }),
+    });
+
+    expect(SpaceOutput.parse(later)).toEqual(later);
+  });
+
+  it.each([
+    ["une fin de période qui n'est pas une date", { currentPeriodEnd: "le mois prochain" }],
+    ["un abonnement sans payeur", { payer: undefined }],
+    ["un payeur sans l'indication que c'est moi", { payer: { name: "Ada", email: "a@b.c" } }],
+  ])("refuse %s", (_case, subscription) => {
+    expect(
+      SpaceOutput.safeParse(
+        makeSpace({ storage: makeStorage(), subscription: makeSubscription(subscription) }),
+      ).success,
+    ).toBe(false);
+  });
+});
+
 describe("conventions de sortie de la liste de mes espaces (ADR 0023 §4)", () => {
   it("SpaceOutput les respecte", () => {
     expect(checkOutputSchema("SpaceOutput", SpaceOutput)).toEqual([]);

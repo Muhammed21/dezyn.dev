@@ -1,11 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import type { SubscriptionStatus } from "#modules/subscription/contracts/subscription-status.ts";
-
 import { allowedActionsOf, type Membership } from "../../domain/can.ts";
 import { spaceStorageOf } from "../../domain/storage-limit.ts";
 import { inMemoryMembershipReader } from "../membership-reader.fake.ts";
-import { readSpace } from "../read-space.ts";
+import { readSpace, type SpaceSubscription } from "../read-space.ts";
 
 const SPACE = {
   id: "6d1f0c2e-3a4b-4c5d-8e6f-7a8b9c0d1e2f",
@@ -24,16 +22,26 @@ const makeMembership = (overrides: Partial<Membership> = {}): Membership => ({
 
 const STORED_BYTES = 1_200_000;
 
+const PERIOD_END = new Date("2026-12-22T10:00:00.000Z");
+
+const makeSubscription = (overrides: Partial<SpaceSubscription> = {}): SpaceSubscription => ({
+  status: "active",
+  currentPeriodEnd: PERIOD_END,
+  payer: { id: ADA, name: "Ada Lovelace", email: "ada@dezyn.test" },
+  ...overrides,
+});
+
 const readWith = (
   memberships: readonly Membership[],
-  {
-    storedBytes = STORED_BYTES,
-    subscriptionStatus,
-  }: { readonly storedBytes?: number; readonly subscriptionStatus?: SubscriptionStatus } = {},
+  storedBytes = STORED_BYTES,
+  subscription?: SpaceSubscription,
 ) =>
   readSpace({
     memberships: inMemoryMembershipReader(memberships),
-    spaces: { find: async () => ({ ...SPACE, storedBytes, subscriptionStatus }) },
+    spaces: { find: async () => ({ ...SPACE, storedBytes }) },
+    subscriptions: {
+      subscriptionOf: async (spaceId) => (spaceId === SPACE.id ? subscription : undefined),
+    },
   });
 
 describe("lire un espace", () => {
@@ -54,7 +62,7 @@ describe("lire un espace", () => {
   it.each(["owner", "editor"] as const)(
     "rend au rôle %s le stockage de l'espace, sa limite et l'alerte à 80 % (ADR 0032)",
     async (role) => {
-      const read = readWith([makeMembership({ role })], { storedBytes: 16_000_000_000 });
+      const read = readWith([makeMembership({ role })], 16_000_000_000);
 
       const space = await read({ spaceId: SPACE.id, userId: ADA });
 
@@ -65,30 +73,6 @@ describe("lire un espace", () => {
       });
     },
   );
-
-  it("rend au propriétaire le statut de l'abonnement de l'espace (ADR 0050 §3)", async () => {
-    const read = readWith([makeMembership({ role: "owner" })], { subscriptionStatus: "past_due" });
-
-    const space = await read({ spaceId: SPACE.id, userId: ADA });
-
-    expect(space.ok && space.value.subscription).toEqual({ status: "past_due" });
-  });
-
-  it("ne rend pas l'abonnement de l'espace à un éditeur", async () => {
-    const read = readWith([makeMembership({ role: "editor" })], { subscriptionStatus: "past_due" });
-
-    const space = await read({ spaceId: SPACE.id, userId: ADA });
-
-    expect(space.ok && space.value).not.toHaveProperty("subscription");
-  });
-
-  it("ne rend aucun abonnement au propriétaire d'un espace qui n'en a pas", async () => {
-    const read = readWith([makeMembership({ role: "owner" })]);
-
-    const space = await read({ spaceId: SPACE.id, userId: ADA });
-
-    expect(space.ok && space.value).not.toHaveProperty("subscription");
-  });
 
   it("ne trouve pas l'espace pour un utilisateur qui n'en est pas membre", async () => {
     const read = readWith([makeMembership({ userId: ADA })]);
@@ -106,5 +90,63 @@ describe("lire un espace", () => {
       ok: false,
       error: "not_found",
     });
+  });
+});
+
+describe("lire l'abonnement d'un espace (ADR 0050 §3)", () => {
+  it("rend au payeur le statut, la fin de période et le payeur, qu'il voit être lui", async () => {
+    const read = readWith([makeMembership({ role: "owner" })], STORED_BYTES, makeSubscription());
+
+    const space = await read({ spaceId: SPACE.id, userId: ADA });
+
+    expect(space.ok && space.value.subscription).toEqual({
+      status: "active",
+      currentPeriodEnd: PERIOD_END,
+      payer: { name: "Ada Lovelace", email: "ada@dezyn.test", you: true },
+    });
+  });
+
+  it("rend à un autre propriétaire le payeur, qu'il voit ne pas être lui", async () => {
+    const read = readWith(
+      [makeMembership({ userId: GRACE, role: "owner" })],
+      STORED_BYTES,
+      makeSubscription(),
+    );
+
+    const space = await read({ spaceId: SPACE.id, userId: GRACE });
+
+    expect(space.ok && space.value.subscription?.payer).toEqual({
+      name: "Ada Lovelace",
+      email: "ada@dezyn.test",
+      you: false,
+    });
+  });
+
+  it("rend sans date un abonnement sans fin de période", async () => {
+    const read = readWith(
+      [makeMembership({ role: "owner" })],
+      STORED_BYTES,
+      makeSubscription({ currentPeriodEnd: undefined }),
+    );
+
+    const space = await read({ spaceId: SPACE.id, userId: ADA });
+
+    expect(space.ok && space.value.subscription?.currentPeriodEnd).toBeNull();
+  });
+
+  it("ne rend pas l'abonnement à un éditeur", async () => {
+    const read = readWith([makeMembership({ role: "editor" })], STORED_BYTES, makeSubscription());
+
+    const space = await read({ spaceId: SPACE.id, userId: ADA });
+
+    expect(space.ok && space.value).not.toHaveProperty("subscription");
+  });
+
+  it("ne rend pas d'abonnement à un espace qui n'en a pas", async () => {
+    const read = readWith([makeMembership({ role: "owner" })]);
+
+    const space = await read({ spaceId: SPACE.id, userId: ADA });
+
+    expect(space.ok && space.value).not.toHaveProperty("subscription");
   });
 });

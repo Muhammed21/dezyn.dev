@@ -30,6 +30,13 @@ describe("le statut d'un abonnement selon Polar (ADR 0050 §4)", () => {
   });
 
   it.each([false, true])(
+    "un abonnement annulé par Polar est terminé, résiliation en fin de période ou non (%s)",
+    (cancelAtPeriodEnd) => {
+      expect(subscriptionStatusOf({ status: "canceled", cancelAtPeriodEnd })).toBe("ended");
+    },
+  );
+
+  it.each([false, true])(
     "un abonnement en retard de paiement est en retard de paiement (résiliation : %s)",
     (cancelAtPeriodEnd) => {
       expect(subscriptionStatusOf({ status: "past_due", cancelAtPeriodEnd })).toBe("past_due");
@@ -95,6 +102,46 @@ describe("appliquer l'état d'un abonnement reçu de Polar (ADR 0050 §4)", () =
     const incoming = makeSubscription({ modifiedAt: secondsAfter(MODIFIED_AT, -1) });
 
     expect(subscriptionChangeOf({ stored, incoming, plan: "team" })).toEqual({ kind: "stale" });
+  });
+
+  it("un autre abonnement du même espace ne remplace pas celui enregistré, même plus récent", () => {
+    const stored = makeSubscription({ id: "polar-subscription-a" });
+    const incoming = makeSubscription({
+      id: "polar-subscription-b",
+      modifiedAt: secondsAfter(MODIFIED_AT, 60),
+    });
+
+    expect(subscriptionChangeOf({ stored, incoming, plan: "team" })).toEqual({
+      kind: "other_subscription",
+      storedId: "polar-subscription-a",
+    });
+  });
+
+  it("un autre abonnement plus ancien que celui enregistré est aussi un autre abonnement", () => {
+    const stored = makeSubscription({ id: "polar-subscription-a" });
+    const incoming = makeSubscription({
+      id: "polar-subscription-b",
+      modifiedAt: secondsAfter(MODIFIED_AT, -60),
+    });
+
+    expect(subscriptionChangeOf({ stored, incoming, plan: "team" })).toEqual({
+      kind: "other_subscription",
+      storedId: "polar-subscription-a",
+    });
+  });
+
+  it("un nouvel abonnement s'applique après un abonnement terminé, et repasse l'espace en Team", () => {
+    const stored = makeSubscription({ id: "polar-subscription-1", status: "ended" });
+    const incoming = makeSubscription({
+      id: "polar-subscription-2",
+      modifiedAt: secondsAfter(MODIFIED_AT, 60),
+    });
+
+    expect(subscriptionChangeOf({ stored, incoming, plan: "free" })).toEqual({
+      kind: "applied",
+      subscription: incoming,
+      planChange: { before: "free", after: "team" },
+    });
   });
 
   it("un état plus récent d'une seconde s'applique", () => {

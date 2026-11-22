@@ -14,13 +14,17 @@ import { err, ok, type Result } from "@repo/result";
 import type {
   Checkout,
   CheckoutFailure,
+  Portal,
+  PortalFailure,
   SpaceFailure,
+  SpaceSubscription,
   SpaceWithStorage,
 } from "../../domain/space.ts";
 import { spacePlanRoute } from "../space-plan-route.tsx";
 
 const SPACE_ID = "4f2a9c1e-7b3d-4e8a-9f10-2c5d6e7f8a9b";
 const CHECKOUT_URL = "https://sandbox.polar.sh/checkout/polar_c_1";
+const PORTAL_URL = "https://sandbox.polar.sh/dezyn/portal?customer_session_token=polar_cst_1";
 
 type ReadSpace = (space: {
   readonly spaceId: string;
@@ -28,6 +32,7 @@ type ReadSpace = (space: {
 type StartCheckout = (space: {
   readonly spaceId: string;
 }) => Promise<Result<Checkout, CheckoutFailure>>;
+type OpenPortal = (space: { readonly spaceId: string }) => Promise<Result<Portal, PortalFailure>>;
 
 const OWNER_RIGHTS = {
   role: "owner",
@@ -44,6 +49,20 @@ const makeSpace = (overrides: Partial<SpaceWithStorage> = {}): SpaceWithStorage 
   storage: { usedBytes: 0, limitBytes: 500_000_000, alertReached: false },
   ...overrides,
 });
+
+const makeSubscription = (overrides: Partial<SpaceSubscription> = {}): SpaceSubscription => ({
+  status: "active",
+  currentPeriodEnd: new Date("2026-12-22T10:00:00.000Z"),
+  payer: { name: "Ada Lovelace", email: "ada@dezyn.test", you: true },
+  ...overrides,
+});
+
+const PAID_BY_SOMEONE_ELSE = {
+  payer: { name: "Ada Lovelace", email: "ada@dezyn.test", you: false },
+} as const;
+
+const makeTeamSpace = (subscription: Partial<SpaceSubscription> = {}) =>
+  makeSpace({ plan: "team", subscription: makeSubscription(subscription) });
 
 const reading =
   (space: SpaceWithStorage): ReadSpace =>
@@ -65,6 +84,11 @@ const checkingOut =
   () =>
     Promise.resolve(ok({ url }));
 
+const openingPortal =
+  (url = PORTAL_URL): OpenPortal =>
+  () =>
+    Promise.resolve(ok({ url }));
+
 const QUICK_POLLING = { intervalMs: 20, timeoutMs: 200 };
 
 const OWNER_ONLY = "Seul un propriétaire de l'espace peut passer au plan Team.";
@@ -77,12 +101,14 @@ const pause = (ms: number) =>
 const renderPlan = ({
   readSpace = reading(makeSpace()),
   startCheckout = checkingOut(),
+  openPortal = openingPortal(),
   goTo = () => undefined,
   path = `/espaces/${SPACE_ID}/plan`,
   polling = QUICK_POLLING,
 }: {
   readonly readSpace?: ReadSpace;
   readonly startCheckout?: StartCheckout;
+  readonly openPortal?: OpenPortal;
   readonly goTo?: (url: string) => void;
   readonly path?: string;
   readonly polling?: { readonly intervalMs: number; readonly timeoutMs: number };
@@ -102,7 +128,7 @@ const renderPlan = ({
   });
   const router = createRouter({
     routeTree: root.addChildren([
-      spacePlanRoute({ parent: root, readSpace, startCheckout, goTo, polling }),
+      spacePlanRoute({ parent: root, readSpace, startCheckout, openPortal, goTo, polling }),
       spacePage,
       signIn,
     ]),
@@ -330,5 +356,131 @@ describe("retour du checkout sur la page « Plan » (spec #343, stories 5 et 6)"
     await pause(QUICK_POLLING.intervalMs * 5);
     expect(reads.count).toBe(1);
     expect(screen.getByRole("status").query()).toBeNull();
+  });
+});
+
+const manageButton = (screen: Screen) => screen.getByRole("button", { name: "Gérer l'abonnement" });
+
+describe("abonnement d'un espace Team sur la page « Plan » (ADR 0050 §3, spec #343)", () => {
+  it("montre au payeur la date du prochain renouvellement, et qu'il paie", async () => {
+    const screen = await renderPlan({ readSpace: reading(makeTeamSpace()) });
+
+    await expect
+      .element(screen.getByText("Prochain renouvellement le 22 décembre 2026."))
+      .toBeVisible();
+    await expect.element(screen.getByText("Vous payez cet abonnement.")).toBeVisible();
+    expect(screen.getByText(/prend fin/).query()).toBeNull();
+    expect(screen.getByRole("alert").query()).toBeNull();
+  });
+
+  it("ne montre pas de date pour un statut d'abonnement inconnu de l'app", async () => {
+    const screen = await renderPlan({ readSpace: reading(makeTeamSpace({ status: "unknown" })) });
+
+    await expect.element(screen.getByText("Vous payez cet abonnement.")).toBeVisible();
+    expect(screen.getByText(/Prochain renouvellement/).query()).toBeNull();
+    expect(screen.getByText(/prend fin/).query()).toBeNull();
+  });
+
+  it("envoie le payeur vers le portail client de Polar", async () => {
+    const asked: string[] = [];
+    const visited: string[] = [];
+    const screen = await renderPlan({
+      readSpace: reading(makeTeamSpace()),
+      openPortal: ({ spaceId }) => {
+        asked.push(spaceId);
+        return openingPortal()({ spaceId });
+      },
+      goTo: (url) => visited.push(url),
+    });
+
+    await manageButton(screen).click();
+
+    await expect.poll(() => visited).toEqual([PORTAL_URL]);
+    expect(asked).toEqual([SPACE_ID]);
+  });
+
+  it("désactive le bouton pendant l'ouverture du portail", async () => {
+    const screen = await renderPlan({
+      readSpace: reading(makeTeamSpace()),
+      openPortal: () => new Promise(() => {}),
+    });
+
+    await manageButton(screen).click();
+
+    await expect.element(manageButton(screen)).toBeDisabled();
+  });
+
+  it("montre à un autre propriétaire qui paie, sans lui ouvrir le portail", async () => {
+    const screen = await renderPlan({ readSpace: reading(makeTeamSpace(PAID_BY_SOMEONE_ELSE)) });
+
+    await expect.element(screen.getByText("Payé par Ada Lovelace (ada@dezyn.test).")).toBeVisible();
+    await expect
+      .element(screen.getByText("Prochain renouvellement le 22 décembre 2026."))
+      .toBeVisible();
+    await expect.element(manageButton(screen)).not.toBeInTheDocument();
+  });
+
+  it("montre la date de fin d'un abonnement résilié, sans date de renouvellement", async () => {
+    const screen = await renderPlan({ readSpace: reading(makeTeamSpace({ status: "canceling" })) });
+
+    await expect
+      .element(screen.getByText("Abonnement résilié : le plan Team prend fin le 22 décembre 2026."))
+      .toBeVisible();
+    expect(screen.getByText(/Prochain renouvellement/).query()).toBeNull();
+    await expect.element(manageButton(screen)).toBeVisible();
+  });
+
+  it("ne montre aucune date pour un abonnement sans fin de période", async () => {
+    const screen = await renderPlan({
+      readSpace: reading(makeTeamSpace({ currentPeriodEnd: undefined })),
+    });
+
+    await expect.element(screen.getByText("Vous payez cet abonnement.")).toBeVisible();
+    expect(screen.getByText(/Prochain renouvellement/).query()).toBeNull();
+    expect(screen.getByText(/prend fin/).query()).toBeNull();
+  });
+
+  it("ne montre ni payeur ni portail pour un abonnement terminé, et propose de repasser Team", async () => {
+    const screen = await renderPlan({
+      readSpace: reading(
+        makeSpace({ plan: "free", subscription: makeSubscription({ status: "ended" }) }),
+      ),
+    });
+
+    await expect.element(upgradeButton(screen)).toBeVisible();
+    expect(screen.getByText("Vous payez cet abonnement.").query()).toBeNull();
+    expect(screen.getByText(/Prochain renouvellement/).query()).toBeNull();
+    await expect.element(manageButton(screen)).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["forbidden", "Seul le payeur de l'abonnement peut le gérer."],
+    ["not_found", "Cet espace est introuvable."],
+    ["unavailable", "Le portail de paiement est indisponible pour le moment."],
+    ["invalid_response", "Le portail de paiement est indisponible pour le moment."],
+  ] as const)("annonce l'échec %s du portail, sans quitter la page", async (failure, message) => {
+    const visited: string[] = [];
+    const screen = await renderPlan({
+      readSpace: reading(makeTeamSpace()),
+      openPortal: () => Promise.resolve(err(failure)),
+      goTo: (url) => visited.push(url),
+    });
+
+    await manageButton(screen).click();
+
+    await expect.element(screen.getByRole("alert")).toHaveTextContent(message);
+    await expect.element(manageButton(screen)).toBeEnabled();
+    expect(visited).toEqual([]);
+  });
+
+  it("renvoie vers la connexion quand le portail trouve la session expirée", async () => {
+    const screen = await renderPlan({
+      readSpace: reading(makeTeamSpace()),
+      openPortal: () => Promise.resolve(err("unauthenticated")),
+    });
+
+    await manageButton(screen).click();
+
+    await expect.element(screen.getByText("Page de connexion")).toBeVisible();
   });
 });
