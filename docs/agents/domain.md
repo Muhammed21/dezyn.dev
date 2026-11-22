@@ -41,6 +41,9 @@ Le code est en anglais. Chaque terme du glossaire y a une seule traduction, cell
 | Membre                  | `member`               | `collaborator`, `user` (pour le rôle) |
 | Propriétaire            | `owner`                | `admin`                               |
 | Éditeur                 | `editor`               | `contributor`, `designer`             |
+| Abonnement              | `subscription`         | `license`, `billing` (seul)           |
+| Payeur                  | `payer`                | `customer`, `buyer`, `owner`          |
+| Espace gelé             | `frozen` (d'un espace) | `suspended`, `locked`, `archived`     |
 | Projet                  | `project`              | `designSystem`                        |
 | Token                   | `token`                | `variable`, `style`                   |
 | Mode                    | `mode`                 | `theme`, `context`                    |

@@ -317,18 +317,19 @@ set_preview_var POLAR_TEAM_PRODUCT_ID "$POLAR_TEAM_PRODUCT_ID"
 pause
 
 stage "Webhook vers l'API de preview"
-say "La route de webhook du plugin Polar est /polar/webhooks sous la base de better-auth, /auth."
+say "L'API reçoit les webhooks de Polar sur sa route /webhooks/polar (ADR 0050)."
 say "Chaque preview a sa propre base : le webhook vise la preview de la PR qui teste le paiement."
 ask POLAR_WEBHOOK_PR "Numéro de la PR dont la preview reçoit les webhooks :"
 until [[ "$POLAR_WEBHOOK_PR" =~ ^[1-9][0-9]*$ ]]; do
   warn "un numéro de PR, par exemple 346"
   ask POLAR_WEBHOOK_PR "Numéro de la PR dont la preview reçoit les webhooks :"
 done
-webhook_url="https://pr-$POLAR_WEBHOOK_PR-api-preview.dezyn.dev/auth/polar/webhooks"
+webhook_url="https://pr-$POLAR_WEBHOOK_PR-api-preview.dezyn.dev/webhooks/polar"
 open_url "$POLAR_SANDBOX_DASHBOARD/dashboard"
 step "Settings → Webhooks → Add Endpoint."
 step "URL : $webhook_url"
 step "Format : Raw."
+step "Version d'API : 2027-01."
 step "Secret : le laisser générer par Polar."
 step "Événements : subscription.created, subscription.updated, subscription.active,"
 step "subscription.canceled, subscription.uncanceled, subscription.revoked, subscription.past_due."

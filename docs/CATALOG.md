@@ -69,11 +69,13 @@ Chaque page de `docs/`, une ligne chacune : titre, [mode](README.md#carte), stat
 - [0047 — Les tests visuels de l'app web capturent dans le Chromium de l'image Docker de Playwright](adr/0047-les-tests-visuels-de-l-app-web-capturent-dans-le-chromium-de-l-image-docker-de-playwright.md) — _explanation · Accepté_ — Où tourne le navigateur des tests visuels, pour qu'une capture soit la même sur macOS et dans la CI Linux ?
 - [0048 — `history_maintainer` purge aussi les clés d'idempotence de plus de 24 heures](adr/0048-history-maintainer-purge-aussi-les-cles-d-idempotence-de-plus-de-24-heures.md) — _explanation · Accepté_ — Quel rôle supprime les clés d'idempotence de plus de 24 heures, et avec quels droits ?
 - [0049 — Une entrée d'historique porte sa taille, et le Worker de purge a 10 secondes par requête](adr/0049-une-entree-d-historique-porte-sa-taille-et-le-worker-de-purge-a-10-secondes-par-requete.md) — _explanation · Accepté_ — Comment la purge retire-t-elle la taille d'un lot d'entrées de 1 Mo sans relire les entrées, et quel délai a chacune de ses requêtes ?
+- [0050 — Polar en Merchant of Record, un abonnement par espace, et un espace gelé sans perte au retour en Free](adr/0050-polar-en-merchant-of-record-un-abonnement-par-espace-et-un-espace-gele-sans-perte-au-retour-en-free.md) — _explanation · Accepté_ — Par quel prestataire et sous quelle forme un espace souscrit-il au plan Team, et que devient un espace qui redevient Free au-dessus des limites Free ?
 - [Décisions d'architecture](adr/README.md) — _explanation_ — Format et circuit : voir `.claude/rules/adr-et-spikes.md`.
 
 ## Spikes — recherche bornée
 
 - [Spike — seuil par défaut de la régression visuelle](spikes/2026-10-14-seuil-de-regression-visuelle.md) — _explanation_ — Le seuil par défaut de l'ADR 0005 (tolérance de couleur 0,1 par pixel, échec au-delà de 0,1 % de pixels différents) laisse-t-il passer le bruit de rendu entre la plateforme et le…
+- [Spike — Polar dans le Worker de l'API](spikes/2026-11-22-polar-dans-le-worker-de-l-api.md) — _explanation_ — Le SDK Polar et le plugin `@polar-sh/better-auth` tournent-ils dans le Worker de l'API (workerd, `nodejs_compat`) pour créer un checkout sandbox du produit Team qui porte…
 
 ## agents
 
