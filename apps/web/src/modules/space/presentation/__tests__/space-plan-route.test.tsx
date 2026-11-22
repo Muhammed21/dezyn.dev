@@ -361,6 +361,9 @@ describe("retour du checkout sur la page « Plan » (spec #343, stories 5 et 6)"
 
 const manageButton = (screen: Screen) => screen.getByRole("button", { name: "Gérer l'abonnement" });
 
+const invoicesButton = (screen: Screen) =>
+  screen.getByRole("button", { name: "Voir mes factures" });
+
 describe("abonnement d'un espace Team sur la page « Plan » (ADR 0050 §3, spec #343)", () => {
   it("montre au payeur la date du prochain renouvellement, et qu'il paie", async () => {
     const screen = await renderPlan({ readSpace: reading(makeTeamSpace()) });
@@ -413,6 +416,8 @@ describe("abonnement d'un espace Team sur la page « Plan » (ADR 0050 §3, spec
   it("montre à un autre propriétaire qui paie, sans lui ouvrir le portail", async () => {
     const screen = await renderPlan({ readSpace: reading(makeTeamSpace(PAID_BY_SOMEONE_ELSE)) });
 
+    await expect.element(invoicesButton(screen)).not.toBeInTheDocument();
+
     await expect.element(screen.getByText("Payé par Ada Lovelace (ada@dezyn.test).")).toBeVisible();
     await expect
       .element(screen.getByText("Prochain renouvellement le 22 décembre 2026."))
@@ -440,17 +445,43 @@ describe("abonnement d'un espace Team sur la page « Plan » (ADR 0050 §3, spec
     expect(screen.getByText(/prend fin/).query()).toBeNull();
   });
 
-  it("ne montre ni payeur ni portail pour un abonnement terminé, et propose de repasser Team", async () => {
+  it("montre à l'ancien payeur d'un abonnement terminé ses factures, sans payeur ni date, et propose de repasser Team", async () => {
+    const asked: string[] = [];
+    const visited: string[] = [];
     const screen = await renderPlan({
       readSpace: reading(
         makeSpace({ plan: "free", subscription: makeSubscription({ status: "ended" }) }),
       ),
+      openPortal: ({ spaceId }) => {
+        asked.push(spaceId);
+        return openingPortal()({ spaceId });
+      },
+      goTo: (url) => visited.push(url),
     });
 
     await expect.element(upgradeButton(screen)).toBeVisible();
     expect(screen.getByText("Vous payez cet abonnement.").query()).toBeNull();
     expect(screen.getByText(/Prochain renouvellement/).query()).toBeNull();
     await expect.element(manageButton(screen)).not.toBeInTheDocument();
+    await invoicesButton(screen).click();
+
+    await expect.poll(() => visited).toEqual([PORTAL_URL]);
+    expect(asked).toEqual([SPACE_ID]);
+  });
+
+  it("ne montre rien d'un abonnement terminé aux autres propriétaires", async () => {
+    const screen = await renderPlan({
+      readSpace: reading(
+        makeSpace({
+          plan: "free",
+          subscription: makeSubscription({ status: "ended", ...PAID_BY_SOMEONE_ELSE }),
+        }),
+      ),
+    });
+
+    await expect.element(upgradeButton(screen)).toBeVisible();
+    expect(screen.getByText(/Payé par/).query()).toBeNull();
+    await expect.element(invoicesButton(screen)).not.toBeInTheDocument();
   });
 
   it.each([

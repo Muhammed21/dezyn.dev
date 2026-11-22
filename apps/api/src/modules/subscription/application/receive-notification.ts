@@ -1,4 +1,4 @@
-import type { Plan } from "#modules/space/contracts/plan.ts";
+import type { Plan, SpaceUsage } from "#modules/space/contracts/plan.ts";
 import type { LogSink } from "#platform/logging.ts";
 import { Uuid } from "@repo/contracts";
 import { err, ok, type Result } from "@repo/result";
@@ -27,6 +27,7 @@ const HANDLED_EVENTS: ReadonlySet<string> = new Set([
 export interface SubscriptionStore {
   lockSpace(spaceId: string): Promise<Plan | undefined>;
   isUser(userId: string): Promise<boolean>;
+  usageOf(spaceId: string): Promise<SpaceUsage>;
   subscriptionOf(spaceId: string): Promise<SpaceSubscription | undefined>;
   save(change: {
     readonly spaceId: string;
@@ -46,7 +47,9 @@ export interface SubscriptionUnitOfWork {
 }
 
 type Recorded =
-  | { readonly kind: "applied" | "stale" | "unknown_space" | "unknown_payer" }
+  | {
+      readonly kind: "applied" | "stale" | "above_free_limits" | "unknown_space" | "unknown_payer";
+    }
   | { readonly kind: "other_subscription"; readonly storedId: string };
 
 const recordEvent = ({
@@ -74,11 +77,15 @@ const recordEvent = ({
       stored: await store.subscriptionOf(spaceId),
       incoming: subscription,
       plan,
+      usage: await store.usageOf(spaceId),
     });
-    if (change.kind !== "applied") {
+    if (change.kind === "stale" || change.kind === "other_subscription") {
       return change;
     }
     await store.save({ spaceId, subscription: change.subscription });
+    if (change.kind === "above_free_limits") {
+      return { kind: "above_free_limits" };
+    }
     if (change.planChange !== undefined) {
       await store.changePlan({
         spaceId,
@@ -145,6 +152,14 @@ const handleSubscriptionEvent = async ({
   }
   if (recorded.kind === "unknown_payer") {
     log({ level: "warn", msg: "polar event for an unknown payer", ...details, spaceId });
+  }
+  if (recorded.kind === "above_free_limits") {
+    log({
+      level: "warn",
+      msg: "polar subscription ended above the free limits, freeze pending",
+      ...details,
+      spaceId,
+    });
   }
   if (recorded.kind === "other_subscription") {
     log({
