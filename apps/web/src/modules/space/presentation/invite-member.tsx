@@ -1,5 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
-import { Navigate } from "@tanstack/react-router";
+import { Link, Navigate } from "@tanstack/react-router";
 import { type SubmitEvent, useState } from "react";
 
 import type { Result } from "@repo/result";
@@ -25,8 +25,10 @@ const INVITATION_MESSAGES: Readonly<Record<Exclude<InvitationFailure, "unauthent
   };
 
 const InvitationOutcome = ({
+  spaceId,
   result,
 }: {
+  readonly spaceId: string;
   readonly result: Result<SentInvitation, InvitationFailure>;
 }) => {
   if (result.ok) {
@@ -35,7 +37,17 @@ const InvitationOutcome = ({
   return result.error === "unauthenticated" ? (
     <Navigate to="/connexion" />
   ) : (
-    <p role="alert">{INVITATION_MESSAGES[result.error]}</p>
+    <p role="alert">
+      {INVITATION_MESSAGES[result.error]}
+      {result.error === "plan_required" && (
+        <>
+          {" "}
+          <Link to="/espaces/$spaceId/plan" params={{ spaceId }}>
+            Passer au plan Team
+          </Link>
+        </>
+      )}
+    </p>
   );
 };
 
@@ -75,7 +87,7 @@ export const inviteMemberForm = ({ inviteMember }: { readonly inviteMember: Invi
             Inviter
           </button>
         </form>
-        {!isPending && data !== undefined && <InvitationOutcome result={data} />}
+        {!isPending && data !== undefined && <InvitationOutcome spaceId={spaceId} result={data} />}
       </section>
     );
   };

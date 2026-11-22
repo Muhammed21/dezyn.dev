@@ -5,6 +5,7 @@ import type { ProjectUseCases } from "#modules/project/application/project-use-c
 import type { ProposalUseCases } from "#modules/proposal/application/proposal-use-cases.ts";
 import type { SpaceUseCases } from "#modules/space/application/spaces.ts";
 import type { ProjectAccess } from "#modules/space/contracts/membership.ts";
+import type { SubscriptionUseCases } from "#modules/subscription/application/subscription-use-cases.ts";
 import type { TokenUseCases } from "#modules/token/application/token-use-cases.ts";
 import type { Database } from "#platform/database.ts";
 import type { Idempotent } from "#platform/idempotency.ts";
@@ -42,6 +43,11 @@ export const makeSpaces = (): SpaceUseCases => ({
   leaveSpace: () => Promise.resolve(err("not_found")),
   changeRole: () => Promise.resolve(err("not_found")),
   removeMember: () => Promise.resolve(err("not_found")),
+});
+
+export const makeSubscriptions = (): SubscriptionUseCases => ({
+  startCheckout: () => Promise.resolve(err("not_found")),
+  receiveNotification: () => Promise.resolve(err("unavailable")),
 });
 
 export const makeProjects = (): ProjectUseCases => ({
@@ -97,6 +103,7 @@ export const makeApp = ({
     auth,
     log: (record) => records.push(record),
     spaces: makeSpaces(),
+    subscriptions: makeSubscriptions(),
     projects: makeProjects(),
     history: makeHistory(),
     tokens: makeTokens(),

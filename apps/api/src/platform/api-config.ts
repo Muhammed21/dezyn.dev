@@ -76,6 +76,54 @@ const WorkerEnv = z
     error: MISSING,
   });
 
+const POLAR_VARIABLES = [
+  "POLAR_ACCESS_TOKEN",
+  "POLAR_WEBHOOK_SECRET",
+  "POLAR_TEAM_PRODUCT_ID",
+  "POLAR_SERVER",
+] as const;
+
+const blankAsMissing = (value: unknown) => (value === "" ? undefined : value);
+
+const PolarPresence = z.object(
+  Object.fromEntries(
+    POLAR_VARIABLES.map((name) => [name, z.preprocess(blankAsMissing, z.unknown())]),
+  ),
+);
+
+const PolarEnv = z.object({
+  POLAR_ACCESS_TOKEN: text(),
+  POLAR_WEBHOOK_SECRET: text(),
+  POLAR_TEAM_PRODUCT_ID: z.string({ error: MISSING }).pipe(z.uuid({ error: "UUID attendu" })),
+  POLAR_SERVER: z.enum(["sandbox", "production"], {
+    error: (issue) => (issue.input === undefined ? MISSING : "sandbox ou production attendu"),
+  }),
+});
+
+export type PolarConfig = {
+  readonly accessToken: string;
+  readonly webhookSecret: string;
+  readonly teamProductId: string;
+  readonly server: "sandbox" | "production";
+};
+
+const polarConfigOf = (env: unknown): Result<PolarConfig | undefined, readonly string[]> => {
+  const present = PolarPresence.catch({}).parse(env);
+  if (Object.values(present).every((value) => value === undefined)) {
+    return ok(undefined);
+  }
+  const parsed = PolarEnv.safeParse(present);
+  if (!parsed.success) {
+    return err(issuesOf(parsed.error));
+  }
+  return ok({
+    accessToken: parsed.data.POLAR_ACCESS_TOKEN,
+    webhookSecret: parsed.data.POLAR_WEBHOOK_SECRET,
+    teamProductId: parsed.data.POLAR_TEAM_PRODUCT_ID,
+    server: parsed.data.POLAR_SERVER,
+  });
+};
+
 const issuesOf = (error: z.ZodError): readonly string[] =>
   error.issues.map(({ path, message }) => `${String(path[0])} : ${message}`);
 
@@ -117,12 +165,12 @@ const versionedSecretsOf = (env: unknown): Result<readonly AuthSecret[], readonl
 
 export type AuthSecret = { readonly version: number; readonly value: string };
 
-const issuesOfBoth = (
+const issuesOfAll = (
   parsed: { readonly success: true } | { readonly success: false; readonly error: z.ZodError },
-  secrets: Result<readonly AuthSecret[], readonly string[]>,
+  ...others: readonly Result<unknown, readonly string[]>[]
 ): readonly string[] => [
   ...(parsed.success ? [] : issuesOf(parsed.error)),
-  ...(secrets.ok ? [] : secrets.error),
+  ...others.flatMap((other) => (other.ok ? [] : other.error)),
 ];
 
 export type ApiConfig = {
@@ -134,6 +182,7 @@ export type ApiConfig = {
   readonly smtp: { readonly host: string; readonly port: number; readonly from: string };
   readonly webUrl: string;
   readonly port: number;
+  readonly polar?: PolarConfig;
 };
 
 export const readApiConfig = (
@@ -141,8 +190,9 @@ export const readApiConfig = (
 ): Result<ApiConfig, readonly string[]> => {
   const parsed = ApiEnv.safeParse(env);
   const secrets = versionedSecretsOf(env);
-  if (!parsed.success || !secrets.ok) {
-    return err(issuesOfBoth(parsed, secrets));
+  const polar = polarConfigOf(env);
+  if (!parsed.success || !secrets.ok || !polar.ok) {
+    return err(issuesOfAll(parsed, secrets, polar));
   }
   const { data } = parsed;
   return ok({
@@ -154,6 +204,7 @@ export const readApiConfig = (
     smtp: { host: data.SMTP_HOST, port: data.SMTP_PORT, from: data.MAIL_FROM },
     webUrl: data.WEB_URL,
     port: data.PORT,
+    ...(polar.value === undefined ? {} : { polar: polar.value }),
   });
 };
 
@@ -166,8 +217,9 @@ export type WorkerConfig = Omit<ApiConfig, "smtp" | "port"> & {
 export const readWorkerConfig = (bindings: unknown): Result<WorkerConfig, readonly string[]> => {
   const parsed = WorkerEnv.safeParse(bindings);
   const secrets = versionedSecretsOf(bindings);
-  if (!parsed.success || !secrets.ok) {
-    return err(issuesOfBoth(parsed, secrets));
+  const polar = polarConfigOf(bindings);
+  if (!parsed.success || !secrets.ok || !polar.ok) {
+    return err(issuesOfAll(parsed, secrets, polar));
   }
   const { data } = parsed;
   return ok({
@@ -182,6 +234,7 @@ export const readWorkerConfig = (bindings: unknown): Result<WorkerConfig, readon
       : {}),
     ...(data.EMAIL_DELIVERY ? { emailDelivery: data.EMAIL_DELIVERY } : {}),
     ...(data.PROJECT_ROOMS ? { projectRooms: data.PROJECT_ROOMS } : {}),
+    ...(polar.value === undefined ? {} : { polar: polar.value }),
   });
 };
 

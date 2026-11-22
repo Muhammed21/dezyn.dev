@@ -3,7 +3,8 @@ import { createApp } from "#create-app";
 import type { PostgresDatabase } from "#db";
 import { createIdentityAuth } from "#modules/identity/infrastructure/better-auth.ts";
 import { durableObjectRooms, type ProjectRooms } from "#modules/project/project-module.ts";
-import type { AuthSecret } from "#platform/api-config.ts";
+import { polarBilling } from "#modules/subscription/subscription-module.ts";
+import type { AuthSecret, PolarConfig } from "#platform/api-config.ts";
 import type { LogSink } from "#platform/logging.ts";
 import type { Mailer } from "#platform/mailer.ts";
 
@@ -17,6 +18,7 @@ export const buildApi = async ({
   trustedIpHeader,
   webUrl,
   projectRooms,
+  polar,
 }: {
   readonly db: PostgresDatabase;
   readonly mailer: Mailer;
@@ -27,12 +29,14 @@ export const buildApi = async ({
   readonly trustedIpHeader: string;
   readonly webUrl: string;
   readonly projectRooms?: ProjectRooms;
+  readonly polar?: PolarConfig;
 }) => {
   const modules = composeModules({
     db,
     mailer,
     webUrl,
     log,
+    ...(polar === undefined ? {} : { billing: polarBilling({ polar, log }) }),
     ...(projectRooms === undefined ? {} : durableObjectRooms(projectRooms)),
   });
   const auth = await createIdentityAuth({

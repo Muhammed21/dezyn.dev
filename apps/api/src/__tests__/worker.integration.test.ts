@@ -13,6 +13,11 @@ import {
   WEB_URL,
 } from "#testing/authorization-flow.ts";
 import { httpApp } from "#testing/http-app.ts";
+import {
+  makeSubscriptionEvent,
+  postPolarWebhook,
+  WEBHOOK_SECRET,
+} from "#testing/subscription-fixtures.ts";
 import { makeColorToken } from "#testing/token-fixtures.ts";
 import { migrate } from "@repo/db";
 import { withThrowawayDatabase } from "@repo/db/testing";
@@ -42,6 +47,13 @@ const jsonLines = (messages: readonly string[]): readonly unknown[] =>
 const withWorker = async (
   databaseUrl: string,
   run: (worker: App, logs: () => readonly string[], url: URL) => Promise<void>,
+  {
+    vars = {},
+    secrets = {},
+  }: {
+    readonly vars?: Readonly<Record<string, string>>;
+    readonly secrets?: Readonly<Record<string, string>>;
+  } = {},
 ) => {
   process.env[HYPERDRIVE_LOCAL] = databaseUrl;
   const worker = createTestHarness({
@@ -49,8 +61,8 @@ const withWorker = async (
     workers: [
       {
         configPath: "./wrangler.jsonc",
-        vars: { BETTER_AUTH_URL: BASE_URL, WEB_URL, TRUSTED_IP_HEADER: "x-forwarded-for" },
-        secrets: { BETTER_AUTH_SECRET: "secret-de-test-de-32-caracteres-au-moins" },
+        vars: { BETTER_AUTH_URL: BASE_URL, WEB_URL, TRUSTED_IP_HEADER: "x-forwarded-for", ...vars },
+        secrets: { BETTER_AUTH_SECRET: "secret-de-test-de-32-caracteres-au-moins", ...secrets },
       },
       { configPath: "../realtime/wrangler.jsonc" },
     ],
@@ -242,5 +254,49 @@ describe("le Worker de production", () => {
         });
       }),
     90_000,
+  );
+
+  it(
+    "vérifie dans workerd la signature d'un webhook Polar et passe l'espace en Team",
+    () =>
+      withThrowawayDatabase(async ({ migratorUrl, appUrl }) => {
+        await migrate({ connectionString: migratorUrl });
+
+        await withWorker(
+          appUrl,
+          async (worker) => {
+            const { accessToken, userId } = await obtainAccessToken(worker);
+            const authorization = `Bearer ${accessToken}`;
+            const listed = await worker.request(`${BASE_URL}/v1/spaces`, {
+              headers: { authorization },
+            });
+            const {
+              spaces: [space],
+            } = await listed.json();
+            const event = makeSubscriptionEvent({ spaceId: space.id, payerId: userId });
+
+            const forged = await postPolarWebhook(worker, { event, key: Buffer.from("autre") });
+            const signed = await postPolarWebhook(worker, { event });
+
+            expect(forged.status).toBe(401);
+            expect(signed.status).toBe(200);
+            const spaces = await worker.request(`${BASE_URL}/v1/spaces`, {
+              headers: { authorization },
+            });
+            expect(await spaces.json()).toMatchObject({ spaces: [{ plan: "team" }] });
+          },
+          {
+            vars: {
+              POLAR_TEAM_PRODUCT_ID: "5c4b3a29-1807-4f6e-9d5c-4b3a29180706",
+              POLAR_SERVER: "sandbox",
+            },
+            secrets: {
+              POLAR_ACCESS_TOKEN: "jeton-polar-de-test",
+              POLAR_WEBHOOK_SECRET: WEBHOOK_SECRET,
+            },
+          },
+        );
+      }),
+    60_000,
   );
 });

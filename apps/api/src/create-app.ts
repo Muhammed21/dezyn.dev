@@ -24,6 +24,11 @@ import type { Action, ProjectAccess } from "#modules/space/contracts/membership.
 import { invitationsRoutes } from "#modules/space/presentation/invitations-routes.ts";
 import { registerListSpaces } from "#modules/space/presentation/list-spaces-tool.ts";
 import { spacesRoutes } from "#modules/space/presentation/spaces-routes.ts";
+import type { SubscriptionUseCases } from "#modules/subscription/application/subscription-use-cases.ts";
+import {
+  checkoutRoutes,
+  polarWebhookRoutes,
+} from "#modules/subscription/presentation/subscription-routes.ts";
 import type { TokenUseCases } from "#modules/token/application/token-use-cases.ts";
 import { registerDeclareFigmaStates } from "#modules/token/presentation/declare-figma-states-tool.ts";
 import { registerExportTokens } from "#modules/token/presentation/export-tokens-tool.ts";
@@ -100,6 +105,7 @@ export const createApp = ({
   auth,
   log,
   spaces,
+  subscriptions,
   projects,
   history,
   tokens,
@@ -112,6 +118,7 @@ export const createApp = ({
   readonly auth: Auth;
   readonly log: LogSink;
   readonly spaces: SpaceUseCases;
+  readonly subscriptions: SubscriptionUseCases;
   readonly projects: ProjectUseCases;
   readonly history: HistoryUseCases;
   readonly tokens: TokenUseCases;
@@ -203,6 +210,7 @@ export const createApp = ({
     idempotentRequest({ idempotent, replayable: allowedInSpace(spaces, "member.invite") }),
   );
   v1.route("/spaces", spacesRoutes(spaces));
+  v1.route("/spaces", checkoutRoutes(subscriptions));
   v1.route("/spaces", projectsRoutes(projects));
   v1.use("/projects/:projectId/events", requireWebOrigin(webUrl));
   v1.route("/projects", projectRoutes(projects));
@@ -247,6 +255,7 @@ export const createApp = ({
     idempotentRequest({ idempotent, replayable: memberOfInvitedSpace(spaces) }),
   );
   v1.route("/invitations", invitationsRoutes(spaces));
+  app.route("/webhooks/polar", polarWebhookRoutes(subscriptions));
   app.route("/v1/mcp", mcp);
   app.route("/v1", v1);
   app.get("/.well-known/oauth-authorization-server", (c) =>

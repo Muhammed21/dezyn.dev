@@ -2,7 +2,9 @@ import type { z } from "zod";
 
 import {
   AlreadyMemberProblem,
+  AlreadyTeamProblem,
   ChangedRoleOutput,
+  CheckoutOutput,
   EmailMismatchProblem,
   LastOwnerProblem,
   MembersOutput,
@@ -34,6 +36,7 @@ import {
 import type { SpaceGateway } from "../application/space-gateway.ts";
 import {
   type AcceptanceFailure,
+  type CheckoutFailure,
   type InvitationFailure,
   knownActionsOf,
   planOf,
@@ -131,6 +134,22 @@ const removalRefusalOf: (response: Response) => Promise<RemovalFailure> = member
   conflictProblem: SelfRemovalProblem,
   conflict: "self_removal",
 });
+
+const checkoutRefusalOf = async (response: Response): Promise<CheckoutFailure> => {
+  if (response.status === UNAUTHORIZED) {
+    return "unauthenticated";
+  }
+  if (response.status === NOT_FOUND) {
+    return "not_found";
+  }
+  if (response.status === FORBIDDEN) {
+    return "forbidden";
+  }
+  if (response.status === CONFLICT) {
+    return (await parseJson(response, AlreadyTeamProblem)).ok ? "already_team" : "invalid_response";
+  }
+  return failureOf(response);
+};
 
 export const createHttpSpaceGateway = ({
   apiUrl,
@@ -259,6 +278,18 @@ export const createHttpSpaceGateway = ({
     }
     const body = await parseJson(response, ChangedRoleOutput);
     return body.ok ? ok({ userId: body.value.userId, role: roleOf(body.value.role) }) : body;
+  },
+  startCheckout: async ({ spaceId }) => {
+    const sent = await send(fetch, `${apiUrl}/v1/spaces/${spaceId}/checkout`, { method: "POST" });
+    if (!sent.ok) {
+      return sent;
+    }
+    const response = sent.value;
+    if (response.status !== CREATED) {
+      return err(await checkoutRefusalOf(response));
+    }
+    const body = await parseJson(response, CheckoutOutput);
+    return body.ok ? ok({ url: body.value.url }) : body;
   },
   removeMember: async ({ spaceId, memberId }) => {
     const sent = await send(fetch, `${apiUrl}/v1/spaces/${spaceId}/members/${memberId}`, {

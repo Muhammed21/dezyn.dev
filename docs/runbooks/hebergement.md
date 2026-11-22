@@ -163,7 +163,7 @@ npx neonctl@2.47.0 branches delete pr-<N> --project-id <projet>
 pnpm polar:sandbox
 ```
 
-Le wizard guide la création de l'organisation sandbox, du produit Team (mensuel, 34,99 € HT), du jeton d'accès et du webhook, puis écrit les valeurs dans `.env` et dans l'environnement GitHub `preview`. Leur passage au Worker de preview par `preview.yml` arrive avec le paiement du plan Team (#346). Le webhook vise `https://pr-<N>-api-preview.dezyn.dev/webhooks/polar` (ADR 0050), en version d'API 2027-01, la preview de la PR qui teste le paiement ; pour une autre PR, modifier l'URL de l'endpoint dans Polar, son secret ne change pas.
+Le wizard guide la création de l'organisation sandbox, du produit Team (mensuel, 34,99 € HT), du jeton d'accès et du webhook, puis écrit les valeurs dans `.env` et dans l'environnement GitHub `preview`. `preview.yml` les passe au Worker de preview : les deux secrets par `--secrets-file`, l'identifiant du produit et l'environnement par `--var`. Le webhook vise `https://pr-<N>-api-preview.dezyn.dev/webhooks/polar` (ADR 0050), en version d'API 2027-01, la preview de la PR qui teste le paiement ; pour une autre PR, modifier l'URL de l'endpoint dans Polar, son secret ne change pas.
 
 ## 7. Vérifier
 

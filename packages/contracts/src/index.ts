@@ -10,6 +10,7 @@ export {
 } from "./space/my-spaces.ts";
 export { CreatedProjectOutput, CreateProjectInput } from "./project/create-project.ts";
 export { PlanRequiredProblem } from "./space/plan-required.ts";
+export { AlreadyTeamProblem, CheckoutOutput } from "./subscription/checkout.ts";
 export {
   AlreadyMemberProblem,
   ChangedRoleOutput,

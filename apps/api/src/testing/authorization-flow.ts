@@ -7,6 +7,7 @@ import type { HistoryWriter } from "#modules/history/contracts/history-writer.ts
 import { createIdentityAuth } from "#modules/identity/infrastructure/better-auth.ts";
 import type { ProjectChannel } from "#modules/project/contracts/project-channel.ts";
 import type { ProjectSignals } from "#modules/project/contracts/project-signals.ts";
+import type { Billing } from "#modules/subscription/subscription-module.ts";
 import type { AuthSecret } from "#platform/api-config.ts";
 import type { Clock } from "#platform/clock.ts";
 import type { LogSink } from "#platform/logging.ts";
@@ -14,6 +15,8 @@ import type { Mailer } from "#platform/mailer.ts";
 import { migrate } from "@repo/db";
 import { createThrowawayDatabase, type ThrowawayDatabase } from "@repo/db/testing";
 import { ok } from "@repo/result";
+
+import { makeMerchantOfRecord, WEBHOOK_SECRET } from "./merchant-of-record.ts";
 
 export const BASE_URL = "http://127.0.0.1:3000";
 export const RESOURCE = `${BASE_URL}/v1`;
@@ -51,6 +54,7 @@ type IdentityAppOptions = {
   readonly authLog?: LogSink;
   readonly signals?: ProjectSignals;
   readonly channel?: ProjectChannel;
+  readonly billing?: Billing | null;
 };
 
 export type IdentityApp = {
@@ -73,6 +77,7 @@ export const startIdentityApp = async ({
   authLog = () => undefined,
   signals,
   channel,
+  billing = { merchant: makeMerchantOfRecord().merchant, webhookSecret: WEBHOOK_SECRET },
 }: IdentityAppOptions = {}): Promise<IdentityApp> => {
   const database = await createDatabase();
   try {
@@ -90,17 +95,26 @@ export const startIdentityApp = async ({
     }
   };
   try {
-    const { spaces, projects, history, tokens, proposals, idempotent, projectAccess } =
-      composeModules({
-        db,
-        mailer,
-        webUrl: WEB_URL,
-        log,
-        wrapHistoryWriter,
-        clock,
-        signals,
-        channel,
-      });
+    const {
+      spaces,
+      subscriptions,
+      projects,
+      history,
+      tokens,
+      proposals,
+      idempotent,
+      projectAccess,
+    } = composeModules({
+      db,
+      mailer,
+      webUrl: WEB_URL,
+      log,
+      ...(billing === null ? {} : { billing }),
+      wrapHistoryWriter,
+      clock,
+      signals,
+      channel,
+    });
     const auth = await createIdentityAuth({
       webUrl: WEB_URL,
       db,
@@ -119,6 +133,7 @@ export const startIdentityApp = async ({
         auth,
         log: () => undefined,
         spaces,
+        subscriptions,
         projects,
         history,
         tokens,

@@ -10,6 +10,7 @@ import {
   makeProjectAccess,
   makeProjects,
   makeSpaces,
+  makeSubscriptions,
   makeProposals,
   makeTokens,
 } from "#testing/make-app.ts";
@@ -64,6 +65,7 @@ const withIdentityApp = (run: (identityApp: IdentityApp) => Promise<void>) =>
         auth,
         log,
         spaces: makeSpaces(),
+        subscriptions: makeSubscriptions(),
         projects: makeProjects(),
         history: makeHistory(),
         tokens: makeTokens(),
