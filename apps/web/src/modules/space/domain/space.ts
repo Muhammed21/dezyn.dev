@@ -14,7 +14,11 @@ const ACTIONS = [
   "subscription.checkout",
 ] as const;
 
+const SUBSCRIPTION_STATUSES = ["active", "canceling", "past_due", "ended"] as const;
+
 export type Plan = (typeof PLANS)[number] | "unknown";
+
+export type SubscriptionStatus = (typeof SUBSCRIPTION_STATUSES)[number] | "unknown";
 
 export type Role = (typeof ROLES)[number] | "unknown";
 
@@ -34,7 +38,16 @@ export type SpaceStorage = {
   readonly alertReached: boolean;
 };
 
-export type SpaceWithStorage = Space & { readonly storage: SpaceStorage };
+export type SpaceSubscription = {
+  readonly status: SubscriptionStatus;
+  readonly currentPeriodEnd: Date | undefined;
+  readonly payer: { readonly name: string; readonly email: string; readonly you: boolean };
+};
+
+export type SpaceWithStorage = Space & {
+  readonly storage: SpaceStorage;
+  readonly subscription?: SpaceSubscription;
+};
 
 export type SpaceFailure = "unauthenticated" | "not_found" | "unavailable" | "invalid_response";
 
@@ -90,6 +103,15 @@ export type CheckoutFailure =
   | "unavailable"
   | "invalid_response";
 
+export type Portal = { readonly url: string };
+
+export type PortalFailure =
+  | "unauthenticated"
+  | "not_found"
+  | "forbidden"
+  | "unavailable"
+  | "invalid_response";
+
 export type AssignableRole = (typeof ROLES)[number];
 
 export type ChangedRole = {
@@ -106,6 +128,9 @@ export type RoleChangeFailure =
   | "invalid_response";
 
 export const planOf = (value: string): Plan => PLANS.find((plan) => plan === value) ?? "unknown";
+
+export const subscriptionStatusOf = (value: string): SubscriptionStatus =>
+  SUBSCRIPTION_STATUSES.find((status) => status === value) ?? "unknown";
 
 export const roleOf = (value: string): Role => ROLES.find((role) => role === value) ?? "unknown";
 

@@ -27,24 +27,42 @@ const NOTIFICATION_PROBLEMS: Readonly<
   unavailable: UNAVAILABLE,
 };
 
-export const checkoutRoutes = ({ startCheckout }: Pick<SubscriptionUseCases, "startCheckout">) =>
-  new Hono<MemberEnv>().post("/:spaceId/checkout", async (c: Context<MemberEnv>) => {
-    const spaceId = Uuid.safeParse(c.req.param("spaceId")).data;
-    if (spaceId === undefined) {
-      return c.notFound();
-    }
-    const checkout = await startCheckout({ spaceId, userId: c.get("identity").userId });
-    if (checkout.ok) {
-      return c.json(checkout.value, 201);
-    }
-    if (checkout.error === "not_found") {
-      return c.notFound();
-    }
-    if (checkout.error === "forbidden") {
-      return problemResponse(c, FORBIDDEN);
-    }
-    return problemResponse(c, checkout.error === "already_team" ? ALREADY_TEAM : UNAVAILABLE);
-  });
+export const subscriptionRoutes = ({
+  startCheckout,
+  openPortal,
+}: Pick<SubscriptionUseCases, "startCheckout" | "openPortal">) =>
+  new Hono<MemberEnv>()
+    .post("/:spaceId/checkout", async (c: Context<MemberEnv>) => {
+      const spaceId = Uuid.safeParse(c.req.param("spaceId")).data;
+      if (spaceId === undefined) {
+        return c.notFound();
+      }
+      const checkout = await startCheckout({ spaceId, userId: c.get("identity").userId });
+      if (checkout.ok) {
+        return c.json(checkout.value, 201);
+      }
+      if (checkout.error === "not_found") {
+        return c.notFound();
+      }
+      if (checkout.error === "forbidden") {
+        return problemResponse(c, FORBIDDEN);
+      }
+      return problemResponse(c, checkout.error === "already_team" ? ALREADY_TEAM : UNAVAILABLE);
+    })
+    .post("/:spaceId/portal", async (c: Context<MemberEnv>) => {
+      const spaceId = Uuid.safeParse(c.req.param("spaceId")).data;
+      if (spaceId === undefined) {
+        return c.notFound();
+      }
+      const portal = await openPortal({ spaceId, userId: c.get("identity").userId });
+      if (portal.ok) {
+        return c.json(portal.value, 201);
+      }
+      if (portal.error === "not_found") {
+        return c.notFound();
+      }
+      return problemResponse(c, portal.error === "forbidden" ? FORBIDDEN : UNAVAILABLE);
+    });
 
 export const polarWebhookRoutes = ({
   receiveNotification,

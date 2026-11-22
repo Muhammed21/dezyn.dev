@@ -19,6 +19,7 @@ import {
 } from "@repo/api/testing/space-fixtures.ts";
 import {
   makeSubscriptionEvent,
+  PERIOD_END,
   postPolarWebhook,
 } from "@repo/api/testing/subscription-fixtures.ts";
 import { err, ok } from "@repo/result";
@@ -452,5 +453,36 @@ describe("passage au plan Team depuis l'app web, contre la vraie API (ADR 0050)"
 
       expect(checkout).toEqual(ok({ url: expect.stringContaining(spaceId) }));
       expect(space).toMatchObject(ok({ plan: "team", storage: { limitBytes: 20_000_000_000 } }));
+    }));
+
+  it("le payeur lit son abonnement et obtient l'URL de son portail client", () =>
+    withIdentityApp(async (app, db) => {
+      const ip = makeClientIp();
+      const userId = await signUp(app, ip);
+      const fetch = makeApiBrowser(app, { ip });
+      await fetch(`${BASE_URL}/auth/sign-in/email`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: ADA.email, password: ADA.password }),
+      });
+      const spaceId = await personalSpaceOf(db, userId);
+      const spaces = createSpaces({ apiUrl: BASE_URL, fetch });
+      await postPolarWebhook(app, {
+        event: makeSubscriptionEvent({ spaceId, payerId: userId, cancelAtPeriodEnd: true }),
+      });
+
+      const space = await spaces.readSpace({ spaceId });
+      const portal = await spaces.openPortal({ spaceId });
+
+      expect(space).toMatchObject(
+        ok({
+          subscription: {
+            status: "canceling",
+            currentPeriodEnd: PERIOD_END,
+            payer: { name: ADA.name, email: ADA.email, you: true },
+          },
+        }),
+      );
+      expect(portal).toEqual(ok({ url: expect.stringContaining(userId) }));
     }));
 });

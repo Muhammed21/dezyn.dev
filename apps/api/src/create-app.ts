@@ -26,7 +26,7 @@ import { registerListSpaces } from "#modules/space/presentation/list-spaces-tool
 import { spacesRoutes } from "#modules/space/presentation/spaces-routes.ts";
 import type { SubscriptionUseCases } from "#modules/subscription/application/subscription-use-cases.ts";
 import {
-  checkoutRoutes,
+  subscriptionRoutes,
   polarWebhookRoutes,
 } from "#modules/subscription/presentation/subscription-routes.ts";
 import type { TokenUseCases } from "#modules/token/application/token-use-cases.ts";
@@ -210,7 +210,7 @@ export const createApp = ({
     idempotentRequest({ idempotent, replayable: allowedInSpace(spaces, "member.invite") }),
   );
   v1.route("/spaces", spacesRoutes(spaces));
-  v1.route("/spaces", checkoutRoutes(subscriptions));
+  v1.route("/spaces", subscriptionRoutes(subscriptions));
   v1.route("/spaces", projectsRoutes(projects));
   v1.use("/projects/:projectId/events", requireWebOrigin(webUrl));
   v1.route("/projects", projectRoutes(projects));

@@ -8,7 +8,10 @@ import type {
   Checkout,
   CheckoutFailure,
   Plan,
+  Portal,
+  PortalFailure,
   SpaceFailure,
+  SpaceSubscription,
   SpaceWithStorage,
 } from "../domain/space.ts";
 
@@ -18,6 +21,7 @@ type ReadSpace = (space: {
 type StartCheckout = (space: {
   readonly spaceId: string;
 }) => Promise<Result<Checkout, CheckoutFailure>>;
+type OpenPortal = (space: { readonly spaceId: string }) => Promise<Result<Portal, PortalFailure>>;
 type GoTo = (url: string) => void;
 type Polling = { readonly intervalMs: number; readonly timeoutMs: number };
 
@@ -25,6 +29,17 @@ const OWNER_ONLY = "Seul un propriétaire de l'espace peut passer au plan Team."
 const UNKNOWN_SPACE = "Cet espace est introuvable.";
 const PAYMENT_UNAVAILABLE = "Le paiement est indisponible pour le moment.";
 const PLAN_UNAVAILABLE = "Le plan de l'espace est indisponible pour le moment.";
+
+const PORTAL_UNAVAILABLE = "Le portail de paiement est indisponible pour le moment.";
+
+const PERIOD_DATE = new Intl.DateTimeFormat("fr-FR", { dateStyle: "long" });
+
+const PORTAL_MESSAGES: Readonly<Record<Exclude<PortalFailure, "unauthenticated">, string>> = {
+  forbidden: "Seul le payeur de l'abonnement peut le gérer.",
+  not_found: UNKNOWN_SPACE,
+  unavailable: PORTAL_UNAVAILABLE,
+  invalid_response: PORTAL_UNAVAILABLE,
+};
 
 const PLAN_NAMES: Readonly<Record<Plan, string>> = {
   free: "Free",
@@ -89,6 +104,85 @@ const UpgradeButton = ({
   );
 };
 
+const PortalButton = ({
+  label,
+  spaceId,
+  openPortal,
+  goTo,
+}: {
+  readonly label: string;
+  readonly spaceId: string;
+  readonly openPortal: OpenPortal;
+  readonly goTo: GoTo;
+}) => {
+  const { data, isPending, mutate } = useMutation({
+    mutationFn: openPortal,
+    onSuccess: (result) => {
+      if (result.ok) {
+        goTo(result.value.url);
+      }
+    },
+  });
+  const failure = !isPending && data?.ok === false ? data.error : undefined;
+  if (failure === "unauthenticated") {
+    return <Navigate to="/connexion" />;
+  }
+  return (
+    <>
+      <button type="button" disabled={isPending} onClick={() => mutate({ spaceId })}>
+        {label}
+      </button>
+      {failure !== undefined && <p role="alert">{PORTAL_MESSAGES[failure]}</p>}
+    </>
+  );
+};
+
+const PeriodEnd = ({ status, currentPeriodEnd }: SpaceSubscription) => {
+  if (currentPeriodEnd === undefined) {
+    return null;
+  }
+  const date = PERIOD_DATE.format(currentPeriodEnd);
+  if (status === "canceling") {
+    return <p>Abonnement résilié : le plan Team prend fin le {date}.</p>;
+  }
+  return status === "active" ? <p>Prochain renouvellement le {date}.</p> : null;
+};
+
+const SubscriptionDetails = ({
+  spaceId,
+  subscription,
+  openPortal,
+  goTo,
+}: {
+  readonly spaceId: string;
+  readonly subscription: SpaceSubscription;
+  readonly openPortal: OpenPortal;
+  readonly goTo: GoTo;
+}) => {
+  const { payer } = subscription;
+  return (
+    <section aria-labelledby="abonnement">
+      <h2 id="abonnement">Abonnement</h2>
+      <PeriodEnd {...subscription} />
+      {payer.you ? (
+        <>
+          <p>Vous payez cet abonnement.</p>
+          <PortalButton
+            label="Gérer l'abonnement"
+            spaceId={spaceId}
+            openPortal={openPortal}
+            goTo={goTo}
+          />
+        </>
+      ) : (
+        <p>
+          Payé par {payer.name} ({payer.email}).
+        </p>
+      )}
+    </section>
+  );
+};
+
 const useDeadline = (timeoutMs: number) => {
   const [passed, setPassed] = useState(false);
   useEffect(() => {
@@ -116,6 +210,7 @@ const SpacePlan = ({
   returning,
   readSpace,
   startCheckout,
+  openPortal,
   goTo,
   polling,
 }: {
@@ -123,6 +218,7 @@ const SpacePlan = ({
   readonly returning: boolean;
   readonly readSpace: ReadSpace;
   readonly startCheckout: StartCheckout;
+  readonly openPortal: OpenPortal;
   readonly goTo: GoTo;
   readonly polling: Polling;
 }) => {
@@ -146,13 +242,29 @@ const SpacePlan = ({
       <p role="alert">{READ_MESSAGES[data.error]}</p>
     );
   }
-  const { plan, allowedActions } = data.value;
+  const { plan, allowedActions, subscription } = data.value;
   const canUpgrade = plan === "free" && !returning;
   return (
     <main>
       <h1>Plan</h1>
       <p>Plan actuel : {PLAN_NAMES[plan]}</p>
       {returning && <CheckoutReturn plan={plan} expired={expired} />}
+      {subscription !== undefined && subscription.status !== "ended" && (
+        <SubscriptionDetails
+          spaceId={spaceId}
+          subscription={subscription}
+          openPortal={openPortal}
+          goTo={goTo}
+        />
+      )}
+      {subscription?.status === "ended" && subscription.payer.you && (
+        <PortalButton
+          label="Voir mes factures"
+          spaceId={spaceId}
+          openPortal={openPortal}
+          goTo={goTo}
+        />
+      )}
       <TeamOffer />
       {canUpgrade && allowedActions.includes("subscription.checkout") && (
         <UpgradeButton spaceId={spaceId} startCheckout={startCheckout} goTo={goTo} />
@@ -172,12 +284,14 @@ export const spacePlanRoute = ({
   parent,
   readSpace,
   startCheckout,
+  openPortal,
   goTo,
   polling,
 }: {
   readonly parent: AnyRootRoute;
   readonly readSpace: ReadSpace;
   readonly startCheckout: StartCheckout;
+  readonly openPortal: OpenPortal;
   readonly goTo: GoTo;
   readonly polling: Polling;
 }) => {
@@ -197,6 +311,7 @@ export const spacePlanRoute = ({
           returning={checkout !== undefined}
           readSpace={readSpace}
           startCheckout={startCheckout}
+          openPortal={openPortal}
           goTo={goTo}
           polling={polling}
         />

@@ -94,6 +94,7 @@ const appRouter = ({
         parent: root,
         readSpace: spaces.readSpace,
         startCheckout: spaces.startCheckout,
+        openPortal: spaces.openPortal,
         goTo: goToInBrowser,
         polling: CHECKOUT_RETURN_POLLING,
       }),

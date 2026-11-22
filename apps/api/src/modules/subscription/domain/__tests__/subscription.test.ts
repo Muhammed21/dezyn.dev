@@ -20,6 +20,10 @@ const makeSubscription = (overrides: Partial<SpaceSubscription> = {}): SpaceSubs
 
 const secondsAfter = (date: Date, seconds: number) => new Date(date.getTime() + seconds * 1000);
 
+const UNDER_FREE_LIMITS = { projects: 3, storedBytes: 500_000_000, members: 1 } as const;
+
+const ABOVE_FREE_LIMITS = { projects: 4, storedBytes: 500_000_000, members: 1 } as const;
+
 describe("le statut d'un abonnement selon Polar (ADR 0050 §4)", () => {
   it("un abonnement actif est actif", () => {
     expect(subscriptionStatusOf({ status: "active", cancelAtPeriodEnd: false })).toBe("active");
@@ -28,6 +32,13 @@ describe("le statut d'un abonnement selon Polar (ADR 0050 §4)", () => {
   it("un abonnement actif résilié en fin de période est en résiliation", () => {
     expect(subscriptionStatusOf({ status: "active", cancelAtPeriodEnd: true })).toBe("canceling");
   });
+
+  it.each([false, true])(
+    "un abonnement annulé par Polar est terminé, résiliation en fin de période ou non (%s)",
+    (cancelAtPeriodEnd) => {
+      expect(subscriptionStatusOf({ status: "canceled", cancelAtPeriodEnd })).toBe("ended");
+    },
+  );
 
   it.each(["trialing", "incomplete", "paused", "un-statut-inconnu"])(
     "le statut %s n'est pas reconnu",
@@ -54,7 +65,9 @@ describe("appliquer l'état d'un abonnement reçu de Polar (ADR 0050 §4)", () =
   it("le premier état reçu s'applique et fait passer un espace Free en Team", () => {
     const incoming = makeSubscription();
 
-    expect(subscriptionChangeOf({ stored: undefined, incoming, plan: "free" })).toEqual({
+    expect(
+      subscriptionChangeOf({ usage: UNDER_FREE_LIMITS, stored: undefined, incoming, plan: "free" }),
+    ).toEqual({
       kind: "applied",
       subscription: incoming,
       planChange: { before: "free", after: "team" },
@@ -68,7 +81,9 @@ describe("appliquer l'état d'un abonnement reçu de Polar (ADR 0050 §4)", () =
       currentPeriodEnd: new Date("2027-01-22T10:00:00.000Z"),
     });
 
-    expect(subscriptionChangeOf({ stored, incoming, plan: "team" })).toEqual({
+    expect(
+      subscriptionChangeOf({ usage: UNDER_FREE_LIMITS, stored, incoming, plan: "team" }),
+    ).toEqual({
       kind: "applied",
       subscription: incoming,
       planChange: undefined,
@@ -78,7 +93,9 @@ describe("appliquer l'état d'un abonnement reçu de Polar (ADR 0050 §4)", () =
   it("le même état reçu deux fois ne s'applique qu'une fois", () => {
     const stored = makeSubscription();
 
-    expect(subscriptionChangeOf({ stored, incoming: stored, plan: "team" })).toEqual({
+    expect(
+      subscriptionChangeOf({ usage: UNDER_FREE_LIMITS, stored, incoming: stored, plan: "team" }),
+    ).toEqual({
       kind: "stale",
     });
   });
@@ -87,7 +104,9 @@ describe("appliquer l'état d'un abonnement reçu de Polar (ADR 0050 §4)", () =
     const stored = makeSubscription();
     const incoming = makeSubscription({ modifiedAt: secondsAfter(MODIFIED_AT, -1) });
 
-    expect(subscriptionChangeOf({ stored, incoming, plan: "team" })).toEqual({ kind: "stale" });
+    expect(
+      subscriptionChangeOf({ usage: UNDER_FREE_LIMITS, stored, incoming, plan: "team" }),
+    ).toEqual({ kind: "stale" });
   });
 
   it("un autre abonnement du même espace ne remplace pas celui enregistré, même plus récent", () => {
@@ -97,7 +116,9 @@ describe("appliquer l'état d'un abonnement reçu de Polar (ADR 0050 §4)", () =
       modifiedAt: secondsAfter(MODIFIED_AT, 60),
     });
 
-    expect(subscriptionChangeOf({ stored, incoming, plan: "team" })).toEqual({
+    expect(
+      subscriptionChangeOf({ usage: UNDER_FREE_LIMITS, stored, incoming, plan: "team" }),
+    ).toEqual({
       kind: "other_subscription",
       storedId: "polar-subscription-a",
     });
@@ -110,9 +131,27 @@ describe("appliquer l'état d'un abonnement reçu de Polar (ADR 0050 §4)", () =
       modifiedAt: secondsAfter(MODIFIED_AT, -60),
     });
 
-    expect(subscriptionChangeOf({ stored, incoming, plan: "team" })).toEqual({
+    expect(
+      subscriptionChangeOf({ usage: UNDER_FREE_LIMITS, stored, incoming, plan: "team" }),
+    ).toEqual({
       kind: "other_subscription",
       storedId: "polar-subscription-a",
+    });
+  });
+
+  it("un nouvel abonnement s'applique après un abonnement terminé, et repasse l'espace en Team", () => {
+    const stored = makeSubscription({ id: "polar-subscription-1", status: "ended" });
+    const incoming = makeSubscription({
+      id: "polar-subscription-2",
+      modifiedAt: secondsAfter(MODIFIED_AT, 60),
+    });
+
+    expect(
+      subscriptionChangeOf({ usage: UNDER_FREE_LIMITS, stored, incoming, plan: "free" }),
+    ).toEqual({
+      kind: "applied",
+      subscription: incoming,
+      planChange: { before: "free", after: "team" },
     });
   });
 
@@ -120,10 +159,66 @@ describe("appliquer l'état d'un abonnement reçu de Polar (ADR 0050 §4)", () =
     const stored = makeSubscription({ status: "ended" });
     const incoming = makeSubscription({ modifiedAt: secondsAfter(MODIFIED_AT, 1) });
 
-    expect(subscriptionChangeOf({ stored, incoming, plan: "free" })).toEqual({
+    expect(
+      subscriptionChangeOf({ usage: UNDER_FREE_LIMITS, stored, incoming, plan: "free" }),
+    ).toEqual({
       kind: "applied",
       subscription: incoming,
       planChange: { before: "free", after: "team" },
     });
+  });
+});
+
+describe("un abonnement terminé d'un espace au-dessus des limites Free (ADR 0050 §5, en attendant le gel)", () => {
+  const revoked = makeSubscription({ status: "ended", modifiedAt: secondsAfter(MODIFIED_AT, 60) });
+
+  it("un espace sous les limites Free redevient Free", () => {
+    expect(
+      subscriptionChangeOf({
+        stored: makeSubscription(),
+        incoming: revoked,
+        plan: "team",
+        usage: UNDER_FREE_LIMITS,
+      }),
+    ).toEqual({
+      kind: "applied",
+      subscription: revoked,
+      planChange: { before: "team", after: "free" },
+    });
+  });
+
+  it("un espace au-dessus d'une limite Free garde le plan Team, avec l'abonnement terminé", () => {
+    expect(
+      subscriptionChangeOf({
+        stored: makeSubscription(),
+        incoming: revoked,
+        plan: "team",
+        usage: ABOVE_FREE_LIMITS,
+      }),
+    ).toEqual({ kind: "above_free_limits", subscription: revoked });
+  });
+
+  it("un abonnement actif d'un espace au-dessus des limites Free s'applique comme avant", () => {
+    const incoming = makeSubscription({ modifiedAt: secondsAfter(MODIFIED_AT, 60) });
+
+    expect(
+      subscriptionChangeOf({
+        stored: makeSubscription(),
+        incoming,
+        plan: "team",
+        usage: ABOVE_FREE_LIMITS,
+      }),
+    ).toEqual({ kind: "applied", subscription: incoming, planChange: undefined });
+  });
+
+  it("un abonnement terminé d'un espace déjà Free s'applique sans changement de plan", () => {
+    expect(
+      subscriptionChangeOf({
+        stored: makeSubscription({ status: "ended" }),
+        incoming: revoked,
+        plan: "free",
+        usage: ABOVE_FREE_LIMITS,
+      }),
+    ).toEqual({ kind: "applied", subscription: revoked, planChange: undefined });
   });
 });
