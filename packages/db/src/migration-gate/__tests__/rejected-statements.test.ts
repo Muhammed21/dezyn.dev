@@ -107,12 +107,85 @@ describe("rejectedStatements", () => {
     ]);
   });
 
-  it.each([`CREATE INDEX "i" ON "t" (a$$b)`, `GRANT SELECT ON a$$b TO app`])(
-    "ne prend pas le $$ d'un identifiant pour le début d'un corps : %s",
-    (statement) => {
-      expect(rejectedStatements(`${statement}; DROP TABLE "t";`)).toEqual([`DROP TABLE "t"`]);
+  it.each([
+    `CREATE INDEX "i" ON "t" (a$$b)`,
+    `GRANT SELECT ON a$$b TO app`,
+    `GRANT SELECT ON é$$b TO app`,
+    `GRANT SELECT ON €$$b TO app`,
+  ])("ne prend pas le $$ d'un identifiant pour le début d'un corps : %s", (statement) => {
+    expect(rejectedStatements(`${statement}; DROP TABLE "t";`)).toEqual([`DROP TABLE "t"`]);
+  });
+
+  it.each([
+    "body",
+    "fn",
+    "_corps2",
+    "Fn",
+    "étiquette",
+    "_é1",
+    "corps_à2",
+    "€",
+    "😀",
+    "a€1",
+    "a😀1",
+    "𝒜",
+  ])("garde un corps $%s$ entier et refuse le DROP qui le suit", (label) => {
+    const tag = `$${label}$`;
+    const sql = `CREATE FUNCTION one() RETURNS integer LANGUAGE sql AS ${tag} SELECT 1; ${tag}; DROP TABLE "t";`;
+
+    expect(rejectedStatements(sql)).toEqual([
+      `CREATE FUNCTION one() RETURNS integer LANGUAGE sql AS ${tag} SELECT 1; ${tag}`,
+      `DROP TABLE "t"`,
+    ]);
+  });
+
+  it.each(["$b$", "$$", "$ab$", "$A$", "$a", "'", '"', "--"])(
+    "ne ferme un corps $a$ que sur $a$, pas sur %s",
+    (inner) => {
+      const sql = `DO $a$ SELECT ${inner}; DROP TABLE "x"; ${inner} $a$; DROP TABLE "t";`;
+
+      expect(rejectedStatements(sql)).toEqual([
+        `DO $a$ SELECT ${inner}; DROP TABLE "x"; ${inner} $a$`,
+        `DROP TABLE "t"`,
+      ]);
     },
   );
+
+  it.each([
+    `CREATE INDEX "i" ON "t" (a$tag$b)`,
+    `GRANT SELECT ON a$tag$b TO app`,
+    `GRANT SELECT ON é$tag$b TO app`,
+    `GRANT SELECT ON 😀$tag$b TO app`,
+    `GRANT SELECT ON 𝒜$tag$b TO app`,
+    `GRANT SELECT ON 𝒳$tag$b TO app`,
+  ])("ne prend pas le $tag$ d'un identifiant pour le début d'un corps : %s", (statement) => {
+    expect(rejectedStatements(`${statement}; DROP TABLE "t";`)).toEqual([`DROP TABLE "t"`]);
+  });
+
+  it.each(["$1$", "$1a$", "$a-b$", "$ $", "$1é$", "$é-b$"])(
+    "ne prend pas %s pour un délimiteur de corps",
+    (text) => {
+      const sql = `PREPARE q AS SELECT ${text}; DROP TABLE "t"; PREPARE r AS SELECT ${text};`;
+
+      expect(rejectedStatements(sql)).toEqual([
+        `PREPARE q AS SELECT ${text}`,
+        `DROP TABLE "t"`,
+        `PREPARE r AS SELECT ${text}`,
+      ]);
+    },
+  );
+
+  it("garde dans l'instruction tout ce qui suit un corps $tag$ jamais fermé", () => {
+    const sql = `DO $tag$ SELECT 1; DROP TABLE "t";`;
+
+    expect(rejectedStatements(sql)).toEqual([`DO $tag$ SELECT 1; DROP TABLE "t";`]);
+  });
+
+  it("garde dans l'instruction tout ce qui suit un corps $$ jamais fermé", () => {
+    const sql = `DO $$ SELECT 1; DROP TABLE "t";`;
+
+    expect(rejectedStatements(sql)).toEqual([`DO $$ SELECT 1; DROP TABLE "t";`]);
+  });
 
   it("ne coupe pas une chaîne d'échappement E'…' sur son point-virgule", () => {
     expect(rejectedStatements(`COMMENT ON TABLE "t" IS E'a;b'; DROP TABLE "t";`)).toEqual([
@@ -193,6 +266,15 @@ describe("rejectedStatements", () => {
     ].join("--> statement-breakpoint\n");
 
     expect(rejectedStatements(sql)).toEqual([`ALTER TABLE "audit"."palette" DROP COLUMN "id"`]);
+  });
+
+  it('ne prend pas un schéma nommé « "public » pour le schéma public', () => {
+    const sql = [
+      `CREATE TABLE "palette" ("id" uuid PRIMARY KEY NOT NULL);`,
+      `ALTER TABLE """public".palette DROP COLUMN "id";`,
+    ].join("--> statement-breakpoint\n");
+
+    expect(rejectedStatements(sql)).toEqual([`ALTER TABLE """public".palette DROP COLUMN "id"`]);
   });
 
   it("nomme une instruction écrite sur plusieurs lignes sur une seule ligne", () => {
