@@ -39,6 +39,10 @@ const seedFreeSpace = async (app: App, db: Parameters<typeof personalSpaceOf>[0]
   return { ...owner, spaceId: await personalSpaceOf(db, owner.userId) };
 };
 
+const SUBSCRIPTION_A = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
+
+const SUBSCRIPTION_B = "9f8e7d6c-5b4a-4392-8170-6f5e4d3c2b1a";
+
 const secondsAfter = (date: Date, seconds: number) => new Date(date.getTime() + seconds * 1000);
 
 const withSubscriptionData = (
@@ -184,6 +188,77 @@ describe("le webhook « abonnement actif » de Polar passe l'espace en Team (ADR
 
       expect(responses.map(({ status }) => status)).toEqual([200, 200]);
       expect(await planChangesOf(db, spaceId)).toHaveLength(1);
+    }));
+
+  it("un second abonnement payé pour l'espace ne remplace pas le premier, et se journalise", () => {
+    const { records, log } = makeLog();
+    return withIdentityApp(
+      async (app, db) => {
+        const { userId, spaceId } = await seedFreeSpace(app, db);
+        await postPolarWebhook(app, {
+          event: makeSubscriptionEvent({
+            spaceId,
+            payerId: userId,
+            subscriptionId: SUBSCRIPTION_A,
+          }),
+        });
+
+        const response = await postPolarWebhook(app, {
+          event: makeSubscriptionEvent({
+            spaceId,
+            payerId: userId,
+            subscriptionId: SUBSCRIPTION_B,
+            modifiedAt: secondsAfter(MODIFIED_AT, 60),
+            currentPeriodEnd: new Date("2027-01-22T10:00:00.000Z"),
+          }),
+        });
+
+        expect(response.status).toBe(200);
+        expect(await subscriptionOf(db, spaceId)).toMatchObject({
+          polarSubscriptionId: SUBSCRIPTION_A,
+          currentPeriodEnd: PERIOD_END,
+          polarModifiedAt: MODIFIED_AT,
+        });
+        expect(await planChangesOf(db, spaceId)).toEqual([
+          expect.objectContaining({ polarSubscriptionId: SUBSCRIPTION_A }),
+        ]);
+        expect(records).toContainEqual(
+          expect.objectContaining({
+            level: "warn",
+            msg: "polar event for another subscription of the space",
+            event: "subscription.active",
+            spaceId,
+            storedSubscriptionId: SUBSCRIPTION_A,
+            subscriptionId: SUBSCRIPTION_B,
+          }),
+        );
+      },
+      { log },
+    );
+  });
+
+  it("le premier abonnement continue d'évoluer après le refus d'un second", () =>
+    withIdentityApp(async (app, db) => {
+      const { userId, spaceId } = await seedFreeSpace(app, db);
+      const event = (subscriptionId: string, seconds: number, cancelAtPeriodEnd = false) =>
+        makeSubscriptionEvent({
+          spaceId,
+          payerId: userId,
+          subscriptionId,
+          cancelAtPeriodEnd,
+          modifiedAt: secondsAfter(MODIFIED_AT, seconds),
+        });
+      await postPolarWebhook(app, { event: event(SUBSCRIPTION_A, 0) });
+      await postPolarWebhook(app, { event: event(SUBSCRIPTION_B, 60) });
+
+      await postPolarWebhook(app, { event: event(SUBSCRIPTION_A, 30, true) });
+      await postPolarWebhook(app, { event: event(SUBSCRIPTION_B, 120) });
+
+      expect(await subscriptionOf(db, spaceId)).toMatchObject({
+        polarSubscriptionId: SUBSCRIPTION_A,
+        status: "canceling",
+        polarModifiedAt: secondsAfter(MODIFIED_AT, 30),
+      });
     }));
 
   it("un état plus ancien reçu après un plus récent est ignoré", () =>

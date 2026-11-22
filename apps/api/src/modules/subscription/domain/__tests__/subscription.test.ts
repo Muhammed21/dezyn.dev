@@ -90,6 +90,32 @@ describe("appliquer l'état d'un abonnement reçu de Polar (ADR 0050 §4)", () =
     expect(subscriptionChangeOf({ stored, incoming, plan: "team" })).toEqual({ kind: "stale" });
   });
 
+  it("un autre abonnement du même espace ne remplace pas celui enregistré, même plus récent", () => {
+    const stored = makeSubscription({ id: "polar-subscription-a" });
+    const incoming = makeSubscription({
+      id: "polar-subscription-b",
+      modifiedAt: secondsAfter(MODIFIED_AT, 60),
+    });
+
+    expect(subscriptionChangeOf({ stored, incoming, plan: "team" })).toEqual({
+      kind: "other_subscription",
+      storedId: "polar-subscription-a",
+    });
+  });
+
+  it("un autre abonnement plus ancien que celui enregistré est aussi un autre abonnement", () => {
+    const stored = makeSubscription({ id: "polar-subscription-a" });
+    const incoming = makeSubscription({
+      id: "polar-subscription-b",
+      modifiedAt: secondsAfter(MODIFIED_AT, -60),
+    });
+
+    expect(subscriptionChangeOf({ stored, incoming, plan: "team" })).toEqual({
+      kind: "other_subscription",
+      storedId: "polar-subscription-a",
+    });
+  });
+
   it("un état plus récent d'une seconde s'applique", () => {
     const stored = makeSubscription({ status: "ended" });
     const incoming = makeSubscription({ modifiedAt: secondsAfter(MODIFIED_AT, 1) });

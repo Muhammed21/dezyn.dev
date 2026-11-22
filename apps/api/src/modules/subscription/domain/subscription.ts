@@ -16,6 +16,7 @@ export type PlanChange = { readonly before: Plan; readonly after: Plan };
 
 export type SubscriptionChange =
   | { readonly kind: "stale" }
+  | { readonly kind: "other_subscription"; readonly storedId: string }
   | {
       readonly kind: "applied";
       readonly subscription: SpaceSubscription;
@@ -47,6 +48,9 @@ export const subscriptionChangeOf = ({
   readonly incoming: SpaceSubscription;
   readonly plan: Plan;
 }): SubscriptionChange => {
+  if (stored !== undefined && stored.id !== incoming.id) {
+    return { kind: "other_subscription", storedId: stored.id };
+  }
   if (stored !== undefined && stored.modifiedAt.getTime() >= incoming.modifiedAt.getTime()) {
     return { kind: "stale" };
   }
