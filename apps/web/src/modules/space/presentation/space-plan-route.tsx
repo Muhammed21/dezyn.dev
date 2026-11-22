@@ -104,11 +104,13 @@ const UpgradeButton = ({
   );
 };
 
-const ManageButton = ({
+const PortalButton = ({
+  label,
   spaceId,
   openPortal,
   goTo,
 }: {
+  readonly label: string;
   readonly spaceId: string;
   readonly openPortal: OpenPortal;
   readonly goTo: GoTo;
@@ -128,7 +130,7 @@ const ManageButton = ({
   return (
     <>
       <button type="button" disabled={isPending} onClick={() => mutate({ spaceId })}>
-        Gérer l'abonnement
+        {label}
       </button>
       {failure !== undefined && <p role="alert">{PORTAL_MESSAGES[failure]}</p>}
     </>
@@ -165,7 +167,12 @@ const SubscriptionDetails = ({
       {payer.you ? (
         <>
           <p>Vous payez cet abonnement.</p>
-          <ManageButton spaceId={spaceId} openPortal={openPortal} goTo={goTo} />
+          <PortalButton
+            label="Gérer l'abonnement"
+            spaceId={spaceId}
+            openPortal={openPortal}
+            goTo={goTo}
+          />
         </>
       ) : (
         <p>
@@ -246,6 +253,14 @@ const SpacePlan = ({
         <SubscriptionDetails
           spaceId={spaceId}
           subscription={subscription}
+          openPortal={openPortal}
+          goTo={goTo}
+        />
+      )}
+      {subscription?.status === "ended" && subscription.payer.you && (
+        <PortalButton
+          label="Voir mes factures"
+          spaceId={spaceId}
           openPortal={openPortal}
           goTo={goTo}
         />

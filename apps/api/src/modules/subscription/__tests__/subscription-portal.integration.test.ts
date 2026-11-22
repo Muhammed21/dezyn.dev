@@ -12,7 +12,15 @@ import {
   withIdentityApp,
 } from "#testing/authorization-flow.ts";
 import { personalSpaceOf } from "#testing/space-fixtures.ts";
-import { makeMerchantOfRecord, seedSubscription } from "#testing/subscription-fixtures.ts";
+import {
+  makeMerchantOfRecord,
+  makeSubscriptionEvent,
+  MODIFIED_AT,
+  postPolarWebhook,
+  seedSubscription,
+  subscriptionOf,
+  WEBHOOK_SECRET,
+} from "#testing/subscription-fixtures.ts";
 import { PortalOutput } from "@repo/contracts";
 import { schema } from "@repo/db";
 
@@ -64,6 +72,33 @@ describe("le portail client de Polar est réservé au payeur de l'espace (ADR 00
         { spaceId, payerId: payer.userId, returnUrl: `${WEB_URL}/espaces/${spaceId}/plan` },
       ]);
     }, billingWith(merchantOfRecord));
+  });
+
+  it("après la révocation, l'ancien payeur ouvre encore son portail, pour ses factures", () => {
+    const merchantOfRecord = makeMerchantOfRecord();
+    return withIdentityApp(
+      async (app, db) => {
+        const { payer, spaceId } = await seedPaidSpace(app, db);
+        await postPolarWebhook(app, {
+          event: makeSubscriptionEvent({
+            type: "subscription.revoked",
+            spaceId,
+            payerId: payer.userId,
+            status: "canceled",
+            modifiedAt: new Date(MODIFIED_AT.getTime() + 60_000),
+          }),
+        });
+
+        const response = await openPortal(app, { accessToken: payer.accessToken, spaceId });
+
+        expect(await subscriptionOf(db, spaceId)).toMatchObject({ status: "ended" });
+        expect(response.status).toBe(201);
+        expect(merchantOfRecord.portals).toEqual([
+          { spaceId, payerId: payer.userId, returnUrl: `${WEB_URL}/espaces/${spaceId}/plan` },
+        ]);
+      },
+      { billing: { merchant: merchantOfRecord.merchant, webhookSecret: WEBHOOK_SECRET } },
+    );
   });
 
   it.each(["owner", "editor"] as const)(
