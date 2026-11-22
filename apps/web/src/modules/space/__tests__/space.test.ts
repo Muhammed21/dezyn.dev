@@ -182,6 +182,30 @@ describe("lecture d'un espace du membre dans l'app web (ADR 0044 §5)", () => {
     expect(read.ok && read.value.storage).toEqual(storage);
   });
 
+  it("donne au propriétaire le retard de paiement de l'abonnement (ADR 0050 §4)", async () => {
+    const { spaces } = answering(json(makeReadSpace({ subscription: { status: "past_due" } })));
+
+    const read = await spaces.readSpace({ spaceId: SPACE_ID });
+
+    expect(read.ok && read.value.subscription).toEqual({ status: "past_due" });
+  });
+
+  it("donne un statut d'abonnement inconnu de l'app comme inconnu (ADR 0023 §2)", async () => {
+    const { spaces } = answering(json(makeReadSpace({ subscription: { status: "paused" } })));
+
+    const read = await spaces.readSpace({ spaceId: SPACE_ID });
+
+    expect(read.ok && read.value.subscription).toEqual({ status: "unknown" });
+  });
+
+  it("ne donne aucun abonnement quand l'API n'en rend pas", async () => {
+    const { spaces } = answering(json(makeReadSpace()));
+
+    const read = await spaces.readSpace({ spaceId: SPACE_ID });
+
+    expect(read.ok && read.value).not.toHaveProperty("subscription");
+  });
+
   it("ignore une action inconnue de l'app (ADR 0023 §2)", async () => {
     const { spaces } = answering(
       json(makeReadSpace({ allowedActions: ["space.archive", "project.create"] })),

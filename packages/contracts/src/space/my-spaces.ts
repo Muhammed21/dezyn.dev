@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { openEnum, Uuid } from "../conventions/schemas.ts";
+import { SpaceSubscriptionOutput } from "../subscription/space-subscription.ts";
 
 export const PLANS = ["free", "team"] as const;
 
@@ -32,6 +33,7 @@ export const SpaceOutput = MySpaceOutput.extend({
     limitBytes: z.int().nonnegative(),
     alertReached: z.boolean(),
   }),
+  subscription: SpaceSubscriptionOutput.optional(),
 });
 
 export const MySpacesOutput = z.looseObject({

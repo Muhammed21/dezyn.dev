@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import type { SubscriptionStatus } from "#modules/subscription/contracts/subscription-status.ts";
+
 import { allowedActionsOf, type Membership } from "../../domain/can.ts";
 import { spaceStorageOf } from "../../domain/storage-limit.ts";
 import { inMemoryMembershipReader } from "../membership-reader.fake.ts";
@@ -22,10 +24,16 @@ const makeMembership = (overrides: Partial<Membership> = {}): Membership => ({
 
 const STORED_BYTES = 1_200_000;
 
-const readWith = (memberships: readonly Membership[], storedBytes = STORED_BYTES) =>
+const readWith = (
+  memberships: readonly Membership[],
+  {
+    storedBytes = STORED_BYTES,
+    subscriptionStatus,
+  }: { readonly storedBytes?: number; readonly subscriptionStatus?: SubscriptionStatus } = {},
+) =>
   readSpace({
     memberships: inMemoryMembershipReader(memberships),
-    spaces: { find: async () => ({ ...SPACE, storedBytes }) },
+    spaces: { find: async () => ({ ...SPACE, storedBytes, subscriptionStatus }) },
   });
 
 describe("lire un espace", () => {
@@ -46,7 +54,7 @@ describe("lire un espace", () => {
   it.each(["owner", "editor"] as const)(
     "rend au rôle %s le stockage de l'espace, sa limite et l'alerte à 80 % (ADR 0032)",
     async (role) => {
-      const read = readWith([makeMembership({ role })], 16_000_000_000);
+      const read = readWith([makeMembership({ role })], { storedBytes: 16_000_000_000 });
 
       const space = await read({ spaceId: SPACE.id, userId: ADA });
 
@@ -57,6 +65,30 @@ describe("lire un espace", () => {
       });
     },
   );
+
+  it("rend au propriétaire le statut de l'abonnement de l'espace (ADR 0050 §3)", async () => {
+    const read = readWith([makeMembership({ role: "owner" })], { subscriptionStatus: "past_due" });
+
+    const space = await read({ spaceId: SPACE.id, userId: ADA });
+
+    expect(space.ok && space.value.subscription).toEqual({ status: "past_due" });
+  });
+
+  it("ne rend pas l'abonnement de l'espace à un éditeur", async () => {
+    const read = readWith([makeMembership({ role: "editor" })], { subscriptionStatus: "past_due" });
+
+    const space = await read({ spaceId: SPACE.id, userId: ADA });
+
+    expect(space.ok && space.value).not.toHaveProperty("subscription");
+  });
+
+  it("ne rend aucun abonnement au propriétaire d'un espace qui n'en a pas", async () => {
+    const read = readWith([makeMembership({ role: "owner" })]);
+
+    const space = await read({ spaceId: SPACE.id, userId: ADA });
+
+    expect(space.ok && space.value).not.toHaveProperty("subscription");
+  });
 
   it("ne trouve pas l'espace pour un utilisateur qui n'en est pas membre", async () => {
     const read = readWith([makeMembership({ userId: ADA })]);

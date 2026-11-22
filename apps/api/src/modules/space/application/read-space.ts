@@ -1,3 +1,4 @@
+import type { SubscriptionStatus } from "#modules/subscription/contracts/subscription-status.ts";
 import { err, ok, type Result } from "@repo/result";
 
 import { can } from "../domain/can.ts";
@@ -11,10 +12,14 @@ export type SpaceFinder = {
     readonly name: string;
     readonly plan: Plan;
     readonly storedBytes: number;
+    readonly subscriptionStatus: SubscriptionStatus | undefined;
   }>;
 };
 
-export type SpaceWithStorage = MySpace & { readonly storage: SpaceStorage };
+export type SpaceWithStorage = MySpace & {
+  readonly storage: SpaceStorage;
+  readonly subscription?: { readonly status: SubscriptionStatus };
+};
 
 export const readSpace =
   ({
@@ -29,9 +34,12 @@ export const readSpace =
     if (membership === undefined || !can({ membership, action: "space.read" })) {
       return err("not_found");
     }
-    const { storedBytes, ...space } = await spaces.find(key.spaceId);
+    const { storedBytes, subscriptionStatus, ...space } = await spaces.find(key.spaceId);
     return ok({
       ...mySpaceOf({ ...space, role: membership.role }),
       storage: spaceStorageOf({ plan: space.plan, storedBytes }),
+      ...(membership.role === "owner" && subscriptionStatus !== undefined
+        ? { subscription: { status: subscriptionStatus } }
+        : {}),
     });
   };

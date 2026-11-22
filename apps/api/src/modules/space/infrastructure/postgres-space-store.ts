@@ -7,7 +7,7 @@ import type { SpaceFinder } from "../application/read-space.ts";
 import type { SpaceStore } from "../application/spaces.ts";
 import { StoredSpaceWithRole, StoredSpaceWithStorage } from "./stored-rows.ts";
 
-const { project, space, spaceMember } = schema;
+const { project, space, spaceMember, spaceSubscription } = schema;
 
 export const postgresSpaceStore = (db: PostgresDatabase): SpaceStore & SpaceFinder => ({
   find: async (spaceId) => {
@@ -17,11 +17,13 @@ export const postgresSpaceStore = (db: PostgresDatabase): SpaceStore & SpaceFind
         name: space.name,
         plan: space.plan,
         storedBytes: sql`coalesce(sum(${project.storedBytes}), 0)`,
+        subscriptionStatus: spaceSubscription.status,
       })
       .from(space)
       .leftJoin(project, eq(project.spaceId, space.id))
+      .leftJoin(spaceSubscription, eq(spaceSubscription.spaceId, space.id))
       .where(eq(space.id, spaceId))
-      .groupBy(space.id);
+      .groupBy(space.id, spaceSubscription.status);
     return StoredSpaceWithStorage.parse(row);
   },
   createPersonal: ({ space: personal, owner, at }) =>

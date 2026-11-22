@@ -44,6 +44,7 @@ import {
   type RoleChangeFailure,
   roleOf,
   type Space,
+  subscriptionStatusOf,
 } from "../domain/space.ts";
 
 const spaceOf = ({
@@ -197,6 +198,9 @@ export const createHttpSpaceGateway = ({
             limitBytes: body.value.storage.limitBytes,
             alertReached: body.value.storage.alertReached,
           },
+          ...(body.value.subscription === undefined
+            ? {}
+            : { subscription: { status: subscriptionStatusOf(body.value.subscription.status) } }),
         })
       : body;
   },

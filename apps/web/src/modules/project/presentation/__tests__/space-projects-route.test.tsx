@@ -82,6 +82,10 @@ const SpaceStorageAlertStub = ({ spaceId }: { readonly spaceId: string }) => (
   <p>Stockage de l'espace {spaceId}</p>
 );
 
+const SpacePaymentAlertStub = ({ spaceId }: { readonly spaceId: string }) => (
+  <p>Paiement de l'espace {spaceId}</p>
+);
+
 const renderSpaceProjects = ({
   listProjects = listing([]),
   createProject = refusing("unavailable"),
@@ -126,6 +130,7 @@ const renderSpaceProjects = ({
         InviteMember: InviteMemberStub,
         SpaceMembers: SpaceMembersStub,
         SpaceStorageAlert: SpaceStorageAlertStub,
+        SpacePaymentAlert: SpacePaymentAlertStub,
         clock,
       }),
       signIn,
@@ -497,6 +502,21 @@ describe("stockage de l'espace sur la page de l'espace (ADR 0032, #32)", () => {
       ).toBeTruthy();
     },
   );
+});
+
+describe("retard de paiement sur la page de l'espace (ADR 0050 §4, #348)", () => {
+  it("place le bandeau du retard de paiement de l'espace de l'adresse au-dessus des projets", async () => {
+    const screen = await renderSpaceProjects({ listProjects: listing([makeProject()]) });
+
+    const alert = screen.getByText(`Paiement de l'espace ${SPACE_ID}`);
+    await expect.element(alert).toBeVisible();
+    expect(
+      alert
+        .element()
+        .compareDocumentPosition(screen.getByRole("list", { name: "Projets" }).element()) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
 });
 
 const PURGE_NOTICE =

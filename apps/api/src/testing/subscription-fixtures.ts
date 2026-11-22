@@ -129,11 +129,13 @@ export const seedSubscription = async (
   {
     spaceId,
     payerId,
+    status = "active",
     modifiedAt = MODIFIED_AT,
     currentPeriodEnd = PERIOD_END,
   }: {
     readonly spaceId: string;
     readonly payerId: string;
+    readonly status?: string;
     readonly modifiedAt?: Date;
     readonly currentPeriodEnd?: Date;
   },
@@ -142,7 +144,7 @@ export const seedSubscription = async (
     spaceId,
     polarSubscriptionId: "0d3f6a2b-7c1e-4b8a-9f2d-5e6a7b8c9d0e",
     payerId,
-    status: "active",
+    status,
     currentPeriodEnd,
     polarModifiedAt: modifiedAt,
   });

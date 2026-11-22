@@ -15,7 +15,13 @@ import type {
   SubscriptionEvent,
 } from "./merchant-of-record.ts";
 
-const HANDLED_EVENTS: ReadonlySet<string> = new Set(["subscription.active"]);
+const HANDLED_EVENTS: Readonly<Record<string, (event: SubscriptionEvent) => boolean>> = {
+  "subscription.active": () => true,
+  "subscription.past_due": () => true,
+  "subscription.updated": (event) => event.status === "past_due",
+};
+
+const isHandled = (event: SubscriptionEvent) => HANDLED_EVENTS[event.type]?.(event) === true;
 
 export interface SubscriptionStore {
   lockSpace(spaceId: string): Promise<Plan | undefined>;
@@ -160,7 +166,7 @@ export const receiveNotification =
       return err(notification.error);
     }
     const { value } = notification;
-    if (value.kind === "other" || !HANDLED_EVENTS.has(value.event.type)) {
+    if (value.kind === "other" || !isHandled(value.event)) {
       log({
         level: "info",
         msg: "polar event ignored",

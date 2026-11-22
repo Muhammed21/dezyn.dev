@@ -18,6 +18,7 @@ import { invitationRoute } from "./modules/space/presentation/invitation-route.t
 import { inviteMemberForm } from "./modules/space/presentation/invite-member.tsx";
 import { mySpacesRoute } from "./modules/space/presentation/my-spaces-route.tsx";
 import { spaceMembers } from "./modules/space/presentation/space-members.tsx";
+import { spacePaymentAlert } from "./modules/space/presentation/space-payment-alert.tsx";
 import { spacePlanRoute } from "./modules/space/presentation/space-plan-route.tsx";
 import { spaceStorageAlert } from "./modules/space/presentation/space-storage-alert.tsx";
 import { createSpaces } from "./modules/space/space-module.ts";
@@ -63,6 +64,7 @@ const appRouter = ({
   });
 
   const SpaceStorageAlert = spaceStorageAlert({ readSpace: spaces.readSpace });
+  const SpacePaymentAlert = spacePaymentAlert({ readSpace: spaces.readSpace });
 
   const root = createRootRoute();
   return createRouter({
@@ -88,6 +90,7 @@ const appRouter = ({
           removeMember: spaces.removeMember,
         }),
         SpaceStorageAlert,
+        SpacePaymentAlert,
         clock,
       }),
       spacePlanRoute({
