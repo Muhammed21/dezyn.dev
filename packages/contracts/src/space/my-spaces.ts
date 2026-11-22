@@ -18,6 +18,8 @@ export const ACTIONS = [
   "subscription.checkout",
 ] as const;
 
+export const FREE_LIMITS = ["projects", "storage", "members"] as const;
+
 const SUBSCRIPTION_STATUSES = ["active", "canceling", "past_due", "ended"] as const;
 
 const SpaceSubscriptionOutput = z.looseObject({
@@ -41,6 +43,8 @@ export const SpaceOutput = MySpaceOutput.extend({
     alertReached: z.boolean(),
   }),
   subscription: SpaceSubscriptionOutput.optional(),
+  frozen: z.boolean(),
+  exceededFreeLimits: z.array(openEnum(FREE_LIMITS)),
 });
 
 export const MySpacesOutput = z.looseObject({

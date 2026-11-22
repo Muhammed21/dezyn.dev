@@ -16,6 +16,8 @@ const ACTIONS = [
 
 const SUBSCRIPTION_STATUSES = ["active", "canceling", "past_due", "ended"] as const;
 
+const FREE_LIMITS = ["projects", "storage", "members"] as const;
+
 export type Plan = (typeof PLANS)[number] | "unknown";
 
 export type SubscriptionStatus = (typeof SUBSCRIPTION_STATUSES)[number] | "unknown";
@@ -44,12 +46,21 @@ export type SpaceSubscription = {
   readonly payer: { readonly name: string; readonly email: string; readonly you: boolean };
 };
 
+export type FreeLimit = (typeof FREE_LIMITS)[number];
+
 export type SpaceWithStorage = Space & {
   readonly storage: SpaceStorage;
   readonly subscription?: SpaceSubscription;
+  readonly frozen: boolean;
+  readonly exceededFreeLimits: readonly FreeLimit[];
 };
 
-export type SpaceFailure = "unauthenticated" | "not_found" | "unavailable" | "invalid_response";
+export type SpaceFailure =
+  | "unauthenticated"
+  | "not_found"
+  | "frozen"
+  | "unavailable"
+  | "invalid_response";
 
 export type SpaceMember = {
   readonly userId: string;
@@ -58,7 +69,7 @@ export type SpaceMember = {
   readonly role: Role;
 };
 
-export type MembersFailure = SpaceFailure;
+export type MembersFailure = Exclude<SpaceFailure, "frozen">;
 
 export type RemovalFailure =
   | "unauthenticated"
@@ -133,6 +144,9 @@ export const subscriptionStatusOf = (value: string): SubscriptionStatus =>
   SUBSCRIPTION_STATUSES.find((status) => status === value) ?? "unknown";
 
 export const roleOf = (value: string): Role => ROLES.find((role) => role === value) ?? "unknown";
+
+export const knownFreeLimitsOf = (values: readonly string[]): readonly FreeLimit[] =>
+  FREE_LIMITS.filter((limit) => values.includes(limit));
 
 export const knownActionsOf = (values: readonly string[]): readonly Action[] =>
   ACTIONS.filter((action) => values.includes(action));

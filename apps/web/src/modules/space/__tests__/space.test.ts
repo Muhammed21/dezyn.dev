@@ -141,7 +141,42 @@ const makeStorage = (overrides: Readonly<Record<string, unknown>> = {}) => ({
 });
 
 const makeReadSpace = (overrides: Readonly<Record<string, unknown>> = {}) =>
-  makeSpace({ storage: makeStorage(), ...overrides });
+  makeSpace({ storage: makeStorage(), frozen: false, exceededFreeLimits: [], ...overrides });
+
+describe("gel d'un espace lu dans l'app web (ADR 0050 §5)", () => {
+  it("donne au propriétaire le gel de l'espace et les limites Free dépassées", async () => {
+    const { spaces } = answering(
+      json(makeReadSpace({ frozen: true, exceededFreeLimits: ["projects", "members"] })),
+    );
+
+    const read = await spaces.readSpace({ spaceId: SPACE_ID });
+
+    expect(read.ok && { frozen: read.value.frozen, limits: read.value.exceededFreeLimits }).toEqual(
+      { frozen: true, limits: ["projects", "members"] },
+    );
+  });
+
+  it("ignore une limite inconnue de l'app (ADR 0023 §2)", async () => {
+    const { spaces } = answering(
+      json(makeReadSpace({ frozen: true, exceededFreeLimits: ["components", "storage"] })),
+    );
+
+    const read = await spaces.readSpace({ spaceId: SPACE_ID });
+
+    expect(read.ok && read.value.exceededFreeLimits).toEqual(["storage"]);
+  });
+
+  it("donne frozen à l'éditeur refusé par le problème space-frozen", async () => {
+    const { spaces } = answering(
+      json(
+        { type: "https://dezyn.dev/problems/space-frozen", title: "Espace gelé", status: 403 },
+        403,
+      ),
+    );
+
+    expect(await spaces.readSpace({ spaceId: SPACE_ID })).toEqual(err("frozen"));
+  });
+});
 
 describe("lecture d'un espace du membre dans l'app web (ADR 0044 §5)", () => {
   it("demande l'espace de l'adresse à l'API avec le cookie du navigateur", async () => {
@@ -169,6 +204,8 @@ describe("lecture d'un espace du membre dans l'app web (ADR 0044 §5)", () => {
         role: "editor",
         allowedActions: ["space.read", "token.create", "proposal.review"],
         storage: { usedBytes: 1_200_000, limitBytes: 500_000_000, alertReached: false },
+        frozen: false,
+        exceededFreeLimits: [],
       }),
     );
   });

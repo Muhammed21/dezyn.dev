@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { allowedActionsOf, type Membership } from "../../domain/can.ts";
 import { spaceStorageOf } from "../../domain/storage-limit.ts";
+import type { FreezeFacts } from "../frozen-space-guard.ts";
 import { inMemoryMembershipReader } from "../membership-reader.fake.ts";
 import { readSpace, type SpaceSubscription } from "../read-space.ts";
 
@@ -31,16 +32,28 @@ const makeSubscription = (overrides: Partial<SpaceSubscription> = {}): SpaceSubs
   ...overrides,
 });
 
+const makeFacts = (overrides: Partial<FreezeFacts> = {}): FreezeFacts => ({
+  plan: "team",
+  subscriptionEnded: false,
+  usage: { projects: 1, storedBytes: STORED_BYTES, members: 1 },
+  ...overrides,
+});
+
 const readWith = (
   memberships: readonly Membership[],
   storedBytes = STORED_BYTES,
   subscription?: SpaceSubscription,
+  facts: FreezeFacts = makeFacts(),
 ) =>
   readSpace({
     memberships: inMemoryMembershipReader(memberships),
     spaces: { find: async () => ({ ...SPACE, storedBytes }) },
     subscriptions: {
       subscriptionOf: async (spaceId) => (spaceId === SPACE.id ? subscription : undefined),
+    },
+    freezes: {
+      freezeFactsOf: async (spaceId) =>
+        spaceId === SPACE.id ? facts : makeFacts({ plan: "free", subscriptionEnded: true }),
     },
   });
 
@@ -55,6 +68,8 @@ describe("lire un espace", () => {
         role: "editor",
         allowedActions: allowedActionsOf("editor"),
         storage: spaceStorageOf({ plan: SPACE.plan, storedBytes: STORED_BYTES }),
+        frozen: false,
+        exceededFreeLimits: [],
       },
     });
   });
@@ -148,5 +163,45 @@ describe("lire l'abonnement d'un espace (ADR 0050 §3)", () => {
     const space = await read({ spaceId: SPACE.id, userId: ADA });
 
     expect(space.ok && space.value).not.toHaveProperty("subscription");
+  });
+});
+
+describe("lire le gel d'un espace (ADR 0050 §5)", () => {
+  it("rend au propriétaire d'un espace gelé le gel et les limites Free dépassées", async () => {
+    const read = readWith(
+      [makeMembership({ role: "owner" })],
+      STORED_BYTES,
+      undefined,
+      makeFacts({
+        plan: "free",
+        subscriptionEnded: true,
+        usage: { projects: 5, storedBytes: 3_000_000_000, members: 1 },
+      }),
+    );
+
+    const space = await read({ spaceId: SPACE.id, userId: ADA });
+
+    expect(
+      space.ok && { frozen: space.value.frozen, limits: space.value.exceededFreeLimits },
+    ).toEqual({ frozen: true, limits: ["projects", "storage"] });
+  });
+
+  it("rend un espace Free jamais abonné, au-dessus des limites, comme non gelé", async () => {
+    const read = readWith(
+      [makeMembership({ role: "owner" })],
+      STORED_BYTES,
+      undefined,
+      makeFacts({
+        plan: "free",
+        subscriptionEnded: false,
+        usage: { projects: 5, storedBytes: 3_000_000_000, members: 1 },
+      }),
+    );
+
+    const space = await read({ spaceId: SPACE.id, userId: ADA });
+
+    expect(
+      space.ok && { frozen: space.value.frozen, limits: space.value.exceededFreeLimits },
+    ).toEqual({ frozen: false, limits: [] });
   });
 });

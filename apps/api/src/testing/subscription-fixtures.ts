@@ -149,6 +149,21 @@ export const seedSubscription = async (
   await db.orm.update(schema.space).set({ plan: "team" }).where(eq(schema.space.id, spaceId));
 };
 
+export const seedEndedSubscription = async (
+  db: PostgresDatabase,
+  { spaceId, payerId }: { readonly spaceId: string; readonly payerId: string },
+) => {
+  await db.orm.insert(schema.spaceSubscription).values({
+    spaceId,
+    polarSubscriptionId: "0d3f6a2b-7c1e-4b8a-9f2d-5e6a7b8c9d0e",
+    payerId,
+    status: "ended",
+    currentPeriodEnd: PERIOD_END,
+    polarModifiedAt: MODIFIED_AT,
+  });
+  await db.orm.update(schema.space).set({ plan: "free" }).where(eq(schema.space.id, spaceId));
+};
+
 export const subscriptionOf = async (db: PostgresDatabase, spaceId: string) => {
   const [row] = await db.orm
     .select()

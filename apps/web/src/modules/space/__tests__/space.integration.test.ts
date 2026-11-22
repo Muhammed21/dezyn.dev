@@ -21,6 +21,7 @@ import {
   makeSubscriptionEvent,
   PERIOD_END,
   postPolarWebhook,
+  seedEndedSubscription,
 } from "@repo/api/testing/subscription-fixtures.ts";
 import { err, ok } from "@repo/result";
 
@@ -115,6 +116,16 @@ describe("lecture d'un espace par l'app web, contre la vraie API (ADR 0044 §5)"
         limitBytes: 20_000_000_000,
         alertReached: true,
       });
+    }));
+
+  it("un éditeur d'un espace gelé lit frozen (ADR 0050 §5)", () =>
+    withIdentityApp(async (app, db) => {
+      const { userId, spaces } = await signedInAda(app);
+      const spaceId = await seedTeamSpaceWith(db, { userId, role: "editor" });
+      await seedProjectStoring(db, { spaceId, bytes: 3_000_000_000 });
+      await seedEndedSubscription(db, { spaceId, payerId: userId });
+
+      expect(await spaces.readSpace({ spaceId })).toEqual(err("frozen"));
     }));
 
   it("l'espace personnel d'un autre membre donne not_found", () =>

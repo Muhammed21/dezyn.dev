@@ -1,4 +1,4 @@
-import { index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { bigint, index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
 import { identityUser } from "./identity.ts";
 import { space } from "./space.ts";
@@ -16,6 +16,7 @@ export const spaceSubscription = pgTable("space_subscription", {
   status: text("status").notNull(),
   currentPeriodEnd: at("current_period_end"),
   polarModifiedAt: at("polar_modified_at").notNull(),
+  storedBytesAtEnd: bigint("stored_bytes_at_end", { mode: "number" }),
 });
 
 export const spacePlanChange = pgTable(

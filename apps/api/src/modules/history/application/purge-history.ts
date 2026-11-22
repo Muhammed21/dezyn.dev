@@ -1,4 +1,4 @@
-import type { Plan } from "#modules/space/contracts/plan.ts";
+import { freezeOf, type Plan } from "#modules/space/contracts/plan.ts";
 import { storageLimitOf } from "#modules/space/contracts/storage-limit.ts";
 
 import {
@@ -16,6 +16,8 @@ export type PurgeCandidate = SpaceStorage & {
   readonly spaceId: string;
   readonly name: string;
   readonly projects: readonly CandidateProject[];
+  readonly subscriptionEnded: boolean;
+  readonly members: number;
 };
 
 export type PurgedProject = {
@@ -57,6 +59,12 @@ const excessOf = ({ plan, storedBytes }: SpaceStorage) =>
   storedBytes - purgeTargetOf(storageLimitOf(plan));
 
 const reachesLimit = ({ plan, storedBytes }: SpaceStorage) => storedBytes >= storageLimitOf(plan);
+
+const isFrozen = ({ plan, storedBytes, projects, members, subscriptionEnded }: PurgeCandidate) =>
+  freezeOf({ plan, subscriptionEnded, usage: { projects: projects.length, storedBytes, members } })
+    .frozen;
+
+const purgeable = (candidate: PurgeCandidate) => reachesLimit(candidate) && !isFrozen(candidate);
 
 const oldestOfFirstWithEntries = async (
   unit: PurgeBatch,
@@ -139,7 +147,7 @@ export const purgeHistory =
         ? purged
         : purgeSpace({ spaceId, projects }, withBatch(purged, batch));
     };
-    const spaces = (await candidates.list()).filter(reachesLimit);
+    const spaces = (await candidates.list()).filter(purgeable);
     return spaces.reduce<Promise<readonly PurgedSpace[]>>(async (previous, candidate) => {
       const report = await previous;
       const projects = await purgeSpace(candidate, []);

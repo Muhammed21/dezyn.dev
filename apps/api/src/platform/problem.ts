@@ -34,7 +34,19 @@ export const invalidRequest = (errors: NonNullable<Problem["errors"]>): Problem 
   errors,
 });
 
+export class ProblemError extends Error {
+  readonly problem: Problem;
+
+  constructor({ problem, message }: { readonly problem: Problem; readonly message: string }) {
+    super(message);
+    this.problem = problem;
+  }
+}
+
 export const clientProblem = (error: Error): Problem | undefined => {
+  if (error instanceof ProblemError) {
+    return error.problem;
+  }
   if (error instanceof InvalidRequest) {
     return invalidRequest(
       error.issues.map((issue) => ({ path: issue.path.join("."), message: issue.message })),

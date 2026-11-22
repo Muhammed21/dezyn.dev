@@ -35,6 +35,8 @@ const makeSpace = (overrides: Partial<SpaceWithStorage> = {}): SpaceWithStorage 
   plan: "free",
   ...EDITOR_RIGHTS,
   storage: FREE_JUST_UNDER_ALERT,
+  frozen: false,
+  exceededFreeLimits: [],
   ...overrides,
 });
 

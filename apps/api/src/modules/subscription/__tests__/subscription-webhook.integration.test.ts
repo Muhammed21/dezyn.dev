@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import { and, eq, isNull } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 
 import type { LogRecord } from "#platform/logging.ts";
@@ -10,7 +11,7 @@ import {
   obtainAccessToken,
   withIdentityApp,
 } from "#testing/authorization-flow.ts";
-import { seedProjectStoring } from "#testing/project-storage.ts";
+import { seedProjectStoring, seedStoredBytes } from "#testing/project-storage.ts";
 import { invite, makeOutbox, personalSpaceOf } from "#testing/space-fixtures.ts";
 import {
   makeSubscriptionEvent,
@@ -137,6 +138,7 @@ describe("le webhook « abonnement actif » de Polar passe l'espace en Team (ADR
         status: "active",
         currentPeriodEnd: PERIOD_END,
         polarModifiedAt: MODIFIED_AT,
+        storedBytesAtEnd: null,
       });
     }));
 
@@ -541,8 +543,8 @@ const seedEditor = async (app: App, db: Parameters<typeof personalSpaceOf>[0], s
   });
 };
 
-describe("une révocation au-dessus des limites Free garde l'espace en Team, en attendant le gel (ADR 0050 §5, §6)", () => {
-  it("un espace pile aux limites Free (3 projets, 500 Mo, 1 membre) redevient Free", () =>
+describe("une révocation rend l'espace Free, et le gèle au-dessus des limites Free, sans rien supprimer (ADR 0050 §5, §6)", () => {
+  it("un espace pile aux limites Free (3 projets, 500 Mo, 1 membre) redevient Free, sans gel", () =>
     withIdentityApp(async (app, db) => {
       const { accessToken, userId, spaceId } = await seedTeamSpace(app, db);
       await seedProjectStoring(db, { spaceId, bytes: 200_000_000 });
@@ -551,7 +553,11 @@ describe("une révocation au-dessus des limites Free garde l'espace en Team, en 
 
       await postPolarWebhook(app, { event: revokedEvent({ spaceId, payerId: userId }) });
 
-      expect((await readSpace(app, { accessToken, spaceId })).plan).toBe("free");
+      expect(await readSpace(app, { accessToken, spaceId })).toMatchObject({
+        plan: "free",
+        frozen: false,
+        exceededFreeLimits: [],
+      });
       expect(await planChangesOf(db, spaceId)).toHaveLength(1);
     }));
 
@@ -564,6 +570,7 @@ describe("une révocation au-dessus des limites Free garde l'espace en Team, en 
         await seedProjectStoring(db, { spaceId, bytes: 0 });
         await seedProjectStoring(db, { spaceId, bytes: 0 });
       },
+      "projects",
     ],
     [
       "plus de 500 Mo stockés",
@@ -571,42 +578,101 @@ describe("une révocation au-dessus des limites Free garde l'espace en Team, en 
         await seedProjectStoring(db, { spaceId, bytes: 300_000_000 });
         await seedProjectStoring(db, { spaceId, bytes: 200_000_001 });
       },
+      "storage",
     ],
     [
       "plus d'un membre",
       (app: App, db: Parameters<typeof personalSpaceOf>[0], spaceId: string) =>
         seedEditor(app, db, spaceId),
+      "members",
     ],
-  ])(
-    "un espace avec %s reste Team, son abonnement terminé, et se journalise",
-    (_case, seedAbove) => {
-      const { records, log } = makeLog();
-      return withIdentityApp(
-        async (app, db) => {
-          const { accessToken, userId, spaceId } = await seedTeamSpace(app, db);
-          await seedAbove(app, db, spaceId);
+  ])("un espace avec %s redevient Free, tracé, et il est gelé", (_case, seedAbove, exceededLimit) =>
+    withIdentityApp(async (app, db) => {
+      const { accessToken, userId, spaceId } = await seedTeamSpace(app, db);
+      await seedAbove(app, db, spaceId);
 
-          const response = await postPolarWebhook(app, {
-            event: revokedEvent({ spaceId, payerId: userId }),
-          });
+      const response = await postPolarWebhook(app, {
+        event: revokedEvent({ spaceId, payerId: userId }),
+      });
 
-          expect(response.status).toBe(200);
-          expect((await readSpace(app, { accessToken, spaceId })).plan).toBe("team");
-          expect(await subscriptionOf(db, spaceId)).toMatchObject({ status: "ended" });
-          expect(await planChangesOf(db, spaceId)).toEqual([]);
-          expect(records).toContainEqual(
-            expect.objectContaining({
-              level: "warn",
-              msg: "polar subscription ended above the free limits, freeze pending",
-              event: "subscription.revoked",
-              spaceId,
-            }),
-          );
-        },
-        { log },
-      );
-    },
+      expect(response.status).toBe(200);
+      expect(await readSpace(app, { accessToken, spaceId })).toMatchObject({
+        plan: "free",
+        frozen: true,
+        exceededFreeLimits: [exceededLimit],
+      });
+      expect(await planChangesOf(db, spaceId)).toEqual([
+        expect.objectContaining({ planBefore: "team", planAfter: "free" }),
+      ]);
+    }),
   );
+
+  it("la révocation enregistre sur l'abonnement le stockage de l'espace à cet instant", () =>
+    withIdentityApp(async (app, db) => {
+      const { userId, spaceId } = await seedTeamSpace(app, db);
+      await seedProjectStoring(db, { spaceId, bytes: 2_000_000_000 });
+      await seedProjectStoring(db, { spaceId, bytes: 1_000_000_000 });
+
+      await postPolarWebhook(app, { event: revokedEvent({ spaceId, payerId: userId }) });
+
+      expect(await subscriptionOf(db, spaceId)).toMatchObject({
+        status: "ended",
+        storedBytesAtEnd: 3_000_000_000,
+      });
+    }));
+
+  it("un état plus récent de l'abonnement terminé garde le stockage enregistré à sa fin", () =>
+    withIdentityApp(async (app, db) => {
+      const { userId, spaceId } = await seedTeamSpace(app, db);
+      const projectId = await seedProjectStoring(db, { spaceId, bytes: 3_000_000_000 });
+      await postPolarWebhook(app, { event: revokedEvent({ spaceId, payerId: userId }) });
+      await seedStoredBytes(db, { projectId, bytes: 100 });
+
+      await postPolarWebhook(app, {
+        event: makeSubscriptionEvent({
+          type: "subscription.updated",
+          spaceId,
+          payerId: userId,
+          ...REVOKED_STATE,
+          modifiedAt: secondsAfter(MODIFIED_AT, 120),
+        }),
+      });
+
+      expect(await subscriptionOf(db, spaceId)).toMatchObject({
+        polarModifiedAt: secondsAfter(MODIFIED_AT, 120),
+        storedBytesAtEnd: 3_000_000_000,
+      });
+    }));
+
+  it("le gel ne supprime aucun projet, aucun membre, et garde le stockage", () =>
+    withIdentityApp(async (app, db) => {
+      const { accessToken, userId, spaceId } = await seedTeamSpace(app, db);
+      await seedProjectStoring(db, { spaceId, bytes: 2_000_000_000 });
+      await seedProjectStoring(db, { spaceId, bytes: 0 });
+      await seedProjectStoring(db, { spaceId, bytes: 0 });
+      await seedProjectStoring(db, { spaceId, bytes: 0 });
+      await seedEditor(app, db, spaceId);
+
+      await postPolarWebhook(app, { event: revokedEvent({ spaceId, payerId: userId }) });
+
+      expect(
+        await db.orm
+          .select({ id: schema.project.id })
+          .from(schema.project)
+          .where(eq(schema.project.spaceId, spaceId)),
+      ).toHaveLength(4);
+      expect(
+        await db.orm
+          .select({ id: schema.spaceMember.id })
+          .from(schema.spaceMember)
+          .where(and(eq(schema.spaceMember.spaceId, spaceId), isNull(schema.spaceMember.closedAt))),
+      ).toHaveLength(2);
+      expect(await readSpace(app, { accessToken, spaceId })).toMatchObject({
+        frozen: true,
+        exceededFreeLimits: ["projects", "storage", "members"],
+        storage: { usedBytes: 2_000_000_000 },
+      });
+    }));
 });
 
 describe("le webhook de Polar refuse ce qu'il ne peut pas vérifier (ADR 0050 §7)", () => {

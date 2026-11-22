@@ -14,6 +14,7 @@ import {
   PortalOutput,
   SelfRemovalProblem,
   SentInvitationOutput,
+  SpaceFrozenProblem,
   SpaceOutput,
 } from "@repo/contracts";
 import { err, ok } from "@repo/result";
@@ -40,6 +41,7 @@ import {
   type CheckoutFailure,
   type InvitationFailure,
   knownActionsOf,
+  knownFreeLimitsOf,
   planOf,
   type PortalFailure,
   type RemovalFailure,
@@ -209,6 +211,9 @@ export const createHttpSpaceGateway = ({
     if (response.status === NOT_FOUND) {
       return err("not_found");
     }
+    if (response.status === FORBIDDEN && (await parseJson(response, SpaceFrozenProblem)).ok) {
+      return err("frozen");
+    }
     if (!response.ok) {
       return err(failureOf(response));
     }
@@ -221,6 +226,8 @@ export const createHttpSpaceGateway = ({
             limitBytes: body.value.storage.limitBytes,
             alertReached: body.value.storage.alertReached,
           },
+          frozen: body.value.frozen,
+          exceededFreeLimits: knownFreeLimitsOf(body.value.exceededFreeLimits),
           ...(body.value.subscription === undefined
             ? {}
             : { subscription: subscriptionOf(body.value.subscription) }),

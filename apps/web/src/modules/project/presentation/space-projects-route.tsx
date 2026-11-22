@@ -27,6 +27,7 @@ type InviteMember = ComponentType<{ readonly spaceId: string }>;
 type SpaceMembers = ComponentType<{ readonly spaceId: string }>;
 type SpaceStorageAlert = ComponentType<{ readonly spaceId: string }>;
 type SpacePaymentAlert = ComponentType<{ readonly spaceId: string }>;
+type SpaceFrozenAlert = ComponentType<{ readonly spaceId: string }>;
 
 const UNKNOWN_SPACE = "Cet espace est introuvable.";
 
@@ -123,6 +124,7 @@ const SpaceProjects = ({
   SpaceMembers,
   SpaceStorageAlert,
   SpacePaymentAlert,
+  SpaceFrozenAlert,
   clock,
 }: {
   readonly spaceId: string;
@@ -133,6 +135,7 @@ const SpaceProjects = ({
   readonly SpaceMembers: SpaceMembers;
   readonly SpaceStorageAlert: SpaceStorageAlert;
   readonly SpacePaymentAlert: SpacePaymentAlert;
+  readonly SpaceFrozenAlert: SpaceFrozenAlert;
   readonly clock: Clock;
 }) => {
   const { data } = useQuery({
@@ -146,6 +149,14 @@ const SpaceProjects = ({
   const allowedActions = space?.ok === true ? space.value.allowedActions : [];
   const canCreateProject = allowedActions.includes("project.create");
   const canInviteMember = allowedActions.includes("member.invite");
+  if (space?.ok === false && space.error === "frozen") {
+    return (
+      <main>
+        <h1>Projets</h1>
+        <SpaceFrozenAlert spaceId={spaceId} />
+      </main>
+    );
+  }
   if (data === undefined) {
     return <p>Chargement des projets…</p>;
   }
@@ -162,6 +173,7 @@ const SpaceProjects = ({
       <Link to="/espaces/$spaceId/plan" params={{ spaceId }}>
         Plan de l'espace
       </Link>
+      <SpaceFrozenAlert spaceId={spaceId} />
       <SpacePaymentAlert spaceId={spaceId} />
       <SpaceStorageAlert spaceId={spaceId} />
       {data.value.length === 0 ? (
@@ -197,6 +209,7 @@ export const spaceProjectsRoute = ({
   SpaceMembers,
   SpaceStorageAlert,
   SpacePaymentAlert,
+  SpaceFrozenAlert,
   clock,
 }: {
   readonly parent: AnyRootRoute;
@@ -207,6 +220,7 @@ export const spaceProjectsRoute = ({
   readonly SpaceMembers: SpaceMembers;
   readonly SpaceStorageAlert: SpaceStorageAlert;
   readonly SpacePaymentAlert: SpacePaymentAlert;
+  readonly SpaceFrozenAlert: SpaceFrozenAlert;
   readonly clock: Clock;
 }) => {
   const route = createRoute({
@@ -224,6 +238,7 @@ export const spaceProjectsRoute = ({
           SpaceMembers={SpaceMembers}
           SpaceStorageAlert={SpaceStorageAlert}
           SpacePaymentAlert={SpacePaymentAlert}
+          SpaceFrozenAlert={SpaceFrozenAlert}
           clock={clock}
         />
       );
