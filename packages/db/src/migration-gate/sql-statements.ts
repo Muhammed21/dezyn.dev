@@ -22,6 +22,8 @@ const ESCAPE_STRING = /'(?:[^'\\]|''|\\[\s\S])*'/y;
 const STRING_CONTINUATION = /[ \t\f]*(?:--[^\n\r]*)?[\n\r](?:[ \t\n\r\f]|--[^\n\r]*[\n\r])*(?=')/y;
 const VERTICAL_TAB = "\v";
 const ESCAPE_PREFIX = /^\d*[Ee]$/;
+const UNICODE_ESCAPE_PREFIX = /^[Uu]$/;
+const UNICODE_ESCAPE_QUOTE = /&["']/y;
 const COMMENT_MARK = /\/\*|\*\//g;
 
 const matchAt = (pattern: RegExp, chunk: string, index: number): string | undefined => {
@@ -64,6 +66,9 @@ const dollarToken = (chunk: string, index: number, tag: string): Token => {
 
 const wordToken = (chunk: string, index: number, word: string): Token => {
   const quoteAt = index + word.length;
+  if (UNICODE_ESCAPE_PREFIX.test(word) && matchAt(UNICODE_ESCAPE_QUOTE, chunk, quoteAt)) {
+    return token("word", word, false);
+  }
   return ESCAPE_PREFIX.test(word) && chunk.charAt(quoteAt) === "'"
     ? stringToken(chunk, index, quoteAt, ESCAPE_STRING)
     : token("word", word);

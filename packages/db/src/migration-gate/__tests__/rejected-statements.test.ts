@@ -461,6 +461,31 @@ describe("rejectedStatements sur les chaînes, identifiants et commentaires de P
     expect(rejectedStatements(sql)).toEqual([statement]);
   });
 
+  it('refuse un ALTER TABLE dont l\'identifiant U&"…" désigne une autre table que celle créée', () => {
+    const statement = `ALTER TABLE U&"token" DROP COLUMN "description"`;
+
+    expect(rejectedStatements(`CREATE TABLE u (id int);\n${statement};`)).toEqual([statement]);
+  });
+
+  it.each([
+    [`CREATE TABLE U&"t" ("id" integer)`],
+    [`CREATE TABLE u&"t" ("id" integer)`],
+    [`CREATE TABLE U&"t!0061" UESCAPE '!' ("id" integer)`],
+    [`CREATE TABLE "t" ("c" text DEFAULT U&'d\\0061t\\0061')`],
+  ])(
+    "refuse d'office l'instruction %j, dont le nom ou la chaîne est en échappement Unicode",
+    (statement) => {
+      expect(rejectedStatements(`${statement};`)).toEqual([statement]);
+    },
+  );
+
+  it.each([
+    [`CREATE TABLE "t" ("menu" integer CHECK (menu&"menu" = 0));`],
+    [`CREATE TABLE "t" ("u1" integer CHECK (u1&'1' = 0));`],
+  ])("lit un mot qui n'est pas U seul, devant &, comme un mot ordinaire dans %j", (sql) => {
+    expect(rejectedStatements(sql)).toEqual([]);
+  });
+
   it("refuse un ALTER TABLE dont une chaîne E'…' cache une seconde action", () => {
     const statement = String.raw`ALTER TABLE "t" ADD COLUMN "c" text DEFAULT E'\'', DROP COLUMN "x", ADD COLUMN "d" text DEFAULT 'a'`;
 
