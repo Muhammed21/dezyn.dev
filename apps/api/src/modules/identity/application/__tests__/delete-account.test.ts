@@ -44,8 +44,8 @@ const makeAccount = ({
       done.push(`leavePaidSpaces ${userId} ${at.toISOString()}`);
       return paidSpaces.map(({ id }) => ({ spaceId: id }));
     },
-    dropOrphanedInvitations: async (userId) => {
-      done.push(`dropOrphanedInvitations ${userId}`);
+    orphanSpaces: async ({ userId, at }) => {
+      done.push(`orphanSpaces ${userId} ${at.toISOString()}`);
     },
     pseudonymizeHistory: async (userId) => {
       done.push(`pseudonymizeHistory ${userId}`);
@@ -91,7 +91,7 @@ const deletionOf = (checkPassword = makePasswordCheck().checkPassword) => ({
 });
 
 describe("la suppression d'un compte (ADR 0011 §5, ADR 0015, ADR 0050 §3)", () => {
-  it("quitte les espaces payés, supprime les invitations des espaces qu'il laisse orphelins, pseudonymise l'historique puis supprime l'utilisateur", async () => {
+  it("quitte les espaces payés, laisse orphelins les espaces dont il était le seul membre, pseudonymise l'historique puis supprime l'utilisateur", async () => {
     const account = makeAccount();
 
     const deleted = await deleteAccount({ ...account, now: () => NOW })(deletionOf());
@@ -99,7 +99,7 @@ describe("la suppression d'un compte (ADR 0011 §5, ADR 0015, ADR 0050 §3)", ()
     expect(deleted).toEqual(ok(undefined));
     expect(account.committed).toEqual([
       `leavePaidSpaces ${USER_ID} ${NOW.toISOString()}`,
-      `dropOrphanedInvitations ${USER_ID}`,
+      `orphanSpaces ${USER_ID} ${NOW.toISOString()}`,
       `pseudonymizeHistory ${USER_ID}`,
       `deleteUser ${USER_ID}`,
     ]);

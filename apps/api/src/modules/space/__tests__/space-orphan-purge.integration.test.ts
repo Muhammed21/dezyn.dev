@@ -21,6 +21,10 @@ const AFTER_NOW = new Date(NOW.getTime() + 60_000);
 
 const MORE_THAN_ONE_BATCH = 1_201;
 
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+
+const ONE_MILLISECOND_AFTER_NOW = new Date(NOW.getTime() + 1);
+
 type Databases = { readonly app: PostgresDatabase; readonly maintainer: PostgresDatabase };
 
 const withDatabases = (run: (databases: Databases) => Promise<void>) =>
@@ -100,6 +104,38 @@ describe("la purge des espaces orphelins, avec le rôle history_maintainer (ADR 
       expect(await purgeOf(maintainer)).toEqual({ purgedSpaces: 0, waitingSpaces: 1 });
 
       expect(await remainsOfSpace(app, spaceId)).toEqual(before);
+    }));
+
+  it("attend 7 jours après l'orphelinat d'un espace sans abonnement, puis le supprime (ADR 0056)", () =>
+    withDatabases(async ({ app, maintainer }) => {
+      const { spaceId } = await seedSpaceWithData(app, {
+        orphanedAt: new Date(NOW.getTime() - SEVEN_DAYS_MS + 1),
+      });
+      const before = await remainsOfSpace(app, spaceId);
+
+      expect(await purgeOf(maintainer, NOW)).toEqual({ purgedSpaces: 0, waitingSpaces: 1 });
+      expect(await remainsOfSpace(app, spaceId)).toEqual(before);
+
+      expect(await purgeOf(maintainer, ONE_MILLISECOND_AFTER_NOW)).toEqual({
+        purgedSpaces: 1,
+        waitingSpaces: 0,
+      });
+      expect(await remainsOfSpace(app, spaceId)).toEqual(NOTHING_LEFT);
+    }));
+
+  it("attend la fin de la période payée quand elle finit après le délai de grâce (ADR 0056)", () =>
+    withDatabases(async ({ app, maintainer }) => {
+      const { spaceId } = await seedSpaceWithData(app, {
+        orphanedAt: new Date(NOW.getTime() - SEVEN_DAYS_MS),
+        subscription: { status: "canceling", currentPeriodEnd: AFTER_NOW },
+      });
+      const before = await remainsOfSpace(app, spaceId);
+
+      expect(await purgeOf(maintainer, NOW)).toEqual({ purgedSpaces: 0, waitingSpaces: 1 });
+      expect(await remainsOfSpace(app, spaceId)).toEqual(before);
+
+      expect(await purgeOf(maintainer, AFTER_NOW)).toEqual({ purgedSpaces: 1, waitingSpaces: 0 });
+      expect(await remainsOfSpace(app, spaceId)).toEqual(NOTHING_LEFT);
     }));
 
   it("supprime en plusieurs lots un historique de plusieurs projets plus grand qu'un lot", () =>

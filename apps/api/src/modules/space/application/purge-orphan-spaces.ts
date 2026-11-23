@@ -3,7 +3,7 @@ import { errorDetails, type LogSink } from "#platform/logging.ts";
 import {
   type OrphanSpace,
   orphanSpaceIsPurgeable,
-  type OrphanSubscription,
+  type OrphanState,
 } from "../domain/orphan-space.ts";
 
 export type OrphanPurgeStep = "continued" | "purged" | "skipped";
@@ -20,7 +20,7 @@ export interface OrphanSpaces {
 export interface OrphanPurgeUnitOfWork {
   step(input: {
     readonly spaceId: string;
-    readonly purgeable: (subscription: OrphanSubscription | undefined) => boolean;
+    readonly purgeable: (orphan: OrphanState) => boolean;
   }): Promise<OrphanPurgeStep>;
 }
 
@@ -41,8 +41,8 @@ export const purgeOrphanSpaces =
   async (): Promise<OrphanPurgePass> => {
     const startedAt = now();
     const withinBudget = () => now().getTime() - startedAt.getTime() < budgetMs;
-    const purgeable = (subscription: OrphanSubscription | undefined) =>
-      orphanSpaceIsPurgeable({ subscription, now: startedAt });
+    const purgeable = ({ orphanedAt, subscription }: OrphanState) =>
+      orphanSpaceIsPurgeable({ orphanedAt, subscription, now: startedAt });
     const purgeSpace = async (spaceId: string): Promise<boolean> => {
       if (!withinBudget()) {
         return false;
@@ -51,7 +51,7 @@ export const purgeOrphanSpaces =
       return step === "continued" ? purgeSpace(spaceId) : step === "purged";
     };
     const listed = await orphans.list();
-    const toPurge = listed.filter(({ subscription }) => purgeable(subscription));
+    const toPurge = listed.filter(purgeable);
     const outcome = await toPurge.reduce<
       Promise<{ readonly purgedSpaces: number; readonly failures: readonly unknown[] }>
     >(

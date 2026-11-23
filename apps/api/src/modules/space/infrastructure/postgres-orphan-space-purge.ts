@@ -43,21 +43,25 @@ export const ORPHAN_PURGE_BATCH_SIZE = 500;
 const StoredOrphan = z
   .object({
     spaceId: z.string(),
+    orphanedAt: z.date().nullable(),
     status: z.string().nullable(),
     currentPeriodEnd: z.date().nullable(),
     cancelRequestedAt: z.date().nullable(),
   })
-  .transform(({ spaceId, status, currentPeriodEnd, cancelRequestedAt }): OrphanSpace => ({
-    spaceId,
-    subscription:
-      status === null
-        ? undefined
-        : {
-            status,
-            currentPeriodEnd: currentPeriodEnd ?? undefined,
-            cancelRequested: cancelRequestedAt !== null,
-          },
-  }));
+  .transform(
+    ({ spaceId, orphanedAt, status, currentPeriodEnd, cancelRequestedAt }): OrphanSpace => ({
+      spaceId,
+      orphanedAt: orphanedAt ?? undefined,
+      subscription:
+        status === null
+          ? undefined
+          : {
+              status,
+              currentPeriodEnd: currentPeriodEnd ?? undefined,
+              cancelRequested: cancelRequestedAt !== null,
+            },
+    }),
+  );
 
 const LockTaken = z.object({ taken: z.boolean() });
 
@@ -74,6 +78,7 @@ const orphans = (orm: Pick<PostgresTransaction, "select">) =>
   orm
     .select({
       spaceId: space.id,
+      orphanedAt: space.orphanedAt,
       status: spaceSubscription.status,
       currentPeriodEnd: spaceSubscription.currentPeriodEnd,
       cancelRequestedAt: spaceSubscription.cancelRequestedAt,
@@ -165,7 +170,7 @@ export const postgresOrphanPurgeUnitOfWork = (db: PostgresDatabase): OrphanPurge
         }
         await tx.delete(spaceInvitation).where(eq(spaceInvitation.spaceId, spaceId));
         const [row] = await orphans(tx).where(and(eq(space.id, spaceId), noOpenMember(tx)));
-        if (row === undefined || !purgeable(StoredOrphan.parse(row).subscription)) {
+        if (row === undefined || !purgeable(StoredOrphan.parse(row))) {
           tx.rollback();
         }
         return nextStep(tx, spaceId);

@@ -112,6 +112,16 @@ const userExists = async (db: PostgresDatabase, userId: string) =>
       .where(eq(schema.identityUser.id, userId))
   ).length === 1;
 
+const orphanedAtOf = async (db: PostgresDatabase, spaceId: string) => {
+  const [row] = await db.orm
+    .select({ orphanedAt: schema.space.orphanedAt })
+    .from(schema.space)
+    .where(eq(schema.space.id, spaceId));
+  return row?.orphanedAt;
+};
+
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+
 const readSpace = async (app: App, accessToken: string, spaceId: string) => {
   const response = await app.request(`${BASE_URL}/v1/spaces/${spaceId}`, {
     headers: { authorization: `Bearer ${accessToken}` },
@@ -398,7 +408,7 @@ describe("un utilisateur supprime son compte (ADR 0015, ADR 0050 §3)", () => {
     );
   });
 
-  it("les invitations d'un espace où il reste un membre ouvert ne sont pas touchées", () => {
+  it("les invitations d'un espace où il reste un membre ouvert ne sont pas touchées, et l'espace n'est pas orphelin", () => {
     const outbox = makeOutbox();
     return withIdentityApp(
       async (app, db) => {
@@ -421,12 +431,13 @@ describe("un utilisateur supprime son compte (ADR 0015, ADR 0050 §3)", () => {
             .from(schema.spaceInvitation)
             .where(eq(schema.spaceInvitation.spaceId, graceSpace)),
         ).toEqual([{ email: LINUS.email }]);
+        expect(await orphanedAtOf(db, graceSpace)).toBeNull();
       },
       { mailer: outbox.mailer },
     );
   });
 
-  it("le seul membre d'un espace avec projets, tokens, historique et abonnement terminé supprime son compte, et la purge suivante ne laisse rien de l'espace (ADR 0051)", () =>
+  it("le seul membre d'un espace avec projets, tokens, historique et abonnement terminé supprime son compte, et la purge, 7 jours plus tard, ne laisse rien de l'espace (ADR 0051, ADR 0056)", () =>
     withIdentityApp(async (app, db, { maintainerUrl }) => {
       const ada = await obtainAccessToken(app);
       const spaceId = await personalSpaceOf(db, ada.userId);
@@ -455,14 +466,25 @@ describe("un utilisateur supprime son compte (ADR 0015, ADR 0050 §3)", () => {
         history_entry: 4,
         space_subscription: 1,
       });
+      const deletionStartedAt = new Date();
       await deleteAccountOf(app, ADA);
+      const deletionEndedAt = new Date();
+      const orphanedAt = (await orphanedAtOf(db, spaceId)) ?? new Date(Number.NaN);
+      const before = await remainsOfSpace(db, spaceId);
       const maintainer = createPostgresDatabase({ url: maintainerUrl });
+      const purgeAt = (ms: number) =>
+        orphanSpacePurge({
+          db: maintainer,
+          log: () => undefined,
+          now: () => new Date(orphanedAt.getTime() + ms),
+        })();
 
       try {
-        expect(await orphanSpacePurge({ db: maintainer, log: () => undefined })()).toEqual({
-          purgedSpaces: 1,
-          waitingSpaces: 0,
-        });
+        expect(orphanedAt.getTime()).toBeGreaterThanOrEqual(deletionStartedAt.getTime());
+        expect(orphanedAt.getTime()).toBeLessThanOrEqual(deletionEndedAt.getTime());
+        expect(await purgeAt(SEVEN_DAYS_MS - 1)).toEqual({ purgedSpaces: 0, waitingSpaces: 1 });
+        expect(await remainsOfSpace(db, spaceId)).toEqual(before);
+        expect(await purgeAt(SEVEN_DAYS_MS)).toEqual({ purgedSpaces: 1, waitingSpaces: 0 });
       } finally {
         await maintainer.close();
       }
