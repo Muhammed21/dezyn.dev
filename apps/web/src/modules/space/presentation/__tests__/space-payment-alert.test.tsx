@@ -27,7 +27,7 @@ const EDITOR_RIGHTS = { role: "editor", allowedActions: ["space.read"] } as cons
 const makeSubscription = (overrides: Partial<SpaceSubscription> = {}): SpaceSubscription => ({
   status: "active",
   currentPeriodEnd: new Date("2026-12-22T10:00:00.000Z"),
-  payer: { name: "Ada Lovelace", email: "ada@dezyn.test", you: true },
+  payer: { name: "Ada Lovelace", email: "ada@dezyn.test", you: true, left: false },
   ...overrides,
 });
 

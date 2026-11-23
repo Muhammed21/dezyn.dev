@@ -28,7 +28,7 @@ const PERIOD_END = new Date("2026-12-22T10:00:00.000Z");
 const makeSubscription = (overrides: Partial<SpaceSubscription> = {}): SpaceSubscription => ({
   status: "active",
   currentPeriodEnd: PERIOD_END,
-  payer: { id: ADA, name: "Ada Lovelace", email: "ada@dezyn.test" },
+  payer: { id: ADA, name: "Ada Lovelace", email: "ada@dezyn.test", left: false },
   ...overrides,
 });
 
@@ -117,7 +117,7 @@ describe("lire l'abonnement d'un espace (ADR 0050 §3)", () => {
     expect(space.ok && space.value.subscription).toEqual({
       status: "active",
       currentPeriodEnd: PERIOD_END,
-      payer: { name: "Ada Lovelace", email: "ada@dezyn.test", you: true },
+      payer: { name: "Ada Lovelace", email: "ada@dezyn.test", you: true, left: false },
     });
   });
 
@@ -134,7 +134,22 @@ describe("lire l'abonnement d'un espace (ADR 0050 §3)", () => {
       name: "Ada Lovelace",
       email: "ada@dezyn.test",
       you: false,
+      left: false,
     });
+  });
+
+  it("rend à un autre propriétaire un payeur parti de l'espace", async () => {
+    const read = readWith(
+      [makeMembership({ userId: GRACE, role: "owner" })],
+      STORED_BYTES,
+      makeSubscription({
+        payer: { id: ADA, name: "Ada Lovelace", email: "ada@dezyn.test", left: true },
+      }),
+    );
+
+    const space = await read({ spaceId: SPACE.id, userId: GRACE });
+
+    expect(space.ok && space.value.subscription?.payer).toMatchObject({ you: false, left: true });
   });
 
   it("rend sans date un abonnement sans fin de période", async () => {

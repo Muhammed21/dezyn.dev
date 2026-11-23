@@ -204,3 +204,53 @@ describe("le portail client Polar du payeur (ADR 0050 §3, §7)", () => {
       }),
   );
 });
+
+const SUBSCRIPTION_ID = "0d3f6a2b-7c1e-4b8a-9f2d-5e6a7b8c9d0e";
+
+describe("la résiliation Polar en fin de période (ADR 0050 §3, §7)", () => {
+  it("demande à Polar de résilier l'abonnement à la fin de la période", () =>
+    withFakePolar(
+      { status: 200, answer: { id: SUBSCRIPTION_ID, cancel_at_period_end: true } },
+      async ({ baseUrl, received }) => {
+        const canceled = await merchantAt(baseUrl).cancelAtPeriodEnd({
+          spaceId: SPACE_ID,
+          subscriptionId: SUBSCRIPTION_ID,
+        });
+
+        expect(canceled).toEqual({ ok: true, value: undefined });
+        expect(received).toEqual([
+          expect.objectContaining({
+            method: "PATCH",
+            path: `/v1/subscriptions/${SUBSCRIPTION_ID}`,
+            body: { cancel_at_period_end: true },
+          }),
+        ]);
+        expect(received[0]?.headers).toMatchObject({
+          authorization: "Bearer polar_oat_jeton-de-test",
+          "polar-version": "2027-01",
+        });
+      },
+    ));
+
+  it.each([500, 404])(
+    "une réponse %i de Polar rend la résiliation indisponible, et se journalise",
+    (status) =>
+      withFakePolar({ status, answer: { detail: [] } }, async ({ baseUrl }) => {
+        const records: LogRecord[] = [];
+
+        const canceled = await merchantAt(baseUrl, (record) =>
+          records.push(record),
+        ).cancelAtPeriodEnd({ spaceId: SPACE_ID, subscriptionId: SUBSCRIPTION_ID });
+
+        expect(canceled).toEqual({ ok: false, error: "unavailable" });
+        expect(records).toEqual([
+          expect.objectContaining({
+            level: "error",
+            msg: "polar cancel at period end failed",
+            spaceId: SPACE_ID,
+            subscriptionId: SUBSCRIPTION_ID,
+          }),
+        ]);
+      }),
+  );
+});

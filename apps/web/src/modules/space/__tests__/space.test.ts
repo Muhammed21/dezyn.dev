@@ -707,6 +707,64 @@ describe("retrait d'un membre depuis l'app web (ADR 0017 §2)", () => {
   });
 });
 
+describe("départ d'un membre depuis l'app web (ADR 0011 §5, ADR 0050 §3)", () => {
+  it("demande le départ du membre à l'API avec le cookie du navigateur", async () => {
+    const { spaces, calls } = answering(noContent);
+
+    await spaces.leaveSpace({ spaceId: SPACE_ID });
+
+    expect(calls).toEqual([
+      {
+        url: `${API_URL}/v1/spaces/${SPACE_ID}/members/me`,
+        init: { method: "DELETE", credentials: "include" },
+      },
+    ]);
+  });
+
+  it("donne ok sur un 204", async () => {
+    const { spaces } = answering(noContent);
+
+    expect(await spaces.leaveSpace({ spaceId: SPACE_ID })).toEqual(ok(undefined));
+  });
+
+  it("donne not_found sans appeler l'API quand l'identifiant de l'espace n'est pas un UUID", async () => {
+    const { spaces, calls } = answering(noContent);
+
+    expect(await spaces.leaveSpace({ spaceId: "espace-1" })).toEqual(err("not_found"));
+    expect(calls).toEqual([]);
+  });
+
+  it.each([
+    ["unauthenticated", json({}, 401)],
+    ["not_found", problem({ type: "about:blank" }, 404)],
+    ["last_owner", problem({ type: "https://dezyn.dev/problems/last-owner" }, 409)],
+    ["unavailable", json({}, 500)],
+  ] as const)("donne %s", async (failure, response) => {
+    const { spaces } = answering(response);
+
+    expect(await spaces.leaveSpace({ spaceId: SPACE_ID })).toEqual(err(failure));
+  });
+
+  it.each([
+    ["un 409 sans type connu", problem({ type: "about:blank" }, 409)],
+    ["un 200 au lieu d'un 204", json({}, 200)],
+    ["un 403", problem({ type: "about:blank" }, 403)],
+  ])("donne invalid_response sur %s", async (_case, response) => {
+    const { spaces } = answering(response);
+
+    expect(await spaces.leaveSpace({ spaceId: SPACE_ID })).toEqual(err("invalid_response"));
+  });
+
+  it("donne unavailable quand l'API est injoignable", async () => {
+    const spaces = createSpaces({
+      apiUrl: API_URL,
+      fetch: () => Promise.reject(new TypeError("Failed to fetch")),
+    });
+
+    expect(await spaces.leaveSpace({ spaceId: SPACE_ID })).toEqual(err("unavailable"));
+  });
+});
+
 const CHECKOUT_URL = "https://sandbox.polar.sh/checkout/polar_c_1";
 
 describe("checkout du plan Team depuis l'app web (ADR 0050 §7)", () => {
@@ -773,7 +831,7 @@ describe("checkout du plan Team depuis l'app web (ADR 0050 §7)", () => {
 const makeSubscription = (overrides: Readonly<Record<string, unknown>> = {}) => ({
   status: "active",
   currentPeriodEnd: "2026-12-22T10:00:00.000Z",
-  payer: { name: "Ada Lovelace", email: "ada@dezyn.test", you: true },
+  payer: { name: "Ada Lovelace", email: "ada@dezyn.test", you: true, left: false },
   ...overrides,
 });
 
@@ -786,8 +844,24 @@ describe("abonnement d'un espace lu dans l'app web (ADR 0050 §3)", () => {
     expect(read.ok && read.value.subscription).toEqual({
       status: "active",
       currentPeriodEnd: new Date("2026-12-22T10:00:00.000Z"),
-      payer: { name: "Ada Lovelace", email: "ada@dezyn.test", you: true },
+      payer: { name: "Ada Lovelace", email: "ada@dezyn.test", you: true, left: false },
     });
+  });
+
+  it("lit un payeur parti de l'espace", async () => {
+    const { spaces } = answering(
+      json(
+        makeReadSpace({
+          subscription: makeSubscription({
+            payer: { name: "Ada Lovelace", email: "ada@dezyn.test", you: false, left: true },
+          }),
+        }),
+      ),
+    );
+
+    const read = await spaces.readSpace({ spaceId: SPACE_ID });
+
+    expect(read.ok && read.value.subscription?.payer).toMatchObject({ you: false, left: true });
   });
 
   it.each(["active", "canceling", "past_due", "ended"])("lit le statut %s", async (status) => {

@@ -169,6 +169,13 @@
       "when": 1795386103174,
       "tag": "0023_space_subscription_stored_bytes_at_end",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1795391279371,
+      "tag": "0024_space_subscription_cancel_requested_at",
+      "breakpoints": true
     }
   ]
 }

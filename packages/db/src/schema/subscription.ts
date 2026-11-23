@@ -17,6 +17,7 @@ export const spaceSubscription = pgTable("space_subscription", {
   currentPeriodEnd: at("current_period_end"),
   polarModifiedAt: at("polar_modified_at").notNull(),
   storedBytesAtEnd: bigint("stored_bytes_at_end", { mode: "number" }),
+  cancelRequestedAt: at("cancel_requested_at"),
 });
 
 export const spacePlanChange = pgTable(

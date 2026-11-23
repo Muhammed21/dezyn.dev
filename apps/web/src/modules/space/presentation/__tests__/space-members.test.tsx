@@ -7,6 +7,7 @@ import {
   RouterProvider,
   type RouterHistory,
 } from "@tanstack/react-router";
+import type { ReactNode } from "react";
 import { describe, expect, it } from "vitest";
 import { render } from "vitest-browser-react";
 
@@ -98,6 +99,7 @@ const renderSpaceMembers = async ({
   readSpace = readEditorSpace,
   changeRole = pending,
   removeMember = neverRemoves,
+  LeaveSpace = () => null,
   history = createMemoryHistory({ initialEntries: [`/espaces/${SPACE_ID}`] }),
   queryClient = new QueryClient(),
 }: {
@@ -105,10 +107,17 @@ const renderSpaceMembers = async ({
   readonly readSpace?: ReadSpace;
   readonly changeRole?: ChangeRole;
   readonly removeMember?: RemoveMember;
+  readonly LeaveSpace?: (props: { readonly spaceId: string }) => ReactNode;
   readonly history?: RouterHistory;
   readonly queryClient?: QueryClient;
 }) => {
-  const SpaceMembers = spaceMembers({ listMembers, readSpace, changeRole, removeMember });
+  const SpaceMembers = spaceMembers({
+    listMembers,
+    readSpace,
+    changeRole,
+    removeMember,
+    LeaveSpace,
+  });
   const root = createRootRoute();
   const spacePage = createRoute({
     getParentRoute: () => root,
@@ -215,6 +224,15 @@ describe("membres de l'espace (ADR 0044 §5)", () => {
     });
 
     await expect.element(screen.getByText("Page de connexion")).toBeVisible();
+  });
+
+  it("propose de quitter l'espace de la page dans la section Membres", async () => {
+    const screen = await renderSpaceMembers({
+      listMembers: listAdaAndGrace,
+      LeaveSpace: ({ spaceId }) => <p>Quitter {spaceId}</p>,
+    });
+
+    await expect.element(membersSection(screen).getByText(`Quitter ${SPACE_ID}`)).toBeVisible();
   });
 });
 

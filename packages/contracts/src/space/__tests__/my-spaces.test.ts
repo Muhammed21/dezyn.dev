@@ -127,7 +127,7 @@ describe("sortie de la lecture d'un espace, avec son stockage (ADR 0032)", () =>
 const makeSubscription = (overrides: Readonly<Record<string, unknown>> = {}) => ({
   status: "active",
   currentPeriodEnd: "2026-12-22T10:00:00.000Z",
-  payer: { name: "Ada Lovelace", email: "ada@dezyn.test", you: true },
+  payer: { name: "Ada Lovelace", email: "ada@dezyn.test", you: true, left: false },
   ...overrides,
 });
 
@@ -171,7 +171,14 @@ describe("sortie de l'abonnement d'un espace, lu par ses propriétaires (ADR 005
   it.each([
     ["une fin de période qui n'est pas une date", { currentPeriodEnd: "le mois prochain" }],
     ["un abonnement sans payeur", { payer: undefined }],
-    ["un payeur sans l'indication que c'est moi", { payer: { name: "Ada", email: "a@b.c" } }],
+    [
+      "un payeur sans l'indication que c'est moi",
+      { payer: { name: "Ada", email: "a@b.c", left: false } },
+    ],
+    [
+      "un payeur sans l'indication qu'il est parti",
+      { payer: { name: "Ada", email: "a@b.c", you: false } },
+    ],
   ])("refuse %s", (_case, subscription) => {
     expect(
       SpaceOutput.safeParse(

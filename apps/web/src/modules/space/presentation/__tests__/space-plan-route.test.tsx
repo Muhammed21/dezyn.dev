@@ -55,12 +55,12 @@ const makeSpace = (overrides: Partial<SpaceWithStorage> = {}): SpaceWithStorage 
 const makeSubscription = (overrides: Partial<SpaceSubscription> = {}): SpaceSubscription => ({
   status: "active",
   currentPeriodEnd: new Date("2026-12-22T10:00:00.000Z"),
-  payer: { name: "Ada Lovelace", email: "ada@dezyn.test", you: true },
+  payer: { name: "Ada Lovelace", email: "ada@dezyn.test", you: true, left: false },
   ...overrides,
 });
 
 const PAID_BY_SOMEONE_ELSE = {
-  payer: { name: "Ada Lovelace", email: "ada@dezyn.test", you: false },
+  payer: { name: "Ada Lovelace", email: "ada@dezyn.test", you: false, left: false },
 } as const;
 
 const makeTeamSpace = (subscription: Partial<SpaceSubscription> = {}) =>
@@ -429,6 +429,47 @@ describe("abonnement d'un espace Team sur la page « Plan » (ADR 0050 §3, spec
       .element(screen.getByText("Prochain renouvellement le 22 décembre 2026."))
       .toBeVisible();
     await expect.element(manageButton(screen)).not.toBeInTheDocument();
+  });
+
+  it.each(["active", "canceling"] as const)(
+    "annonce à un autre propriétaire le départ du payeur d'un abonnement %s, et qu'il faudra souscrire à nouveau",
+    async (status) => {
+      const screen = await renderPlan({
+        readSpace: reading(
+          makeTeamSpace({ status, payer: { ...PAID_BY_SOMEONE_ELSE.payer, left: true } }),
+        ),
+      });
+
+      await expect
+        .element(
+          screen.getByText(
+            "Ada Lovelace (ada@dezyn.test), qui payait l'abonnement, a quitté l'espace : le plan Team prend fin le 22 décembre 2026. Souscrivez à nouveau au plan Team après cette date pour le garder.",
+          ),
+        )
+        .toBeVisible();
+      expect(screen.getByText(/Payé par/).query()).toBeNull();
+      expect(screen.getByText(/Prochain renouvellement/).query()).toBeNull();
+      expect(screen.getByText(/Abonnement résilié/).query()).toBeNull();
+    },
+  );
+
+  it("sans date de fin connue, annonce le départ du payeur à la fin de la période payée", async () => {
+    const screen = await renderPlan({
+      readSpace: reading(
+        makeTeamSpace({
+          currentPeriodEnd: undefined,
+          payer: { ...PAID_BY_SOMEONE_ELSE.payer, left: true },
+        }),
+      ),
+    });
+
+    await expect
+      .element(
+        screen.getByText(
+          /a quitté l'espace : le plan Team prend fin à la fin de la période payée\./,
+        ),
+      )
+      .toBeVisible();
   });
 
   it("montre la date de fin d'un abonnement résilié, sans date de renouvellement", async () => {

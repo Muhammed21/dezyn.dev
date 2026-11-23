@@ -1,6 +1,7 @@
 import { createPolarCore, webhooks } from "@polar-sh/sdk/2027-01";
 import { createCheckouts } from "@polar-sh/sdk/2027-01/services/checkouts";
 import { createCustomerSessions } from "@polar-sh/sdk/2027-01/services/customer_sessions";
+import { updateSubscriptions } from "@polar-sh/sdk/2027-01/services/subscriptions";
 import { z } from "zod";
 
 import { errorDetails, type LogSink } from "#platform/logging.ts";
@@ -127,12 +128,28 @@ export const polarMerchantOfRecord = ({
         return err("unavailable");
       }
     },
+    cancelAtPeriodEnd: async ({ spaceId, subscriptionId }) => {
+      try {
+        await updateSubscriptions(client)(subscriptionId, { cancel_at_period_end: true });
+        return ok(undefined);
+      } catch (error) {
+        log({
+          level: "error",
+          msg: "polar cancel at period end failed",
+          spaceId,
+          subscriptionId,
+          ...errorDetails(error),
+        });
+        return err("unavailable");
+      }
+    },
   };
 };
 
 export const unavailableMerchantOfRecord: MerchantOfRecord = {
   createCheckout: async () => err("unavailable"),
   createPortal: async () => err("unavailable"),
+  cancelAtPeriodEnd: async () => err("unavailable"),
 };
 
 export const unavailableNotificationReader: NotificationReader = {

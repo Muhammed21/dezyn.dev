@@ -9,11 +9,14 @@ export type RequestedCheckout = Parameters<MerchantOfRecord["createCheckout"]>[0
 
 export type RequestedPortal = Parameters<MerchantOfRecord["createPortal"]>[0];
 
+export type RequestedCancellation = Parameters<MerchantOfRecord["cancelAtPeriodEnd"]>[0];
+
 export const makeMerchantOfRecord = ({
   available = true,
 }: { readonly available?: boolean } = {}) => {
   const checkouts: RequestedCheckout[] = [];
   const portals: RequestedPortal[] = [];
+  const cancellations: RequestedCancellation[] = [];
   const merchant: MerchantOfRecord = {
     createCheckout: async (checkout) => {
       checkouts.push(checkout);
@@ -27,6 +30,10 @@ export const makeMerchantOfRecord = ({
         ? ok({ url: `https://sandbox.polar.sh/dezyn/portal?customer=${portal.payerId}` })
         : err("unavailable");
     },
+    cancelAtPeriodEnd: async (cancellation) => {
+      cancellations.push(cancellation);
+      return available ? ok(undefined) : err("unavailable");
+    },
   };
-  return { checkouts, portals, merchant };
+  return { checkouts, portals, cancellations, merchant };
 };

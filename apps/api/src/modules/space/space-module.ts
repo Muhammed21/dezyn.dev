@@ -11,6 +11,7 @@ import { inviteMember } from "./application/invite-member.ts";
 import { leaveSpace } from "./application/leave-space.ts";
 import { listMembers } from "./application/list-members.ts";
 import { changeRole, removeMember } from "./application/manage-members.ts";
+import type { DepartureListener } from "./application/member-departure.ts";
 import { projectAccess } from "./application/project-access.ts";
 import { readSpace, type SpaceSubscriptions } from "./application/read-space.ts";
 import { spaceAccess } from "./application/space-access.ts";
@@ -40,14 +41,17 @@ export const spaceModule = ({
   webUrl,
   log,
   subscriptions,
+  departureOn = () => async () => undefined,
 }: {
   readonly db: PostgresDatabase;
   readonly mailer: Mailer;
   readonly webUrl: string;
   readonly log: LogSink;
   readonly subscriptions: SpaceSubscriptions;
+  readonly departureOn?: (tx: PostgresTransaction) => DepartureListener;
 }) => {
   const store = postgresSpaceStore(db);
+  const management = postgresMemberManagement(db, departureOn);
   const freezes = postgresSpaceFreezes(db);
   const memberships = guardFrozenSpaces({ memberships: postgresMembershipReader(db), freezes });
   return {
@@ -80,8 +84,8 @@ export const spaceModule = ({
       newId: randomUUID,
       now,
     }),
-    leaveSpace: leaveSpace({ departures: postgresDepartures(db), now }),
-    changeRole: changeRole({ management: postgresMemberManagement(db), newId: randomUUID, now }),
-    removeMember: removeMember({ management: postgresMemberManagement(db), now }),
+    leaveSpace: leaveSpace({ departures: postgresDepartures(db, departureOn), now }),
+    changeRole: changeRole({ management, newId: randomUUID, now }),
+    removeMember: removeMember({ management, now }),
   };
 };
