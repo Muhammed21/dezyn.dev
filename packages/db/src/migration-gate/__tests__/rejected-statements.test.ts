@@ -309,3 +309,365 @@ describe("rejectedStatements", () => {
     expect(rejectedStatements(sql)).toEqual([`ALTER TABLE "token" DROP COLUMN "description"`]);
   });
 });
+
+describe("rejectedStatements sur les chaînes, identifiants et commentaires de PostgreSQL", () => {
+  it("refuse le DROP TABLE caché derrière un \\' dans une chaîne E'…'", () => {
+    const sql = String.raw`ALTER TABLE "t" ADD COLUMN "c" text DEFAULT E'\''; DROP TABLE "t"; --';`;
+
+    expect(rejectedStatements(sql)).toEqual([`DROP TABLE "t"`]);
+  });
+
+  it.each([String.raw`E'a\\'`, String.raw`e'a\\'`, String.raw`E'\\\''`, String.raw`E'l''app'`])(
+    "coupe en deux instructions la chaîne d'échappement %s suivie d'une autre instruction",
+    (text) => {
+      const sql = `COMMENT ON TABLE "t" IS ${text}; DROP TABLE "t";`;
+
+      expect(rejectedStatements(sql)).toEqual([
+        `COMMENT ON TABLE "t" IS ${text}`,
+        `DROP TABLE "t"`,
+      ]);
+    },
+  );
+
+  it("garde dans une chaîne E'…' le point-virgule qui suit un guillemet doublé", () => {
+    const sql = `COMMENT ON TABLE "t" IS E'l''app; DROP TABLE "x"'; DROP TABLE "t";`;
+
+    expect(rejectedStatements(sql)).toEqual([
+      `COMMENT ON TABLE "t" IS E'l''app; DROP TABLE "x"'`,
+      `DROP TABLE "t"`,
+    ]);
+  });
+
+  it.each(["1E", "1.5e", "E"])(
+    "lit une chaîne d'échappement dans %s'…', comme PostgreSQL après un nombre",
+    (prefix) => {
+      const sql = `ALTER TABLE "t" ADD COLUMN "c" int DEFAULT ${prefix}'\\''; DROP TABLE "t"; --';`;
+
+      expect(rejectedStatements(sql)).toEqual([`DROP TABLE "t"`]);
+    },
+  );
+
+  it.each([
+    String.raw`'a\'`,
+    String.raw`date'\'`,
+    String.raw`"E"'\'`,
+    String.raw`aE'\'`,
+    String.raw`_e'\'`,
+    String.raw`N'\'`,
+    String.raw`U&'\'`,
+    String.raw`en'\'`,
+  ])("n'échappe rien par \\ dans la chaîne ordinaire %s", (text) => {
+    const sql = `COMMENT ON TABLE "t" IS ${text}; DROP TABLE "t"; --';`;
+
+    expect(rejectedStatements(sql)).toEqual([`COMMENT ON TABLE "t" IS ${text}`, `DROP TABLE "t"`]);
+  });
+
+  it.each(["\n", " \n\t", " -- suite\n", "\n-- note\n  ", "\r"])(
+    "continue une chaîne E'…' sur la ligne suivante, après %j",
+    (between) => {
+      const sql = `ALTER TABLE "t" ADD COLUMN "c" text DEFAULT E'a'${between}'\\''; DROP TABLE "t"; --';`;
+
+      expect(rejectedStatements(sql)).toEqual([`DROP TABLE "t"`]);
+    },
+  );
+
+  it("garde ordinaire la suite d'une chaîne ordinaire sur la ligne suivante", () => {
+    const sql = `COMMENT ON TABLE "t" IS 'a'\n'\\'; DROP TABLE "t";`;
+
+    expect(rejectedStatements(sql)).toEqual([
+      String.raw`COMMENT ON TABLE "t" IS 'a' '\'`,
+      `DROP TABLE "t"`,
+    ]);
+  });
+
+  it.each([" ", " /* x */\n"])("ne continue pas une chaîne E'…' après %j", (between) => {
+    const sql = `COMMENT ON TABLE "t" IS E'a'${between}'\\'; DROP TABLE "t"; --';`;
+
+    expect(rejectedStatements(sql)).toEqual([
+      String.raw`COMMENT ON TABLE "t" IS E'a' '\'`,
+      `DROP TABLE "t"`,
+    ]);
+  });
+
+  it("analyse sans délai une chaîne suivie de longs espaces et commentaires jamais suivis d'une chaîne", () => {
+    const sql = `COMMENT ON TABLE "t" IS 'a'${" --".repeat(40)}${" ".repeat(40)}x\n${" ".repeat(40)}x;`;
+
+    expect(rejectedStatements(sql)).toEqual([`COMMENT ON TABLE "t" IS 'a' x`]);
+  });
+
+  it.each([
+    `GRANT\vSELECT ON "t" TO app`,
+    `ALTER TABLE "t" ADD COLUMN "c" text DEFAULT E'a'\v\n'b'`,
+  ])("refuse l'instruction %j qui a une tabulation verticale hors d'une chaîne", (statement) => {
+    expect(rejectedStatements(`${statement};`)).toEqual([statement.replaceAll(/\s+/g, " ")]);
+  });
+
+  it("accepte une tabulation verticale dans une chaîne", () => {
+    expect(rejectedStatements(`ALTER TABLE "t" ADD COLUMN "c" text DEFAULT '\v';`)).toEqual([]);
+  });
+
+  it("n'échappe rien par \\ dans un corps $$", () => {
+    const sql = String.raw`DO $$ SELECT E'\'; $$; DROP TABLE "t";`;
+
+    expect(rejectedStatements(sql)).toEqual([String.raw`DO $$ SELECT E'\'; $$`, `DROP TABLE "t"`]);
+  });
+
+  it.each([`"a"";--"`, `"a"";b"`, `"""x"`])(
+    "garde entier l'identifiant à guillemets doublés %s",
+    (identifier) => {
+      const sql = `GRANT SELECT ON ${identifier} TO app; DROP TABLE "t";`;
+
+      expect(rejectedStatements(sql)).toEqual([`DROP TABLE "t"`]);
+    },
+  );
+
+  it.each([
+    `/* ; DROP TABLE "x"; */ GRANT SELECT ON "t" TO app;`,
+    `/* a /* b */ ; DROP TABLE "x"; */ GRANT SELECT ON "t" TO app;`,
+    `/* ' " $$ -- */ GRANT SELECT ON "t" TO app;`,
+    `GRANT/**/SELECT/* , DELETE */ON "t" TO app;`,
+    `/**/GRANT SELECT ON "t" TO app;/***/`,
+  ])("ignore le commentaire /* */ de %s", (sql) => {
+    expect(rejectedStatements(sql)).toEqual([]);
+  });
+
+  it.each([
+    [`/* -- */ DROP TABLE "t";`, `DROP TABLE "t"`],
+    [`-- /*\nDROP TABLE "t";`, `DROP TABLE "t"`],
+    [`/* /* */ */ DROP TABLE "t";`, `DROP TABLE "t"`],
+    [`/* ' */ DROP TABLE "t"; -- '`, `DROP TABLE "t"`],
+    [`DROP/* x */TABLE "t";`, `DROP TABLE "t"`],
+    [`DROP TABLE "t" -- fin\r;`, `DROP TABLE "t"`],
+  ])("voit l'instruction que PostgreSQL exécute dans %j", (sql, statement) => {
+    expect(rejectedStatements(sql)).toEqual([statement]);
+  });
+
+  it("ne prend pas un /* entre guillemets pour un commentaire", () => {
+    const sql = `COMMENT ON TABLE "t" IS '/*'; DROP TABLE "t"; -- */`;
+
+    expect(rejectedStatements(sql)).toEqual([`COMMENT ON TABLE "t" IS '/*'`, `DROP TABLE "t"`]);
+  });
+
+  it.each([
+    [`GRANT SELECT ON "t" TO app; /* DROP TABLE "t";`, `/* DROP TABLE "t";`],
+    [`GRANT SELECT ON "t" TO app; /* /* */ DROP TABLE "t";`, `/* /* */ DROP TABLE "t";`],
+    [`GRANT SELECT ON "t TO app;`, `GRANT SELECT ON "t TO app;`],
+    [`GRANT SELECT ON "t" TO app; COMMENT ON TABLE "t" IS 'x;`, `COMMENT ON TABLE "t" IS 'x;`],
+    [
+      `GRANT SELECT ON "t" TO app; COMMENT ON TABLE "t" IS E'x\\';`,
+      `COMMENT ON TABLE "t" IS E'x\\';`,
+    ],
+  ])("refuse l'instruction de %j, jamais fermée", (sql, statement) => {
+    expect(rejectedStatements(sql)).toEqual([statement]);
+  });
+
+  it('refuse un ALTER TABLE dont l\'identifiant U&"…" désigne une autre table que celle créée', () => {
+    const statement = `ALTER TABLE U&"token" DROP COLUMN "description"`;
+
+    expect(rejectedStatements(`CREATE TABLE u (id int);\n${statement};`)).toEqual([statement]);
+  });
+
+  it.each([
+    [`CREATE TABLE U&"t" ("id" integer)`],
+    [`CREATE TABLE u&"t" ("id" integer)`],
+    [`CREATE TABLE U&"t!0061" UESCAPE '!' ("id" integer)`],
+    [`CREATE TABLE "t" ("c" text DEFAULT U&'d\\0061t\\0061')`],
+  ])(
+    "refuse d'office l'instruction %j, dont le nom ou la chaîne est en échappement Unicode",
+    (statement) => {
+      expect(rejectedStatements(`${statement};`)).toEqual([statement]);
+    },
+  );
+
+  it.each([
+    [`CREATE TABLE "t" ("menu" integer CHECK (menu&"menu" = 0));`],
+    [`CREATE TABLE "t" ("u1" integer CHECK (u1&'1' = 0));`],
+  ])("lit un mot qui n'est pas U seul, devant &, comme un mot ordinaire dans %j", (sql) => {
+    expect(rejectedStatements(sql)).toEqual([]);
+  });
+
+  it("refuse un ALTER TABLE dont une chaîne E'…' cache une seconde action", () => {
+    const statement = String.raw`ALTER TABLE "t" ADD COLUMN "c" text DEFAULT E'\'', DROP COLUMN "x", ADD COLUMN "d" text DEFAULT 'a'`;
+
+    expect(rejectedStatements(`${statement};`)).toEqual([statement]);
+  });
+
+  it("refuse un ALTER TABLE dont le nom de table entre guillemets contient « ADD COLUMN »", () => {
+    const statement = `ALTER TABLE "x ADD COLUMN c text" DROP COLUMN "y"`;
+
+    expect(rejectedStatements(`${statement};`)).toEqual([statement]);
+  });
+
+  it.each([
+    [`CREATE TABLE "token x" ("id" uuid);`, `ALTER TABLE "token" DROP COLUMN "id"`],
+    [`CREATE TABLE Token ("id" uuid);`, `ALTER TABLE "Token" DROP COLUMN "id"`],
+    [`CREATE TABLE IF NOT EXISTS "token" ("id" uuid);`, `ALTER TABLE "token" DROP COLUMN "id"`],
+    [`CREATE TABLE "token" AS SELECT 1;`, `ALTER TABLE "token" DROP COLUMN "id"`],
+    [`CREATE TABLE "a"."b" ("id" uuid);`, `ALTER TABLE "a" DROP COLUMN "id"`],
+    [`CREATE TABLE "a" ("id" uuid);`, `ALTER TABLE "a"."b" DROP COLUMN "id"`],
+    [`CREATE TABLE "a.b" ("id" uuid);`, `ALTER TABLE "a"."b" DROP COLUMN "id"`],
+    [`CREATE TABLE "a" ("id" uuid);`, `ALTER TABLE "a". DROP COLUMN "id"`],
+    [`CREATE TABLE "audit"."a" ("id" uuid);`, `ALTER TABLE "other"."a" DROP COLUMN "id"`],
+    [`CREATE TABLE "a" ("id" uuid);`, `DROP TABLE "a"`],
+    [`CREATE TABLE "a" ("id" uuid);`, `ALTER TABLE 'a' DROP COLUMN "id"`],
+    [`CREATE TABLE "public"."a"."b" ("id" uuid);`, `ALTER TABLE "a"."b" DROP COLUMN "id"`],
+  ])("ne tient pas %s pour la création de la table de « %s »", (create, alter) => {
+    expect(rejectedStatements(`${create}\n--> statement-breakpoint\n${alter};`)).toEqual([alter]);
+  });
+
+  it("ne retient aucune table créée d'un CREATE TABLE sans nom lisible", () => {
+    const sql = `CREATE TABLE ("id" uuid);\n--> statement-breakpoint\nALTER TABLE "a" DROP COLUMN "id";`;
+
+    expect(rejectedStatements(sql)).toEqual([`ALTER TABLE "a" DROP COLUMN "id"`]);
+  });
+
+  it("ne tient pas une fonction du nom d'une table pour la création de cette table", () => {
+    const sql = [
+      `CREATE FUNCTION "token"() RETURNS integer LANGUAGE sql AS $$ SELECT 1 $$;`,
+      `ALTER TABLE "token" DROP COLUMN "id";`,
+    ].join("--> statement-breakpoint\n");
+
+    expect(rejectedStatements(sql)).toEqual([
+      `CREATE FUNCTION "token"() RETURNS integer LANGUAGE sql AS $$ SELECT 1 $$`,
+      `ALTER TABLE "token" DROP COLUMN "id"`,
+    ]);
+  });
+
+  it.each([
+    [`CREATE TABLE Palette ("id" uuid);`, `ALTER TABLE palette DROP COLUMN "id";`],
+    [`CREATE TABLE "Palette" ("id" uuid);`, `ALTER TABLE "Palette" DROP COLUMN "id";`],
+    [`CREATE TABLE public."palette"("id" uuid);`, `ALTER TABLE PUBLIC.Palette DROP COLUMN "id";`],
+    [
+      `CREATE TABLE "audit"."palette" ("id" uuid);`,
+      `ALTER TABLE "audit".palette DROP COLUMN "id";`,
+    ],
+  ])("reconnaît la table de %s dans %s", (create, alter) => {
+    expect(rejectedStatements(`${create}\n--> statement-breakpoint\n${alter}`)).toEqual([]);
+  });
+
+  it.each([
+    `ALTER TABLE "t" ADD COLUMN "c" text NOT/* x */NULL`,
+    `ALTER TABLE "t" ADD COLUMN "c" text not null`,
+    `ALTER TABLE "t" ADD COLUMN "c" text NOT NULL "default"`,
+    `ALTER TABLE "t" ADD COLUMN "c" text NOT NULL CHECK ('DEFAULT' <> '')`,
+    `ALTER TABLE "t" ADD "c" text`,
+    `ALTER TABLE ONLY "t" ADD COLUMN "c" text`,
+    `ALTER TABLE "t" ADD COLUMN`,
+    `ALTER TABLE "t".`,
+    `ALTER TABLE "t"`,
+    `ALTER TABLE 't' ADD COLUMN "c" text`,
+  ])("refuse l'ajout de colonne %s", (statement) => {
+    expect(rejectedStatements(`${statement};`)).toEqual([statement.replace("/* x */", " ")]);
+  });
+
+  it.each([
+    `ALTER TABLE "t" ADD COLUMN "c" text DEFAULT 'x' NOT NULL`,
+    `alter table t add column c text default '' not null`,
+    String.raw`ALTER TABLE "public"."t" ADD COLUMN "c" text NOT NULL DEFAULT E'\''`,
+    `ALTER TABLE "t" ADD COLUMN "c" text DEFAULT ','`,
+    `ALTER TABLE "t" ADD COLUMN "c" "NOT" "NULL"`,
+    `ALTER TABLE "t" ADD COLUMN "c" text NOT "NULL"`,
+    String.raw`ALTER TABLE "t" ADD COLUMN "c" text DEFAULT E'a\ b' NOT NULL`,
+    `ALTER TABLE "t" ADD COLUMN "e" text DEFAULT e NOT NULL`,
+  ])("accepte l'ajout de colonne %s", (statement) => {
+    expect(rejectedStatements(`${statement};`)).toEqual([]);
+  });
+});
+
+describe("rejectedStatements sur les droits accordés et retirés", () => {
+  it.each([
+    `GRANT SELECT ON "t" TO app`,
+    `GRANT SELECT, INSERT ON "t", "u" TO app`,
+    `GRANT SELECT ("a", "b") ON "t" TO app`,
+    `GRANT SELECT ("a"), INSERT ("b") ON "t" TO app`,
+    `GRANT REFERENCES ON "t" TO app`,
+    `GRANT USAGE ON SCHEMA drizzle TO app`,
+    `grant select, insert, references, usage on "t" to app`,
+    `GRANT SELECT ON ALL TABLES IN SCHEMA public TO app`,
+    `GRANT SELECT ON "on" TO app`,
+    `GRANT SELECT ON "with" TO app`,
+    `GRANT SELECT ON "t" TO app GRANTED BY CURRENT_USER`,
+    `GRANT SELECT ON e TO E`,
+  ])("accepte le droit de lire ou d'ajouter %s", (statement) => {
+    expect(rejectedStatements(`${statement};`)).toEqual([]);
+  });
+
+  it.each([
+    `GRANT DELETE ON "t" TO app`,
+    `GRANT UPDATE ON "t" TO app`,
+    `GRANT UPDATE ("status") ON "t" TO app`,
+    `GRANT TRUNCATE ON "t" TO app`,
+    `GRANT TRIGGER ON "t" TO app`,
+    `GRANT ALL ON "t" TO app`,
+    `GRANT ALL PRIVILEGES ON "t" TO app`,
+    `GRANT ALL ("a") ON "t" TO app`,
+    `grant delete on "t" to app`,
+    `GRANT SELECT, DELETE ON "t" TO app`,
+    `GRANT SELECT ("a"), DELETE ON "t" TO app`,
+    `GRANT SELECT ("a") DELETE ON "t" TO app`,
+    `GRANT SELECT ("a")) ON "t" TO app`,
+    `GRANT SELECT (("a")) ON "t" TO app`,
+    `GRANT SELECT ( ON "t" TO app`,
+    `GRANT SELECT ("a" ON "t" TO app`,
+    `GRANT SELECT "a") ON "t" TO app`,
+    `GRANT SELECT DELETE ON "t" TO app`,
+    `GRANT SELECT ON "t" TO app WITH GRANT OPTION`,
+    `GRANT SELECT ON "t" TO app with grant option`,
+    `GRANT EXECUTE ON FUNCTION f() TO app`,
+    `GRANT CREATE ON SCHEMA public TO app`,
+    `GRANT TEMPORARY ON DATABASE d TO app`,
+    `GRANT MAINTAIN ON "t" TO app`,
+    `GRANT "select" ON "t" TO app`,
+    `GRANT "delete" ON "t" TO app`,
+    `GRANT ON "t" TO app`,
+    `GRANT , SELECT ON "t" TO app`,
+    `GRANT SELECT TO app`,
+    `GRANT app TO history_maintainer`,
+    `GRANT app, history_maintainer TO someone`,
+    `GRANT "on" TO app`,
+    `GRANT app TO someone WITH ADMIN OPTION`,
+  ])("demande l'approbation du droit accordé par %s", (statement) => {
+    expect(rejectedStatements(`${statement};`)).toEqual([statement]);
+  });
+
+  it("voit le DELETE accordé après un commentaire de fin de ligne", () => {
+    expect(rejectedStatements(`GRANT SELECT -- note\n, DELETE ON "t" TO app;`)).toEqual([
+      `GRANT SELECT , DELETE ON "t" TO app`,
+    ]);
+  });
+
+  it.each([
+    `REVOKE SELECT ON "t" FROM app`,
+    `REVOKE DELETE ON "t" FROM app`,
+    `REVOKE app FROM history_maintainer`,
+  ])("demande l'approbation du retrait %s", (statement) => {
+    expect(rejectedStatements(`${statement};`)).toEqual([statement]);
+  });
+
+  it("ne refuse que le GRANT qui élève les droits parmi plusieurs", () => {
+    const sql = `GRANT SELECT ON "t" TO app; GRANT DELETE ON "t" TO app; GRANT INSERT ON "t" TO app;`;
+
+    expect(rejectedStatements(sql)).toEqual([`GRANT DELETE ON "t" TO app`]);
+  });
+
+  it.each([`CREATE SCHEMA "audit"`, `CREATE SCHEMA IF NOT EXISTS audit`, `create schema "a""b"`])(
+    "accepte la création du schéma vide %s",
+    (statement) => {
+      expect(rejectedStatements(`${statement};`)).toEqual([]);
+    },
+  );
+
+  it.each([
+    `CREATE SCHEMA "audit" GRANT DELETE ON "public"."token" TO app`,
+    `CREATE SCHEMA "audit" CREATE TABLE "x" ("id" uuid)`,
+    `CREATE SCHEMA "audit" AUTHORIZATION app`,
+    `CREATE SCHEMA AUTHORIZATION app`,
+    `CREATE SCHEMA IF NOT EXISTS`,
+    `CREATE SCHEMA IF EXISTS audit`,
+    `CREATE SCHEMA "a".b`,
+    `CREATE SCHEMA`,
+    `CREATE SCHEMA 'audit'`,
+  ])("demande l'approbation du schéma %s", (statement) => {
+    expect(rejectedStatements(`${statement};`)).toEqual([statement]);
+  });
+});

@@ -1,116 +1,128 @@
-const STATEMENT_BREAKPOINT = "--> statement-breakpoint";
+import { type Statement, type Token, sqlStatements } from "./sql-statements.ts";
 
-type Scan = {
-  readonly quote: string | undefined;
-  readonly comment: boolean;
-  readonly skip: number;
-  readonly current: string;
-  readonly done: readonly string[];
-};
+type Tokens = readonly Token[];
+type QualifiedName = { readonly parts: readonly string[]; readonly next: number };
 
-const DOLLAR_QUOTE = /^\$(?:[A-Za-z_\u0080-\uFFFF][\w\u0080-\uFFFF]*)?\$/;
-const QUOTES = ["'", '"'];
-const IDENTIFIER_CHARACTER = /[\w$\u0080-\uFFFF]/;
-
-const openingAt = (chunk: string, index: number): string | undefined => {
-  const quote = QUOTES.find((opening) => chunk.startsWith(opening, index));
-  if (quote !== undefined || IDENTIFIER_CHARACTER.test(chunk.charAt(index - 1))) return quote;
-  return DOLLAR_QUOTE.exec(chunk.slice(index))?.[0];
-};
-
-const append = (scan: Scan, text: string, quote: string | undefined): Scan => ({
-  ...scan,
-  quote,
-  skip: text.length - 1,
-  current: scan.current + text,
-});
-
-const scanCharacter = (scan: Scan, chunk: string, index: number): Scan => {
-  if (scan.skip > 0) return { ...scan, skip: scan.skip - 1 };
-  const character = chunk.charAt(index);
-  if (scan.comment) return character === "\n" ? { ...scan, comment: false } : scan;
-  if (scan.quote !== undefined) {
-    return chunk.startsWith(scan.quote, index)
-      ? append(scan, scan.quote, undefined)
-      : append(scan, character, scan.quote);
-  }
-  if (chunk.startsWith("--", index)) return { ...scan, comment: true };
-  if (character === ";") return { ...scan, current: "", done: [...scan.done, scan.current] };
-  const quote = openingAt(chunk, index);
-  return append(scan, quote ?? character, quote);
-};
-
-const splitChunk = (chunk: string): readonly string[] => {
-  const scan = chunk
-    .split("")
-    .reduce<Scan>((state, _character, index) => scanCharacter(state, chunk, index), {
-      quote: undefined,
-      comment: false,
-      skip: 0,
-      current: "",
-      done: [],
-    });
-  return [...scan.done, scan.current];
-};
-
-const statements = (sql: string): readonly string[] =>
-  sql
-    .split(STATEMENT_BREAKPOINT)
-    .flatMap(splitChunk)
-    .map((statement) => statement.replaceAll(/\s+/g, " ").trim())
-    .filter((statement) => statement !== "");
-
-const ADDITIVE = [
-  /^CREATE TABLE\b/i,
-  /^CREATE (UNIQUE )?INDEX\b/i,
-  /^CREATE TYPE\b/i,
-  /^CREATE SCHEMA\b/i,
-  /^GRANT\b/i,
+const ADDITIVE_PREFIXES = [
+  ["create", "table"],
+  ["create", "index"],
+  ["create", "unique", "index"],
+  ["create", "type"],
 ];
 
-const CREATE_TABLE = /^CREATE TABLE (?<table>[^ (]+)/i;
-const ALTER_TABLE = /^ALTER TABLE (?<table>[^ ]+)/i;
-const ADD_COLUMN = /^ALTER TABLE [^ ]+ ADD COLUMN (?<definition>.+)/i;
+const ADDITIVE_PRIVILEGES = new Set(["select", "insert", "references", "usage"]);
 
-const tableName = (qualified: string): string =>
-  qualified.replace(/^"?public"?\./i, "").replaceAll('"', "");
+const folded = (text: string): string =>
+  text.replaceAll(/[A-Z]/g, (letter) => letter.toLowerCase());
 
-const tableOf = (statement: string, pattern: RegExp): string | undefined => {
-  const table = pattern.exec(statement)?.groups?.table;
-  return table === undefined ? undefined : tableName(table);
+const isKeyword = (token: Token | undefined, keyword: string): boolean =>
+  token?.kind === "word" && folded(token.text) === keyword;
+
+const isSymbol = (token: Token | undefined, symbol: string): boolean =>
+  token?.kind === "symbol" && token.text === symbol;
+
+const startsWith = (tokens: Tokens, keywords: readonly string[]): boolean =>
+  keywords.every((keyword, index) => isKeyword(tokens[index], keyword));
+
+const namePart = (token: Token | undefined): string | undefined => {
+  if (token?.kind === "word") return folded(token.text);
+  if (token?.kind === "quoted") return token.text.slice(1, -1).replaceAll('""', '"');
+  return undefined;
 };
 
-const hasTopLevelComma = (text: string): boolean =>
-  text.split("").reduce<{ readonly depth: number; readonly found: boolean }>(
-    (state, character) => ({
-      depth: state.depth + (character === "(" ? 1 : character === ")" ? -1 : 0),
-      found: state.found || (character === "," && state.depth === 0),
-    }),
-    { depth: 0, found: false },
-  ).found;
-
-const withoutQuotedText = (text: string): string => text.replaceAll(/'[^']*'|"[^"]*"/g, "''");
-
-const isSafeColumnAddition = (statement: string): boolean => {
-  const quoted = ADD_COLUMN.exec(statement)?.groups?.definition;
-  if (quoted === undefined) return false;
-  const definition = withoutQuotedText(quoted);
-  if (hasTopLevelComma(definition)) return false;
-  return !/\bNOT NULL\b/i.test(definition) || /\bDEFAULT\b/i.test(definition);
+const qualifiedName = (tokens: Tokens, start: number): QualifiedName | undefined => {
+  const first = namePart(tokens[start]);
+  if (first === undefined) return undefined;
+  if (!isSymbol(tokens[start + 1], ".")) return { parts: [first], next: start + 1 };
+  const rest = qualifiedName(tokens, start + 2);
+  return rest === undefined ? undefined : { parts: [first, ...rest.parts], next: rest.next };
 };
 
-const altersCreatedTable = (statement: string, createdTables: ReadonlySet<string>): boolean => {
-  const table = tableOf(statement, ALTER_TABLE);
-  return table !== undefined && createdTables.has(table);
+const tableKey = ({ parts }: QualifiedName): string =>
+  JSON.stringify(parts.length === 2 && parts[0] === "public" ? parts.slice(1) : parts);
+
+const depthChange = (token: Token): number => {
+  if (isSymbol(token, "(")) return 1;
+  return isSymbol(token, ")") ? -1 : 0;
 };
 
-const isAdditive = (statement: string, createdTables: ReadonlySet<string>): boolean =>
-  ADDITIVE.some((pattern) => pattern.test(statement)) ||
-  isSafeColumnAddition(statement) ||
-  altersCreatedTable(statement, createdTables);
+const topLevelGroups = (tokens: Tokens): readonly Tokens[] =>
+  tokens.reduce<{ readonly depth: number; readonly groups: readonly Tokens[] }>(
+    ({ depth, groups }, token) => {
+      if (depth === 0 && isSymbol(token, ",")) return { depth, groups: [...groups, []] };
+      const last = groups.at(-1) ?? [];
+      return {
+        depth: depth + depthChange(token),
+        groups: [...groups.slice(0, -1), [...last, token]],
+      };
+    },
+    { depth: 0, groups: [[]] },
+  ).groups;
+
+const alteredTable = (tokens: Tokens): QualifiedName | undefined =>
+  startsWith(tokens, ["alter", "table"]) ? qualifiedName(tokens, 2) : undefined;
+
+const createdTable = (tokens: Tokens): string[] => {
+  if (!startsWith(tokens, ["create", "table"])) return [];
+  const name = qualifiedName(tokens, 2);
+  return name !== undefined && isSymbol(tokens[name.next], "(") ? [tableKey(name)] : [];
+};
+
+const isSafeColumnAddition = (tokens: Tokens): boolean => {
+  const table = alteredTable(tokens);
+  if (table === undefined) return false;
+  if (!isKeyword(tokens[table.next], "add") || !isKeyword(tokens[table.next + 1], "column")) {
+    return false;
+  }
+  const definition = tokens.slice(table.next + 2);
+  if (definition.length === 0 || topLevelGroups(definition).length > 1) return false;
+  const notNull = definition.some(
+    (token, index) => isKeyword(token, "not") && isKeyword(definition[index + 1], "null"),
+  );
+  return !notNull || definition.some((token) => isKeyword(token, "default"));
+};
+
+const isColumnList = (tokens: Tokens): boolean =>
+  isSymbol(tokens[0], "(") &&
+  isSymbol(tokens.at(-1), ")") &&
+  tokens.slice(1, -1).every((token) => namePart(token) !== undefined || isSymbol(token, ","));
+
+const isAdditivePrivilege = ([privilege, ...columns]: Tokens): boolean =>
+  privilege?.kind === "word" &&
+  ADDITIVE_PRIVILEGES.has(folded(privilege.text)) &&
+  (columns.length === 0 || isColumnList(columns));
+
+const isAdditiveGrant = (tokens: Tokens): boolean => {
+  if (!isKeyword(tokens[0], "grant")) return false;
+  const on = tokens.findIndex((token) => isKeyword(token, "on"));
+  if (on === -1) return false;
+  return (
+    topLevelGroups(tokens.slice(1, on)).every(isAdditivePrivilege) &&
+    !tokens.some((token) => isKeyword(token, "with"))
+  );
+};
+
+const isEmptySchemaCreation = (tokens: Tokens): boolean => {
+  if (!startsWith(tokens, ["create", "schema"])) return false;
+  const name = startsWith(tokens.slice(2), ["if", "not", "exists"]) ? 5 : 2;
+  return tokens.length === name + 1 && namePart(tokens[name]) !== undefined;
+};
+
+const altersCreatedTable = (tokens: Tokens, createdTables: ReadonlySet<string>): boolean => {
+  const table = alteredTable(tokens);
+  return table !== undefined && createdTables.has(tableKey(table));
+};
+
+const isAdditive = ({ tokens, closed }: Statement, createdTables: ReadonlySet<string>): boolean =>
+  closed &&
+  (ADDITIVE_PREFIXES.some((prefix) => startsWith(tokens, prefix)) ||
+    isEmptySchemaCreation(tokens) ||
+    isAdditiveGrant(tokens) ||
+    isSafeColumnAddition(tokens) ||
+    altersCreatedTable(tokens, createdTables));
 
 export const rejectedStatements = (sql: string): readonly string[] => {
-  const all = statements(sql);
-  const createdTables = new Set(all.flatMap((statement) => tableOf(statement, CREATE_TABLE) ?? []));
-  return all.filter((statement) => !isAdditive(statement, createdTables));
+  const all = sqlStatements(sql);
+  const createdTables = new Set(all.flatMap(({ tokens }) => createdTable(tokens)));
+  return all.filter((statement) => !isAdditive(statement, createdTables)).map(({ text }) => text);
 };
