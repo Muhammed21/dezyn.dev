@@ -19,6 +19,7 @@ export const buildApi = async ({
   webUrl,
   projectRooms,
   polar,
+  serverTiming,
 }: {
   readonly db: PostgresDatabase;
   readonly mailer: Mailer;
@@ -30,6 +31,7 @@ export const buildApi = async ({
   readonly webUrl: string;
   readonly projectRooms?: ProjectRooms;
   readonly polar?: PolarConfig;
+  readonly serverTiming: boolean;
 }) => {
   const modules = composeModules({
     db,
@@ -49,5 +51,5 @@ export const buildApi = async ({
     log,
     onUserCreated: modules.spaces.createPersonalSpace,
   });
-  return { app: createApp({ webUrl, db, auth, log, ...modules }), modules };
+  return { app: createApp({ webUrl, db, auth, log, serverTiming, ...modules }), modules };
 };

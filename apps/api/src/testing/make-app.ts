@@ -104,11 +104,13 @@ export const makeApp = ({
   auth = makeAuth(),
   webUrl = "https://dezyn.dev",
   account = makeAccount(),
+  serverTiming,
 }: {
   readonly db?: Database;
   readonly auth?: Auth;
   readonly webUrl?: string;
   readonly account?: AccountUseCases;
+  readonly serverTiming?: boolean;
 } = {}) => {
   const records: LogRecord[] = [];
   const app = createApp({
@@ -125,6 +127,7 @@ export const makeApp = ({
     proposals: makeProposals(),
     idempotent: makeIdempotent(),
     projectAccess: makeProjectAccess(),
+    ...(serverTiming === undefined ? {} : { serverTiming }),
   });
   return { app, records };
 };
