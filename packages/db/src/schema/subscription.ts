@@ -18,6 +18,16 @@ export const spaceSubscription = pgTable("space_subscription", {
   cancelRequestedAt: at("cancel_requested_at"),
 });
 
+export const spaceRefusedSubscription = pgTable("space_refused_subscription", {
+  polarSubscriptionId: text("polar_subscription_id").primaryKey(),
+  spaceId: uuid("space_id").notNull(),
+  payerId: uuid("payer_id").references(() => identityUser.id, { onDelete: "set null" }),
+  receivedAt: at("received_at").notNull(),
+  revokedAt: at("revoked_at"),
+  refundedAt: at("refunded_at"),
+  settlingSince: at("settling_since"),
+});
+
 export const spacePlanChange = pgTable(
   "space_plan_change",
   {

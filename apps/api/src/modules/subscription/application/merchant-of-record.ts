@@ -21,10 +21,17 @@ export type CancellationRequest = {
   readonly subscriptionId: string;
 };
 
+export type RefusalRequest = {
+  readonly spaceId: string;
+  readonly subscriptionId: string;
+};
+
 export interface MerchantOfRecord {
   createCheckout(request: CheckoutRequest): Promise<Result<Checkout, "unavailable">>;
   createPortal(request: PortalRequest): Promise<Result<Portal, "unavailable">>;
   cancelAtPeriodEnd(request: CancellationRequest): Promise<Result<undefined, "unavailable">>;
+  revokeNow(request: RefusalRequest): Promise<Result<undefined, "unavailable">>;
+  refundAll(request: RefusalRequest): Promise<Result<undefined, "unavailable">>;
 }
 
 export type SubscriptionEvent = {

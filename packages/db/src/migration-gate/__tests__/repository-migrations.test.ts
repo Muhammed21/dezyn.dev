@@ -51,6 +51,9 @@ const ELEVATED_PRIVILEGE_MIGRATIONS: Readonly<Record<string, readonly string[]>>
     `GRANT SELECT ("project_id"), DELETE ON "proposal", "proposal_batch" TO history_maintainer`,
   ],
   "0028_orphan_space_invitations.sql": [`GRANT DELETE ON "space_invitation" TO app`],
+  "0029_space_refused_subscription.sql": [
+    `GRANT SELECT, INSERT, UPDATE ("revoked_at", "refunded_at", "settling_since") ON "space_refused_subscription" TO app`,
+  ],
 };
 
 const NON_ADDITIVE_MIGRATIONS = [

@@ -131,7 +131,9 @@ export const spacesRoutes = ({
         memberId,
         role: c.req.valid("json").role,
       });
-      return changed.ok ? c.json(changed.value) : roleChangeProblem(c, changed.error);
+      return changed.ok
+        ? c.json({ userId: changed.value.userId, role: changed.value.role })
+        : roleChangeProblem(c, changed.error);
     })
     .delete("/:spaceId/members/:memberId", async (c) => {
       const spaceId = spaceIdOf(c);

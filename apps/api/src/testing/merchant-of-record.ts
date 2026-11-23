@@ -11,12 +11,24 @@ export type RequestedPortal = Parameters<MerchantOfRecord["createPortal"]>[0];
 
 export type RequestedCancellation = Parameters<MerchantOfRecord["cancelAtPeriodEnd"]>[0];
 
+export type RequestedRevocation = Parameters<MerchantOfRecord["revokeNow"]>[0];
+
+export type RequestedRefund = Parameters<MerchantOfRecord["refundAll"]>[0];
+
 export const makeMerchantOfRecord = ({
   available = true,
-}: { readonly available?: boolean } = {}) => {
+  revokeAvailable = available,
+  refundAvailable = available,
+}: {
+  readonly available?: boolean;
+  readonly revokeAvailable?: boolean;
+  readonly refundAvailable?: boolean;
+} = {}) => {
   const checkouts: RequestedCheckout[] = [];
   const portals: RequestedPortal[] = [];
   const cancellations: RequestedCancellation[] = [];
+  const revocations: RequestedRevocation[] = [];
+  const refunds: RequestedRefund[] = [];
   const merchant: MerchantOfRecord = {
     createCheckout: async (checkout) => {
       checkouts.push(checkout);
@@ -34,6 +46,14 @@ export const makeMerchantOfRecord = ({
       cancellations.push(cancellation);
       return available ? ok(undefined) : err("unavailable");
     },
+    revokeNow: async (revocation) => {
+      revocations.push(revocation);
+      return revokeAvailable ? ok(undefined) : err("unavailable");
+    },
+    refundAll: async (refund) => {
+      refunds.push(refund);
+      return refundAvailable ? ok(undefined) : err("unavailable");
+    },
   };
-  return { checkouts, portals, cancellations, merchant };
+  return { checkouts, portals, cancellations, revocations, refunds, merchant };
 };

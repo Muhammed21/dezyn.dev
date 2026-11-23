@@ -11,10 +11,12 @@ import {
   subscriptionStatusOf,
 } from "../domain/subscription.ts";
 import type {
+  MerchantOfRecord,
   NotificationFailure,
   NotificationReader,
   SubscriptionEvent,
 } from "./merchant-of-record.ts";
+import { type Refusals, SETTLED_REFUSAL, settleRefusal } from "./settle-refusals.ts";
 
 const HANDLED_EVENTS: ReadonlySet<string> = new Set([
   "subscription.active",
@@ -28,6 +30,14 @@ const HANDLED_EVENTS: ReadonlySet<string> = new Set([
 export interface SubscriptionStore {
   lockSpace(spaceId: string): Promise<Plan | undefined>;
   isUser(userId: string): Promise<boolean>;
+  isOpenOwner(membership: { readonly spaceId: string; readonly userId: string }): Promise<boolean>;
+  isRefused(subscriptionId: string): Promise<boolean>;
+  refuse(refusal: {
+    readonly subscriptionId: string;
+    readonly spaceId: string;
+    readonly payerId: string | undefined;
+    readonly at: Date;
+  }): Promise<void>;
   storedBytesOf(spaceId: string): Promise<number>;
   subscriptionOf(spaceId: string): Promise<RecordedSubscription | undefined>;
   save(change: {
@@ -49,7 +59,7 @@ export interface SubscriptionUnitOfWork {
 
 type Recorded =
   | {
-      readonly kind: "applied" | "stale" | "unknown_space" | "unknown_payer";
+      readonly kind: "applied" | "stale" | "unknown_space" | "unknown_payer" | "payer_not_owner";
     }
   | { readonly kind: "other_subscription"; readonly storedId: string };
 
@@ -78,9 +88,15 @@ const recordEvent = ({
     const change = subscriptionChangeOf({
       stored: await store.subscriptionOf(spaceId),
       incoming: { ...subscription, payerId },
+      payerIsOwner:
+        payerId !== undefined && (await store.isOpenOwner({ spaceId, userId: payerId })),
+      refused: await store.isRefused(subscription.id),
       plan,
       storedBytes: await store.storedBytesOf(spaceId),
     });
+    if (change.kind === "payer_not_owner") {
+      await store.refuse({ subscriptionId: subscription.id, spaceId, payerId, at: now() });
+    }
     if (change.kind !== "applied") {
       return change;
     }
@@ -97,17 +113,49 @@ const recordEvent = ({
     return { kind: "applied" };
   });
 
-const handleSubscriptionEvent = async ({
-  unitOfWork,
-  log,
-  now,
-  event,
-}: {
+type NotificationDependencies = {
   readonly unitOfWork: SubscriptionUnitOfWork;
+  readonly refusals: Refusals;
+  readonly merchant: MerchantOfRecord;
   readonly log: LogSink;
   readonly now: () => Date;
+};
+
+const DEFERRED_REFUSAL =
+  "polar subscription paid by a user who is not an owner of the space: revocation or refund left to the replay";
+
+const settleNewRefusal = async ({
+  dependencies,
+  details,
+}: {
+  readonly dependencies: NotificationDependencies;
+  readonly details: {
+    readonly event: string;
+    readonly subscriptionId: string;
+    readonly spaceId: string;
+    readonly payerId: string | undefined;
+  };
+}): Promise<void> => {
+  const settlement = await settleRefusal(dependencies)({
+    spaceId: details.spaceId,
+    subscriptionId: details.subscriptionId,
+  });
+  const msg = {
+    busy: "polar event for a refused subscription",
+    settled: SETTLED_REFUSAL,
+    pending: DEFERRED_REFUSAL,
+  }[settlement.kind];
+  dependencies.log({ level: settlement.kind === "busy" ? "info" : "warn", msg, ...details });
+};
+
+const handleSubscriptionEvent = async ({
+  dependencies,
+  event,
+}: {
+  readonly dependencies: NotificationDependencies;
   readonly event: SubscriptionEvent;
 }): Promise<void> => {
+  const { unitOfWork, log, now } = dependencies;
   const details = { event: event.type, subscriptionId: event.subscriptionId };
   const status = subscriptionStatusOf(event);
   if (status === undefined) {
@@ -152,6 +200,9 @@ const handleSubscriptionEvent = async ({
   if (recorded.kind === "unknown_payer") {
     log({ level: "warn", msg: "polar event for an unknown payer", ...details, spaceId });
   }
+  if (recorded.kind === "payer_not_owner") {
+    await settleNewRefusal({ dependencies, details: { ...details, spaceId, payerId } });
+  }
   if (recorded.kind === "other_subscription") {
     log({
       level: "warn",
@@ -166,19 +217,13 @@ const handleSubscriptionEvent = async ({
 export const receiveNotification =
   ({
     reader,
-    unitOfWork,
-    log,
-    now,
-  }: {
-    readonly reader: NotificationReader;
-    readonly unitOfWork: SubscriptionUnitOfWork;
-    readonly log: LogSink;
-    readonly now: () => Date;
-  }) =>
+    ...dependencies
+  }: NotificationDependencies & { readonly reader: NotificationReader }) =>
   async (
     body: string,
     headers: Readonly<Record<string, string>>,
   ): Promise<Result<undefined, NotificationFailure>> => {
+    const { log } = dependencies;
     const notification = await reader.read(body, headers);
     if (!notification.ok) {
       return err(notification.error);
@@ -192,6 +237,6 @@ export const receiveNotification =
       });
       return ok(undefined);
     }
-    await handleSubscriptionEvent({ unitOfWork, log, now, event: value.event });
+    await handleSubscriptionEvent({ dependencies, event: value.event });
     return ok(undefined);
   };

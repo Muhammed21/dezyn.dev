@@ -21,6 +21,7 @@ export type PlanChange = { readonly before: Plan; readonly after: Plan };
 export type SubscriptionChange =
   | { readonly kind: "stale" }
   | { readonly kind: "unknown_payer" }
+  | { readonly kind: "payer_not_owner" }
   | { readonly kind: "other_subscription"; readonly storedId: string }
   | {
       readonly kind: "applied";
@@ -78,11 +79,15 @@ const storedBytesAtEndOf = ({
 export const subscriptionChangeOf = ({
   stored,
   incoming,
+  payerIsOwner,
+  refused,
   plan,
   storedBytes,
 }: {
   readonly stored: RecordedSubscription | undefined;
   readonly incoming: SpaceSubscription;
+  readonly payerIsOwner: boolean;
+  readonly refused: boolean;
   readonly plan: Plan;
   readonly storedBytes: number;
 }): SubscriptionChange => {
@@ -91,6 +96,9 @@ export const subscriptionChangeOf = ({
   }
   if (stored !== undefined && stored.id !== incoming.id && stored.status !== "ended") {
     return { kind: "other_subscription", storedId: stored.id };
+  }
+  if ((refused || !payerIsOwner) && stored?.id !== incoming.id) {
+    return { kind: "payer_not_owner" };
   }
   if (stored !== undefined && stored.modifiedAt.getTime() >= incoming.modifiedAt.getTime()) {
     return { kind: "stale" };

@@ -135,4 +135,26 @@ describe("le départ du payeur résilie l'abonnement en fin de période (ADR 005
       },
     });
   });
+
+  it("le payeur rendu éditeur : l'email dit qu'il n'est plus propriétaire de l'espace", () => {
+    const departure = payerDepartureOf({
+      subscription: makeDepartedSubscription(),
+      leaverId: PAYER_ID,
+      webUrl: "https://dezyn.dev",
+      reason: "demoted",
+    });
+
+    expect(departure).toEqual({
+      subscriptionId: "polar-subscription-1",
+      cancel: true,
+      notice: {
+        subject: "L'abonnement Team de l'espace « Studio Ada » prend fin le 22 décembre 2026",
+        text: [
+          "Ada Lovelace n'est plus propriétaire de l'espace « Studio Ada ». Ada Lovelace en payait l'abonnement Team : il est résilié et prend fin le 22 décembre 2026.",
+          "Jusqu'à cette date, l'espace reste au plan Team. Après cette date, souscrivez à nouveau au plan Team pour le garder.",
+          `Page « Plan » de l'espace : ${planUrl}`,
+        ].join("\n\n"),
+      },
+    });
+  });
 });

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { PostgresDatabase } from "#db";
-import { replayPendingCancellations } from "#modules/subscription/subscription-module.ts";
+import { replayPendingPolarRequests } from "#modules/subscription/subscription-module.ts";
 import type { LogRecord } from "#platform/logging.ts";
 import {
   type App,
@@ -105,7 +105,7 @@ describe("une résiliation que Polar n'a pas reçue est rejouée (ADR 0050 §3)"
       { billing: unavailablePolar() },
     ));
 
-  it("le payeur rendu éditeur n'enregistre aucune intention, même Polar indisponible", () =>
+  it("Polar indisponible quand le payeur est rendu éditeur : la tâche planifiée rejoue l'intention", () =>
     withIdentityApp(
       async (app, db) => {
         const { payer, owner, spaceId } = await seedPaidSpaceWithOwner(app, db);
@@ -118,6 +118,12 @@ describe("une résiliation que Polar n'a pas reçue est rejouée (ADR 0050 §3)"
         });
 
         expect(response.status).toBe(200);
+        expect((await subscriptionOf(db, spaceId))?.cancelRequestedAt).toBeInstanceOf(Date);
+
+        const polar = makeMerchantOfRecord();
+        await replayPendingPolarRequests({ db, merchant: polar.merchant, log: () => undefined })();
+
+        expect(polar.cancellations).toEqual([{ spaceId, subscriptionId: SUBSCRIPTION_ID }]);
         expect(await subscriptionOf(db, spaceId)).toMatchObject({ cancelRequestedAt: null });
       },
       { billing: unavailablePolar() },
@@ -140,7 +146,7 @@ describe("une résiliation que Polar n'a pas reçue est rejouée (ADR 0050 §3)"
         const polar = makeMerchantOfRecord();
         const records: LogRecord[] = [];
 
-        await replayPendingCancellations({
+        await replayPendingPolarRequests({
           db,
           merchant: polar.merchant,
           log: (record) => records.push(record),
@@ -166,7 +172,7 @@ describe("une résiliation que Polar n'a pas reçue est rejouée (ADR 0050 §3)"
         const kept = (await subscriptionOf(db, spaceId))?.cancelRequestedAt;
         const records: LogRecord[] = [];
 
-        await replayPendingCancellations({
+        await replayPendingPolarRequests({
           db,
           merchant: makeMerchantOfRecord({ available: false }).merchant,
           log: (record) => records.push(record),
@@ -194,7 +200,7 @@ describe("une résiliation que Polar n'a pas reçue est rejouée (ADR 0050 §3)"
       await seedPaidSpaceWithOwner(app, db);
       const polar = makeMerchantOfRecord();
 
-      await replayPendingCancellations({ db, merchant: polar.merchant, log: () => undefined })();
+      await replayPendingPolarRequests({ db, merchant: polar.merchant, log: () => undefined })();
 
       expect(polar.cancellations).toEqual([]);
     }));

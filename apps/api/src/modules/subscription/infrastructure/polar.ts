@@ -1,7 +1,12 @@
-import { createPolarCore, webhooks } from "@polar-sh/sdk/2027-01";
+import { createPolarCore, errors, webhooks } from "@polar-sh/sdk/2027-01";
 import { createCheckouts } from "@polar-sh/sdk/2027-01/services/checkouts";
 import { createCustomerSessions } from "@polar-sh/sdk/2027-01/services/customer_sessions";
-import { updateSubscriptions } from "@polar-sh/sdk/2027-01/services/subscriptions";
+import { listOrders } from "@polar-sh/sdk/2027-01/services/orders";
+import { createRefunds, listRefunds } from "@polar-sh/sdk/2027-01/services/refunds";
+import {
+  revokeSubscriptions,
+  updateSubscriptions,
+} from "@polar-sh/sdk/2027-01/services/subscriptions";
 import { z } from "zod";
 
 import { errorDetails, type LogSink } from "#platform/logging.ts";
@@ -78,6 +83,40 @@ export const polarNotificationReader = ({
   },
 });
 
+const REFUSED_SUBSCRIPTION_KEY = "dezyn_refused_subscription_id";
+
+const REFUND_COMMENT = "Abonnement payé par un utilisateur qui n'est pas propriétaire de l'espace";
+
+const PAGE = { page: 1, limit: 100 } as const;
+
+const PolarOrders = z.object({
+  items: z.array(
+    z.object({ id: z.string(), paid: z.boolean(), refundable_amount: z.number().int() }),
+  ),
+});
+
+const PolarRefunds = z.object({
+  items: z.array(
+    z.object({
+      order_id: z.string(),
+      status: z.string(),
+      metadata: z.record(z.string(), z.unknown()),
+    }),
+  ),
+});
+
+const LIVE_REFUND_STATUSES: ReadonlySet<string> = new Set(["pending", "succeeded"]);
+
+const refundedOrdersOf = (refunds: z.infer<typeof PolarRefunds>, subscriptionId: string) =>
+  new Set(
+    refunds.items
+      .filter(
+        ({ status, metadata }) =>
+          LIVE_REFUND_STATUSES.has(status) && metadata[REFUSED_SUBSCRIPTION_KEY] === subscriptionId,
+      )
+      .map(({ order_id }) => order_id),
+  );
+
 export const polarMerchantOfRecord = ({
   accessToken,
   server,
@@ -143,6 +182,76 @@ export const polarMerchantOfRecord = ({
         return err("unavailable");
       }
     },
+    revokeNow: async ({ spaceId, subscriptionId }) => {
+      try {
+        await revokeSubscriptions(client)(subscriptionId);
+        return ok(undefined);
+      } catch (error) {
+        if (error instanceof errors.AlreadyCanceledSubscription) {
+          return ok(undefined);
+        }
+        log({
+          level: "warn",
+          msg: "polar revoke failed",
+          spaceId,
+          subscriptionId,
+          ...errorDetails(error),
+        });
+        return err("unavailable");
+      }
+    },
+    refundAll: async ({ spaceId, subscriptionId }) => {
+      try {
+        const orders = PolarOrders.parse(
+          await listOrders(client)({ subscription_id: subscriptionId, ...PAGE }),
+        ).items.filter(({ paid }) => paid);
+        if (orders.length === 0) {
+          log({
+            level: "warn",
+            msg: "polar refund failed: no paid order yet",
+            spaceId,
+            subscriptionId,
+          });
+          return err("unavailable");
+        }
+        const refunded = refundedOrdersOf(
+          PolarRefunds.parse(
+            await listRefunds(client)({ subscription_id: subscriptionId, ...PAGE }),
+          ),
+          subscriptionId,
+        );
+        const refundable = orders.filter(
+          ({ id, refundable_amount }) => refundable_amount > 0 && !refunded.has(id),
+        );
+        await Promise.all(
+          refundable.map(async ({ id, refundable_amount }) => {
+            try {
+              await createRefunds(client)({
+                order_id: id,
+                amount: refundable_amount,
+                reason: "other",
+                comment: REFUND_COMMENT,
+                metadata: { [REFUSED_SUBSCRIPTION_KEY]: subscriptionId },
+              });
+            } catch (error) {
+              if (!(error instanceof errors.RefundedAlready)) {
+                throw error;
+              }
+            }
+          }),
+        );
+        return ok(undefined);
+      } catch (error) {
+        log({
+          level: "warn",
+          msg: "polar refund failed",
+          spaceId,
+          subscriptionId,
+          ...errorDetails(error),
+        });
+        return err("unavailable");
+      }
+    },
   };
 };
 
@@ -150,6 +259,8 @@ export const unavailableMerchantOfRecord: MerchantOfRecord = {
   createCheckout: async () => err("unavailable"),
   createPortal: async () => err("unavailable"),
   cancelAtPeriodEnd: async () => err("unavailable"),
+  revokeNow: async () => err("unavailable"),
+  refundAll: async () => err("unavailable"),
 };
 
 export const unavailableNotificationReader: NotificationReader = {
