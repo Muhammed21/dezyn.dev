@@ -12,15 +12,21 @@ const makePurgedProject = ({
   readonly purgedBefore?: Date;
 } = {}) => ({ name, deletedEntries, purgedBefore });
 
+const TEAM_SPACE = { plan: "team", limitBytes: 20_000_000_000 } as const;
+
+const FREE_SPACE = { plan: "free", limitBytes: 500_000_000 } as const;
+
 const makeNotice = ({
-  plan = "team",
+  plan = TEAM_SPACE.plan,
+  limitBytes = TEAM_SPACE.limitBytes,
   storedBytes = 448_000_000,
   projects = [makePurgedProject()],
 }: {
   readonly plan?: "free" | "team";
+  readonly limitBytes?: number;
   readonly storedBytes?: number;
   readonly projects?: readonly ReturnType<typeof makePurgedProject>[];
-} = {}) => ({ spaceName: "Studio Ada", plan, storedBytes, projects });
+} = {}) => ({ spaceName: "Studio Ada", plan, limitBytes, storedBytes, projects });
 
 describe("l'email de purge de l'historique (ADR 0042 §5)", () => {
   it("nomme l'espace dans son sujet", () => {
@@ -53,22 +59,30 @@ describe("l'email de purge de l'historique (ADR 0042 §5)", () => {
   });
 
   it("donne le stockage de l'espace après la purge et sa limite", () => {
-    expect(purgeNoticeOf(makeNotice({ plan: "free", storedBytes: 448_999_999 })).text).toContain(
+    expect(purgeNoticeOf(makeNotice({ ...FREE_SPACE, storedBytes: 448_999_999 })).text).toContain(
       "L'espace « Studio Ada » utilise maintenant 448 Mo sur 500 Mo.",
     );
-    expect(purgeNoticeOf(makeNotice({ plan: "team", storedBytes: 18_050_000_000 })).text).toContain(
-      "L'espace « Studio Ada » utilise maintenant 18 Go sur 20 Go.",
-    );
+    expect(
+      purgeNoticeOf(makeNotice({ ...TEAM_SPACE, storedBytes: 18_050_000_000 })).text,
+    ).toContain("L'espace « Studio Ada » utilise maintenant 18 Go sur 20 Go.");
+  });
+
+  it("donne à un espace gelé son stockage à la fin de l'abonnement comme limite (ADR 0050 §6)", () => {
+    expect(
+      purgeNoticeOf(
+        makeNotice({ plan: "free", limitBytes: 3_000_000_000, storedBytes: 2_700_000_000 }),
+      ).text,
+    ).toContain("L'espace « Studio Ada » utilise maintenant 2,7 Go sur 3 Go.");
   });
 
   it("propose le plan Team à un espace Free", () => {
-    expect(purgeNoticeOf(makeNotice({ plan: "free" })).text).toMatch(
+    expect(purgeNoticeOf(makeNotice(FREE_SPACE)).text).toMatch(
       /Le plan Team offre 20 Go de stockage\.$/,
     );
   });
 
   it("ne propose pas le plan Team à un espace Team", () => {
-    expect(purgeNoticeOf(makeNotice({ plan: "team", storedBytes: 18_050_000_000 })).text).toMatch(
+    expect(purgeNoticeOf(makeNotice({ ...TEAM_SPACE, storedBytes: 18_050_000_000 })).text).toMatch(
       /\n\nL'espace « Studio Ada » utilise maintenant 18 Go sur 20 Go\.$/,
     );
   });

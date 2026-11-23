@@ -11,15 +11,21 @@ import type { PurgeBatch, PurgeCandidates, PurgeUnitOfWork } from "../applicatio
 
 const { historyEntry, identityUser, project, space, spaceMember, spaceSubscription } = schema;
 
-const StoredCandidate = z.object({
-  spaceId: z.string(),
-  plan: z.enum(PLANS),
-  storedBytes: z.coerce.number(),
-  name: z.string(),
-  projects: z.array(z.object({ id: z.string(), name: z.string() })),
-  subscriptionEnded: z.boolean(),
-  members: z.coerce.number(),
-});
+const StoredCandidate = z
+  .object({
+    spaceId: z.string(),
+    plan: z.enum(PLANS),
+    storedBytes: z.coerce.number(),
+    name: z.string(),
+    projects: z.array(z.object({ id: z.string(), name: z.string() })),
+    subscriptionEnded: z.boolean(),
+    storedBytesAtEnd: z.number().nullable(),
+    members: z.coerce.number(),
+  })
+  .transform(({ storedBytes, members, ...candidate }) => ({
+    ...candidate,
+    usage: { projects: candidate.projects.length, storedBytes, members },
+  }));
 
 const LockTaken = z.object({ taken: z.boolean() });
 
@@ -41,12 +47,13 @@ const spaceStorage = (orm: Pick<PostgresTransaction, "select">) =>
       name: space.name,
       projects: sql`json_agg(json_build_object('id', ${project.id}, 'name', ${project.name}) ORDER BY ${project.storedBytes} DESC, ${project.id})`,
       subscriptionEnded: sql`coalesce(${spaceSubscription.status} = 'ended', false)`,
+      storedBytesAtEnd: spaceSubscription.storedBytesAtEnd,
       members: sql`(select count(*) from ${spaceMember} where ${spaceMember.spaceId} = ${space.id} and ${spaceMember.closedAt} is null)`,
     })
     .from(space)
     .innerJoin(project, eq(project.spaceId, space.id))
     .leftJoin(spaceSubscription, eq(spaceSubscription.spaceId, space.id))
-    .groupBy(space.id, spaceSubscription.status)
+    .groupBy(space.id, spaceSubscription.status, spaceSubscription.storedBytesAtEnd)
     .$dynamic();
 
 export const postgresPurgeCandidates = (db: PostgresDatabase): PurgeCandidates => ({
@@ -60,8 +67,7 @@ const purgeBatchOn = (
 ): PurgeBatch => ({
   storage: async () => {
     const [row] = await spaceStorage(tx).where(eq(space.id, spaceId));
-    const { plan, storedBytes } = StoredCandidate.parse(row);
-    return { plan, storedBytes };
+    return StoredCandidate.parse(row);
   },
   oldestEntriesOf: (projectId, count) =>
     tx
@@ -108,7 +114,7 @@ export const postgresPurgeUnitOfWork = ({
 export const postgresPurgeNotices = (db: PostgresDatabase): PurgeNotices => ({
   recipientsOf: async (spaceId) => {
     const [row] = await spaceStorage(db.orm).where(eq(space.id, spaceId));
-    const { plan, storedBytes } = StoredCandidate.parse(row);
+    const storage = StoredCandidate.parse(row);
     const owners = await db.orm
       .select({ email: identityUser.email })
       .from(spaceMember)
@@ -120,6 +126,6 @@ export const postgresPurgeNotices = (db: PostgresDatabase): PurgeNotices => ({
           isNull(spaceMember.closedAt),
         ),
       );
-    return { plan, storedBytes, owners: owners.map(({ email }) => email) };
+    return { ...storage, owners: owners.map(({ email }) => email) };
   },
 });

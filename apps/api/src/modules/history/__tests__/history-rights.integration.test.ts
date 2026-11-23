@@ -40,6 +40,23 @@ const seedHistoryEntry = async (db: PostgresDatabase) => {
   return entry;
 };
 
+const seedEndedSubscription = async (
+  db: PostgresDatabase,
+  { storedBytesAtEnd }: { readonly storedBytesAtEnd: number },
+) => {
+  const { spaceId } = await seedHistoryEntry(db);
+  const [payer] = await db.orm.select({ id: schema.identityUser.id }).from(schema.identityUser);
+  await db.orm.insert(schema.spaceSubscription).values({
+    spaceId,
+    polarSubscriptionId: randomUUID(),
+    payerId: payer?.id ?? randomUUID(),
+    status: "ended",
+    currentPeriodEnd: new Date("2026-11-10T08:00:00.000Z"),
+    polarModifiedAt: new Date("2026-11-10T08:00:00.000Z"),
+    storedBytesAtEnd,
+  });
+};
+
 const withAppDatabase = (run: (db: PostgresDatabase) => Promise<void>) =>
   withThrowawayDatabase(async ({ migratorUrl, appUrl }) => {
     await migrate({ connectionString: migratorUrl });
@@ -145,6 +162,31 @@ describe("le rôle history_maintainer lit ce que la purge exige et ne touche qu'
       expect(await maintainer.orm.select().from(schema.space)).toHaveLength(1);
       expect(await maintainer.orm.select().from(schema.project)).toHaveLength(1);
       expect(await maintainer.orm.select().from(schema.spaceMember)).toEqual([]);
+    }));
+
+  it("history_maintainer lit le statut et le stockage à la fin de l'abonnement d'un espace (ADR 0050 §6)", () =>
+    withMaintainerDatabase(async ({ app, maintainer }) => {
+      await seedEndedSubscription(app, { storedBytesAtEnd: 3_000_000_000 });
+
+      expect(
+        await maintainer.orm
+          .select({
+            status: schema.spaceSubscription.status,
+            storedBytesAtEnd: schema.spaceSubscription.storedBytesAtEnd,
+          })
+          .from(schema.spaceSubscription),
+      ).toEqual([{ status: "ended", storedBytesAtEnd: 3_000_000_000 }]);
+    }));
+
+  it("history_maintainer ne lit pas le payeur d'un abonnement", () =>
+    withMaintainerDatabase(async ({ app, maintainer }) => {
+      await seedEndedSubscription(app, { storedBytesAtEnd: 3_000_000_000 });
+
+      await expect(
+        maintainer.orm
+          .select({ payerId: schema.spaceSubscription.payerId })
+          .from(schema.spaceSubscription),
+      ).rejects.toThrow(permissionDenied("space_subscription"));
     }));
 
   it("history_maintainer lit l'identifiant, l'email et le nom des utilisateurs", () =>
