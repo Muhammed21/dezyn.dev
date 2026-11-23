@@ -18,7 +18,13 @@ import {
   withIdentityApp,
 } from "#testing/authorization-flow.ts";
 import { NOTHING_LEFT, remainsOfSpace } from "#testing/orphan-space-fixtures.ts";
-import { invite, makeOutbox, personalSpaceOf } from "#testing/space-fixtures.ts";
+import {
+  invite,
+  makeOutbox,
+  personalSpaceOf,
+  switchToTeam,
+  tokenOf,
+} from "#testing/space-fixtures.ts";
 import {
   makeMerchantOfRecord,
   makeSubscriptionEvent,
@@ -328,6 +334,75 @@ describe("un utilisateur supprime son compte (ADR 0015, ADR 0050 §3)", () => {
           .where(eq(schema.space.id, spaceId)),
       ).toEqual([{ id: spaceId }]);
     }));
+
+  it("le seul membre ouvert d'un espace supprime son compte : plus aucune invitation de l'espace n'existe, et l'invité ne peut plus y entrer (ADR 0051)", () => {
+    const outbox = makeOutbox();
+    return withIdentityApp(
+      async (app, db) => {
+        const ada = await obtainAccessToken(app);
+        const spaceId = await personalSpaceOf(db, ada.userId);
+        await switchToTeam(db, spaceId);
+        const linus = await obtainAccessToken(app, { user: LINUS });
+        await seedMember(db, { spaceId, userId: linus.userId, role: "owner" });
+        await db.orm
+          .update(schema.spaceMember)
+          .set({ closedAt: new Date("2026-11-01T10:00:00.000Z"), closedReason: "left" })
+          .where(eq(schema.spaceMember.userId, linus.userId));
+        await invite(app, { accessToken: ada.accessToken, spaceId, email: LINUS.email });
+        await invite(app, { accessToken: ada.accessToken, spaceId, email: GRACE.email });
+        const grace = await obtainAccessToken(app, { user: GRACE });
+
+        await deleteAccount(app, await signInCookie(app, ADA));
+
+        expect(
+          await db.orm
+            .select({ id: schema.spaceInvitation.id })
+            .from(schema.spaceInvitation)
+            .where(eq(schema.spaceInvitation.spaceId, spaceId)),
+        ).toEqual([]);
+        const accepted = await app.request(
+          `${BASE_URL}/v1/invitations/${tokenOf(outbox.sent.at(-1))}/accept`,
+          { method: "POST", headers: { authorization: `Bearer ${grace.accessToken}` } },
+        );
+        expect(accepted.status).toBe(410);
+        expect(
+          await db.orm
+            .select({ userId: schema.spaceMember.userId })
+            .from(schema.spaceMember)
+            .where(eq(schema.spaceMember.spaceId, spaceId)),
+        ).toEqual([{ userId: linus.userId }]);
+      },
+      { mailer: outbox.mailer },
+    );
+  });
+
+  it("les invitations d'un espace où il reste un membre ouvert ne sont pas touchées", () => {
+    const outbox = makeOutbox();
+    return withIdentityApp(
+      async (app, db) => {
+        const ada = await obtainAccessToken(app);
+        const grace = await obtainAccessToken(app, { user: GRACE });
+        const graceSpace = await personalSpaceOf(db, grace.userId);
+        await switchToTeam(db, graceSpace);
+        await seedMember(db, { spaceId: graceSpace, userId: ada.userId, role: "owner" });
+        await invite(app, {
+          accessToken: ada.accessToken,
+          spaceId: graceSpace,
+          email: LINUS.email,
+        });
+
+        await deleteAccount(app, await signInCookie(app, ADA));
+
+        expect(
+          await db.orm
+            .select({ email: schema.spaceInvitation.email })
+            .from(schema.spaceInvitation)
+            .where(eq(schema.spaceInvitation.spaceId, graceSpace)),
+        ).toEqual([{ email: LINUS.email }]);
+      },
+      { mailer: outbox.mailer },
+    );
+  });
 
   it("le seul membre d'un espace avec projets, tokens, historique et abonnement terminé supprime son compte, et la purge suivante ne laisse rien de l'espace (ADR 0051)", () =>
     withIdentityApp(async (app, db, { maintainerUrl }) => {

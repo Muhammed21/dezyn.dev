@@ -18,7 +18,10 @@ import { readSpace, type SpaceSubscriptions } from "./application/read-space.ts"
 import { spaceAccess } from "./application/space-access.ts";
 import { createPersonalSpace, listMySpaces } from "./application/spaces.ts";
 import type { ProjectLocator } from "./domain/project-access.ts";
-import { lastOwnerSpacesOn } from "./infrastructure/postgres-account-departures.ts";
+import {
+  dropOrphanedInvitationsOn,
+  lastOwnerSpacesOn,
+} from "./infrastructure/postgres-account-departures.ts";
 import { postgresDepartures } from "./infrastructure/postgres-departures.ts";
 import { postgresInvitationAcceptance } from "./infrastructure/postgres-invitation-acceptance.ts";
 import { postgresInvitationStore } from "./infrastructure/postgres-invitation-store.ts";
@@ -36,7 +39,7 @@ import { postgresSpaceFreezes } from "./infrastructure/postgres-space-freezes.ts
 import { postgresSpaceStore } from "./infrastructure/postgres-space-store.ts";
 import { postgresStorageAlerts } from "./infrastructure/postgres-storage-alerts.ts";
 
-export { lastOwnerSpacesOn };
+export { dropOrphanedInvitationsOn, lastOwnerSpacesOn };
 
 const now = () => new Date();
 

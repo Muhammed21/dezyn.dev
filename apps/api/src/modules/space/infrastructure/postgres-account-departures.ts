@@ -1,4 +1,5 @@
-import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, ne, notExists, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 
 import type { PostgresTransaction } from "#db";
@@ -7,7 +8,9 @@ import { schema } from "@repo/db";
 import { blocksAccountDeletion } from "../domain/departure.ts";
 import { ROLES } from "../domain/space.ts";
 
-const { space, spaceMember } = schema;
+const { space, spaceInvitation, spaceMember } = schema;
+
+const otherMember = alias(spaceMember, "other_member");
 
 const StoredOwnership = z.object({
   id: z.string(),
@@ -48,4 +51,35 @@ export const lastOwnerSpacesOn =
       .map((row) => StoredOwnership.parse(row))
       .filter(blocksAccountDeletion)
       .map(({ id, name }) => ({ id, name }));
+  };
+
+export const dropOrphanedInvitationsOn =
+  (tx: PostgresTransaction) =>
+  async (userId: string): Promise<void> => {
+    await tx.delete(spaceInvitation).where(
+      inArray(
+        spaceInvitation.spaceId,
+        tx
+          .select({ spaceId: spaceMember.spaceId })
+          .from(spaceMember)
+          .where(
+            and(
+              eq(spaceMember.userId, userId),
+              isNull(spaceMember.closedAt),
+              notExists(
+                tx
+                  .select({ id: otherMember.id })
+                  .from(otherMember)
+                  .where(
+                    and(
+                      eq(otherMember.spaceId, spaceMember.spaceId),
+                      ne(otherMember.userId, userId),
+                      isNull(otherMember.closedAt),
+                    ),
+                  ),
+              ),
+            ),
+          ),
+      ),
+    );
   };

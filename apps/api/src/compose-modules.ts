@@ -22,7 +22,11 @@ import {
   proposalWriterOn,
 } from "#modules/proposal/proposal-module.ts";
 import type { MembershipKey } from "#modules/space/contracts/membership.ts";
-import { lastOwnerSpacesOn, spaceModule } from "#modules/space/space-module.ts";
+import {
+  dropOrphanedInvitationsOn,
+  lastOwnerSpacesOn,
+  spaceModule,
+} from "#modules/space/space-module.ts";
 import {
   type Billing,
   cancelRequestOn,
@@ -144,6 +148,7 @@ export const composeModules = ({
     stepsOn: (tx) => ({
       ...payerAccountDeletionOn(tx),
       lastOwnerSpaces: lastOwnerSpacesOn(tx),
+      dropOrphanedInvitations: dropOrphanedInvitationsOn(tx),
       pseudonymizeHistory: pseudonymizeAuthorOn(tx),
     }),
     announce: subscriptions.payerDeletedAccount,

@@ -1,4 +1,6 @@
-import { and, eq } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
+
+import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 
 import type { PostgresDatabase } from "#db";
@@ -10,6 +12,7 @@ import {
   obtainAccessToken,
   withIdentityApp,
 } from "#testing/authorization-flow.ts";
+import { whileHolding } from "#testing/lock-wait.ts";
 import {
   hashOf,
   invite,
@@ -36,6 +39,18 @@ const accept = (app: App, { accessToken, token }: { accessToken: string; token: 
     method: "POST",
     headers: { authorization: `Bearer ${accessToken}` },
   });
+
+const LINUS = {
+  name: "Linus Torvalds",
+  email: "linus@dezyn.test",
+  password: "un-troisieme-mot-de-passe",
+};
+
+const GONE = {
+  type: "about:blank",
+  title: "Invitation expirée ou déjà utilisée",
+  status: 410,
+};
 
 const listSpaces = async (app: App, accessToken: string) => {
   const response = await app.request(`${BASE_URL}/v1/spaces`, {
@@ -71,6 +86,17 @@ const leave = (db: PostgresDatabase, { spaceId, userId }: { spaceId: string; use
     .update(schema.spaceMember)
     .set({ closedAt: new Date(), closedReason: "left" })
     .where(and(eq(schema.spaceMember.spaceId, spaceId), eq(schema.spaceMember.userId, userId)));
+
+const seedEditor = async (app: App, db: PostgresDatabase, spaceId: string) => {
+  const linus = await obtainAccessToken(app, { user: LINUS });
+  await db.orm.insert(schema.spaceMember).values({
+    id: randomUUID(),
+    spaceId,
+    userId: linus.userId,
+    role: "editor",
+    joinedAt: new Date(),
+  });
+};
 
 const membershipsOf = (
   db: PostgresDatabase,
@@ -284,6 +310,94 @@ describe("un membre parti puis réinvité retrouve une ligne ouverte (ADR 0017)"
           { role: "editor", closedReason: "left" },
           { role: "editor", closedReason: null },
         ]);
+      },
+      { mailer: outbox.mailer },
+    );
+  });
+});
+
+describe("une invitation vers un espace sans propriétaire ouvert n'est plus valable (ADR 0051, ADR 0052)", () => {
+  it("le seul propriétaire a fermé son appartenance : l'acceptation répond 410 comme une invitation expirée, sans créer de membre", () => {
+    const outbox = makeOutbox();
+    return withIdentityApp(
+      async (app, db) => {
+        const { ada, spaceId, token } = await inviteIntoTeamSpace(app, db, outbox);
+        await leave(db, { spaceId, userId: ada.userId });
+        const grace = await obtainAccessToken(app, { user: GRACE });
+
+        const response = await accept(app, { accessToken: grace.accessToken, token });
+
+        expect(response.status).toBe(410);
+        expect(await response.json()).toMatchObject(GONE);
+        expect(await membershipsOf(db, { spaceId, userId: grace.userId })).toEqual([]);
+        expect(await acceptedAtOf(db, token)).toBeNull();
+      },
+      { mailer: outbox.mailer },
+    );
+  });
+
+  it("un espace qui ne garde qu'un éditeur ouvert refuse aussi l'invitation", () => {
+    const outbox = makeOutbox();
+    return withIdentityApp(
+      async (app, db) => {
+        const { ada, spaceId, token } = await inviteIntoTeamSpace(app, db, outbox);
+        await seedEditor(app, db, spaceId);
+        await leave(db, { spaceId, userId: ada.userId });
+        const grace = await obtainAccessToken(app, { user: GRACE });
+
+        const response = await accept(app, { accessToken: grace.accessToken, token });
+
+        expect(response.status).toBe(410);
+        expect(await membershipsOf(db, { spaceId, userId: grace.userId })).toEqual([]);
+      },
+      { mailer: outbox.mailer },
+    );
+  });
+
+  it("une acceptation qui attend la suppression du compte du seul membre est refusée, sans interblocage", () => {
+    const outbox = makeOutbox();
+    return withIdentityApp(
+      async (app, db) => {
+        const { ada, spaceId, token } = await inviteIntoTeamSpace(app, db, outbox);
+        const grace = await obtainAccessToken(app, { user: GRACE });
+
+        const accepted = await whileHolding(db, {
+          hold: (tx) => tx.execute(sql`SELECT id FROM space WHERE id = ${spaceId} FOR UPDATE`),
+          meanwhile: () => accept(app, { accessToken: grace.accessToken, token }),
+          afterWait: async (tx) => {
+            await tx
+              .delete(schema.spaceInvitation)
+              .where(eq(schema.spaceInvitation.spaceId, spaceId));
+            await tx
+              .update(schema.spaceMember)
+              .set({ closedAt: new Date(), closedReason: "left" })
+              .where(eq(schema.spaceMember.userId, ada.userId));
+          },
+        });
+
+        expect(accepted.status).toBe(410);
+        expect(await membershipsOf(db, { spaceId, userId: grace.userId })).toEqual([]);
+      },
+      { mailer: outbox.mailer },
+    );
+  });
+
+  it("une invitation supprimée pendant que l'acceptation attend l'espace répond 410", () => {
+    const outbox = makeOutbox();
+    return withIdentityApp(
+      async (app, db) => {
+        const { spaceId, token } = await inviteIntoTeamSpace(app, db, outbox);
+        const grace = await obtainAccessToken(app, { user: GRACE });
+
+        const accepted = await whileHolding(db, {
+          hold: (tx) => tx.execute(sql`SELECT id FROM space WHERE id = ${spaceId} FOR UPDATE`),
+          meanwhile: () => accept(app, { accessToken: grace.accessToken, token }),
+          afterWait: (tx) =>
+            tx.delete(schema.spaceInvitation).where(eq(schema.spaceInvitation.spaceId, spaceId)),
+        });
+
+        expect(accepted.status).toBe(410);
+        expect(await membershipsOf(db, { spaceId, userId: grace.userId })).toEqual([]);
       },
       { mailer: outbox.mailer },
     );

@@ -11,6 +11,7 @@ export interface AccountDeletionSteps<Departure> {
     readonly userId: string;
     readonly at: Date;
   }): Promise<readonly Departure[]>;
+  dropOrphanedInvitations(userId: string): Promise<void>;
   pseudonymizeHistory(userId: string): Promise<void>;
   deleteUser(userId: string): Promise<void>;
 }
@@ -60,6 +61,7 @@ export const deleteAccount =
           return err({ kind: "last_owner", spaces });
         }
         const departures = await steps.leavePaidSpaces({ userId, at: now() });
+        await steps.dropOrphanedInvitations(userId);
         await steps.pseudonymizeHistory(userId);
         await steps.deleteUser(userId);
         return ok(departures);

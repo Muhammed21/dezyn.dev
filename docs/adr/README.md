@@ -236,4 +236,3 @@ graph TD
 - La confirmation, sur un premier webhook signé par Polar et un premier abonnement payé, du secret et du format 2027-01 vérifiés par le spike (ADR 0050, [spike](../spikes/2026-11-22-polar-dans-le-worker-de-l-api.md)).
 - Le transfert d'un abonnement d'un payeur à un autre propriétaire (ADR 0050, négatives).
 - La suppression des fichiers stockés hors de PostgreSQL d'un espace orphelin, quand les rendus et les snapshots auront leur stockage (ADR 0052, risques ; #365).
-- Le refus d'une invitation à un espace orphelin, qui ferait entrer un éditeur dans un espace sans propriétaire (ADR 0052, risques ; #365).

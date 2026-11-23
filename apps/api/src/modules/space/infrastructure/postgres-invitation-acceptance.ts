@@ -16,10 +16,35 @@ const lockedFactsOf = async (
   tx: PostgresTransaction,
   { tokenHash, userId }: { readonly tokenHash: string; readonly userId: string },
 ) => {
+  const [invited] = await tx
+    .select({ spaceId: spaceInvitation.spaceId })
+    .from(spaceInvitation)
+    .where(eq(spaceInvitation.tokenHash, tokenHash));
+  if (invited === undefined) {
+    return undefined;
+  }
+  const [row] = await tx
+    .select({ id: space.id, name: space.name, plan: space.plan })
+    .from(space)
+    .where(eq(space.id, invited.spaceId))
+    .for("update");
+  const target = StoredSpace.parse(row);
+  const openOwners = await tx
+    .select({ id: spaceMember.id })
+    .from(spaceMember)
+    .where(
+      and(
+        eq(spaceMember.spaceId, target.id),
+        eq(spaceMember.role, "owner"),
+        isNull(spaceMember.closedAt),
+      ),
+    );
+  if (openOwners.length === 0) {
+    return undefined;
+  }
   const [invitation] = await tx
     .select({
       id: spaceInvitation.id,
-      spaceId: spaceInvitation.spaceId,
       email: spaceInvitation.email,
       expiresAt: spaceInvitation.expiresAt,
       acceptedAt: spaceInvitation.acceptedAt,
@@ -30,12 +55,6 @@ const lockedFactsOf = async (
   if (invitation === undefined) {
     return undefined;
   }
-  const [row] = await tx
-    .select({ id: space.id, name: space.name, plan: space.plan })
-    .from(space)
-    .where(eq(space.id, invitation.spaceId))
-    .for("update");
-  const target = StoredSpace.parse(row);
   const [user] = await tx
     .select({ email: identityUser.email })
     .from(identityUser)
