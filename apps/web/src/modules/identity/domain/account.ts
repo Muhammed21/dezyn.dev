@@ -11,4 +11,5 @@ export type AccountDeletionFailure = "unauthenticated" | "unavailable" | "invali
 
 export type DeleteAccountFailure =
   | { readonly kind: "last_owner"; readonly spaces: readonly SpaceRef[] }
+  | { readonly kind: "wrong_password" | "rate_limited" }
   | { readonly kind: AccountDeletionFailure };

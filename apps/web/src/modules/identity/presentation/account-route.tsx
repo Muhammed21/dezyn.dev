@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type AnyRootRoute, createRoute, Link, Navigate } from "@tanstack/react-router";
+import { type SubmitEvent, useState } from "react";
 
 import type { Result } from "@repo/result";
 
@@ -12,9 +13,18 @@ import type {
 } from "../domain/account.ts";
 
 type ReadDeletion = () => Promise<Result<AccountDeletion, AccountDeletionFailure>>;
-type DeleteAccount = () => Promise<Result<undefined, DeleteAccountFailure>>;
+type DeleteAccount = (password: string) => Promise<Result<undefined, DeleteAccountFailure>>;
 
 const UNAVAILABLE = "La suppression du compte est indisponible pour le moment.";
+
+const REFUSAL_MESSAGES: Readonly<
+  Record<Exclude<DeleteAccountFailure["kind"], "last_owner" | "unauthenticated">, string>
+> = {
+  wrong_password: "Mot de passe incorrect.",
+  rate_limited: "Trop d'essais. Réessayez dans quelques minutes.",
+  unavailable: UNAVAILABLE,
+  invalid_response: UNAVAILABLE,
+};
 
 const LAST_OWNER =
   "Vous êtes le dernier propriétaire de ces espaces : nommez un autre propriétaire avant de supprimer votre compte.";
@@ -56,6 +66,7 @@ const Confirmation = ({
   readonly paidSpaces: readonly PaidSpace[];
   readonly deleteAccount: DeleteAccount;
 }) => {
+  const [password, setPassword] = useState("");
   const queryClient = useQueryClient();
   const { data, isPending, mutate } = useMutation({
     mutationFn: deleteAccount,
@@ -69,19 +80,37 @@ const Confirmation = ({
   if (data?.ok === true || failure?.kind === "unauthenticated") {
     return <Navigate to="/connexion" />;
   }
+  const onSubmit = (event: SubmitEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    mutate(password);
+  };
   return (
     <>
       <CanceledSubscriptions paidSpaces={paidSpaces} />
-      <button type="button" disabled={isPending} onClick={() => mutate()}>
-        Supprimer définitivement mon compte
-      </button>
+      <form onSubmit={onSubmit}>
+        <label>
+          Mot de passe actuel
+          <input
+            type="password"
+            name="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+          />
+        </label>
+        <button type="submit" disabled={isPending || password === ""}>
+          Supprimer définitivement mon compte
+        </button>
+      </form>
       {failure?.kind === "last_owner" && (
         <>
           <p role="alert">{LAST_OWNER}</p>
           <SpacesToHandOver spaces={failure.spaces} />
         </>
       )}
-      {failure !== undefined && failure.kind !== "last_owner" && <p role="alert">{UNAVAILABLE}</p>}
+      {failure !== undefined && failure.kind !== "last_owner" && (
+        <p role="alert">{REFUSAL_MESSAGES[failure.kind]}</p>
+      )}
     </>
   );
 };

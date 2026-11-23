@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { AccountDeletionOutput, checkOutputSchema, LastOwnerProblem } from "../../index.ts";
+import {
+  AccountDeletionInput,
+  AccountDeletionOutput,
+  checkOutputSchema,
+  LastOwnerProblem,
+  WrongPasswordProblem,
+} from "../../index.ts";
 
 const SPACE_ID = "0b8f3c1e-7b3d-4e8a-9f10-2c5d6e7f8a9b";
 
@@ -58,5 +64,38 @@ describe("le refus du dernier propriétaire nomme ses espaces", () => {
     };
 
     expect(LastOwnerProblem.parse(problem)).toEqual(problem);
+  });
+});
+
+describe("la suppression d'un compte se confirme par le mot de passe actuel", () => {
+  it("lit le mot de passe donné", () => {
+    expect(AccountDeletionInput.parse({ password: "un-mot-de-passe-solide" })).toEqual({
+      password: "un-mot-de-passe-solide",
+    });
+  });
+
+  it.each([
+    ["sans mot de passe", {}],
+    ["avec un mot de passe vide", { password: "" }],
+    ["avec un mot de passe qui n'est pas un texte", { password: 1234 }],
+  ])("refuse une confirmation %s", (_case, input) => {
+    expect(AccountDeletionInput.safeParse(input).success).toBe(false);
+  });
+
+  it("lit le refus d'un mauvais mot de passe", () => {
+    const problem = {
+      type: "https://dezyn.dev/problems/wrong-password",
+      title: "Mot de passe incorrect",
+      status: 403,
+    };
+
+    expect(WrongPasswordProblem.parse(problem)).toEqual(problem);
+  });
+
+  it("ne prend pas un autre refus d'accès pour un mauvais mot de passe", () => {
+    expect(
+      WrongPasswordProblem.safeParse({ type: "about:blank", title: "Accès refusé", status: 403 })
+        .success,
+    ).toBe(false);
   });
 });

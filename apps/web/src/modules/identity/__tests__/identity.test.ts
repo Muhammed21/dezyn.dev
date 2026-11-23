@@ -340,20 +340,50 @@ describe("ce que la suppression du compte annonce, lu depuis l'app web", () => {
   });
 });
 
+const PASSWORD = "un-mot-de-passe-solide";
+
+const WRONG_PASSWORD_PROBLEM = {
+  type: "https://dezyn.dev/problems/wrong-password",
+  title: "Mot de passe incorrect",
+  status: 403,
+};
+
 describe("suppression du compte depuis l'app web (ADR 0015)", () => {
-  it("supprime le compte de la session", async () => {
+  it("supprime le compte de la session, confirmé par le mot de passe actuel", async () => {
     const { identity, calls } = answering(() => new Response(null, { status: 204 }));
 
-    expect(await identity.deleteAccount()).toEqual(ok(undefined));
+    expect(await identity.deleteAccount(PASSWORD)).toEqual(ok(undefined));
     expect(calls).toEqual([
-      { url: `${API_URL}/v1/account`, init: { method: "DELETE", credentials: "include" } },
+      {
+        url: `${API_URL}/v1/account`,
+        init: {
+          method: "DELETE",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ password: PASSWORD }),
+          credentials: "include",
+        },
+      },
     ]);
+  });
+
+  it("dit que le mot de passe est incorrect", async () => {
+    const { identity } = answering(json(WRONG_PASSWORD_PROBLEM, 403));
+
+    expect(await identity.deleteAccount(PASSWORD)).toEqual(err({ kind: "wrong_password" }));
+  });
+
+  it("dit que les essais sont limités", async () => {
+    const { identity } = answering(json({ title: "Trop d'essais", status: 429 }, 429));
+
+    expect(await identity.deleteAccount(PASSWORD)).toEqual(err({ kind: "rate_limited" }));
   });
 
   it("nomme les espaces dont le compte est le dernier propriétaire", async () => {
     const { identity } = answering(json(LAST_OWNER_PROBLEM, 409));
 
-    expect(await identity.deleteAccount()).toEqual(err({ kind: "last_owner", spaces: [SPACE] }));
+    expect(await identity.deleteAccount(PASSWORD)).toEqual(
+      err({ kind: "last_owner", spaces: [SPACE] }),
+    );
   });
 
   it.each([
@@ -365,11 +395,18 @@ describe("suppression du compte depuis l'app web (ADR 0015)", () => {
       "invalid_response",
     ],
     ["quand l'API est en panne", json({}, 503), "unavailable"],
+    [
+      "sur un autre refus d'accès",
+      json({ type: "about:blank", title: "Accès refusé", status: 403 }, 403),
+      "invalid_response",
+    ],
   ] as const)("échoue %s", async (_case, response, failure) => {
-    expect(await answering(response).identity.deleteAccount()).toEqual(err({ kind: failure }));
+    expect(await answering(response).identity.deleteAccount(PASSWORD)).toEqual(
+      err({ kind: failure }),
+    );
   });
 
   it("donne unavailable quand l'API est injoignable", async () => {
-    expect(await unreachable().deleteAccount()).toEqual(err({ kind: "unavailable" }));
+    expect(await unreachable().deleteAccount(PASSWORD)).toEqual(err({ kind: "unavailable" }));
   });
 });
