@@ -22,15 +22,18 @@ export const whileHolding = async <T>(
   {
     hold,
     meanwhile,
+    afterWait = async () => undefined,
   }: {
     readonly hold: (tx: PostgresTransaction) => Promise<unknown>;
     readonly meanwhile: () => T;
+    readonly afterWait?: (tx: PostgresTransaction) => Promise<unknown>;
   },
 ): Promise<T> => {
   const { concurrent } = await db.orm.transaction(async (tx) => {
     await hold(tx);
     const started = meanwhile();
     await lockWaitIn(db);
+    await afterWait(tx);
     return { concurrent: started };
   });
   return concurrent;
