@@ -9,6 +9,10 @@ const HistoryAuthor = extensibleUnion("kind", [
     name: z.string(),
     membership: openEnum(["active", "left"]),
   }),
+  z.looseObject({
+    kind: z.literal("deleted_member"),
+    number: z.int().positive(),
+  }),
 ]);
 
 const HistoryEntryOutput = z.looseObject({

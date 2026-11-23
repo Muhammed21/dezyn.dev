@@ -134,6 +134,12 @@ describe("page de l'historique d'un projet (ADR 0044 §6)", () => {
     await expect.element(item.getByText("Ada Lovelace (a quitté l'espace)")).toBeVisible();
   });
 
+  it("montre un membre supprimé par son numéro, sans nom (ADR 0015)", async () => {
+    const { item } = await firstEntry(makeEntry({ author: { kind: "deleted_member", number: 3 } }));
+
+    await expect.element(item.getByText("Membre supprimé n°3", { exact: true })).toBeVisible();
+  });
+
   it("garde l'entrée d'un auteur inconnu de l'app", async () => {
     const { item } = await firstEntry(makeEntry({ author: { kind: "unknown" } }));
 

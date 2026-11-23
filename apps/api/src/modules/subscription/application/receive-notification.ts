@@ -71,16 +71,17 @@ const recordEvent = ({
     if (plan === undefined) {
       return { kind: "unknown_space" };
     }
-    if (!(await store.isUser(subscription.payerId))) {
-      return { kind: "unknown_payer" };
-    }
+    const payerId =
+      subscription.payerId !== undefined && (await store.isUser(subscription.payerId))
+        ? subscription.payerId
+        : undefined;
     const change = subscriptionChangeOf({
       stored: await store.subscriptionOf(spaceId),
-      incoming: subscription,
+      incoming: { ...subscription, payerId },
       plan,
       storedBytes: await store.storedBytesOf(spaceId),
     });
-    if (change.kind === "stale" || change.kind === "other_subscription") {
+    if (change.kind !== "applied") {
       return change;
     }
     await store.save({ spaceId, subscription: change.subscription });

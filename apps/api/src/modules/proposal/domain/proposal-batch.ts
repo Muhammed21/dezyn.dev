@@ -2,12 +2,12 @@ import type { BatchState, ProposalBatch } from "./proposal.ts";
 
 export const closedBatch = (batch: ProposalBatch): ProposalBatch => ({ ...batch, state: "closed" });
 
-export const declareBatch = ({
+export const declareBatch = <Declared extends ProposalBatch>({
   current,
   declared,
 }: {
   readonly current: ProposalBatch | undefined;
-  readonly declared: ProposalBatch;
+  readonly declared: Declared;
 }) => ({ batch: declared, closed: current === undefined ? null : closedBatch(current) });
 
 const IDLE_LIMIT_MS = 30 * 60 * 1000;

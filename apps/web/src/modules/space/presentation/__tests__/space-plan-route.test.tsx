@@ -472,6 +472,54 @@ describe("abonnement d'un espace Team sur la page « Plan » (ADR 0050 §3, spec
       .toBeVisible();
   });
 
+  it.each(["active", "canceling"] as const)(
+    "annonce qu'un payeur a supprimé son compte, sans le nommer, pour un abonnement %s",
+    async (status) => {
+      const screen = await renderPlan({
+        readSpace: reading(makeTeamSpace({ status, payer: undefined })),
+      });
+
+      await expect
+        .element(
+          screen.getByText(
+            "Le payeur de l'abonnement a supprimé son compte : le plan Team prend fin le 22 décembre 2026. Souscrivez à nouveau au plan Team après cette date pour le garder.",
+          ),
+        )
+        .toBeVisible();
+      expect(screen.getByText(/Payé par/).query()).toBeNull();
+      expect(screen.getByText(/Prochain renouvellement/).query()).toBeNull();
+      await expect.element(manageButton(screen)).not.toBeInTheDocument();
+    },
+  );
+
+  it("sans date de fin connue, annonce la suppression du payeur à la fin de la période payée", async () => {
+    const screen = await renderPlan({
+      readSpace: reading(makeTeamSpace({ currentPeriodEnd: undefined, payer: undefined })),
+    });
+
+    await expect
+      .element(
+        screen.getByText(
+          /a supprimé son compte : le plan Team prend fin à la fin de la période payée\./,
+        ),
+      )
+      .toBeVisible();
+  });
+
+  it("un abonnement terminé sans payeur ne propose pas de factures", async () => {
+    const screen = await renderPlan({
+      readSpace: reading(
+        makeSpace({
+          plan: "free",
+          subscription: makeSubscription({ status: "ended", payer: undefined }),
+        }),
+      ),
+    });
+
+    await expect.element(screen.getByRole("button", { name: "Passer au plan Team" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Voir mes factures" }).query()).toBeNull();
+  });
+
   it("montre la date de fin d'un abonnement résilié, sans date de renouvellement", async () => {
     const screen = await renderPlan({ readSpace: reading(makeTeamSpace({ status: "canceling" })) });
 

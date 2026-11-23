@@ -1,5 +1,6 @@
 export type HistoryAuthor =
   | { readonly kind: "member"; readonly name: string; readonly left: boolean }
+  | { readonly kind: "deleted_member"; readonly number: number }
   | { readonly kind: "unknown" };
 
 export type HistoryEntry = {

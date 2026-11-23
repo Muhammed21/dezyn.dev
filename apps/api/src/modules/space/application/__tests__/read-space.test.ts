@@ -152,6 +152,22 @@ describe("lire l'abonnement d'un espace (ADR 0050 §3)", () => {
     expect(space.ok && space.value.subscription?.payer).toMatchObject({ you: false, left: true });
   });
 
+  it("rend sans payeur un abonnement dont le payeur a supprimé son compte", async () => {
+    const read = readWith(
+      [makeMembership({ userId: GRACE, role: "owner" })],
+      STORED_BYTES,
+      makeSubscription({ status: "canceling", payer: undefined }),
+    );
+
+    const space = await read({ spaceId: SPACE.id, userId: GRACE });
+
+    expect(space.ok && space.value.subscription).toEqual({
+      status: "canceling",
+      currentPeriodEnd: PERIOD_END,
+      payer: null,
+    });
+  });
+
   it("rend sans date un abonnement sans fin de période", async () => {
     const read = readWith(
       [makeMembership({ role: "owner" })],

@@ -419,7 +419,7 @@ export const postgresFigmaStateReader = (db: PostgresDatabase): FigmaStateReader
       })
       .from(tokenFigmaState)
       .innerJoin(token, eq(token.id, tokenFigmaState.tokenId))
-      .innerJoin(identityUser, eq(identityUser.id, tokenFigmaState.userId))
+      .leftJoin(identityUser, eq(identityUser.id, tokenFigmaState.userId))
       .where(eq(token.projectId, projectId));
     return rows.map(({ tokenId, state, figmaVariables, declaredAt, userId, name, clientId }) => {
       const variables = FigmaVariables.parse(figmaVariables);
@@ -428,7 +428,10 @@ export const postgresFigmaStateReader = (db: PostgresDatabase): FigmaStateReader
         state: FigmaState.parse(state),
         ...(variables === null ? {} : { figmaVariables: variables }),
         declaredAt,
-        author: { kind: "member", userId, name },
+        author:
+          userId === null || name === null
+            ? { kind: "deleted_member" as const }
+            : { kind: "member" as const, userId, name },
         clientId,
       };
     });

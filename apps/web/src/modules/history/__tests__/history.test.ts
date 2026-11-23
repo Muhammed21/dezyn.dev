@@ -145,6 +145,18 @@ describe("lecture de l'historique d'un projet dans l'app web (ADR 0044 §6)", ()
     });
   });
 
+  it("lit un membre supprimé et son numéro dans l'espace (ADR 0015)", async () => {
+    const { history } = answering(
+      json(
+        makePageOutput({
+          entries: [makeEntryOutput({ author: { kind: "deleted_member", number: 3 } })],
+        }),
+      ),
+    );
+
+    expect((await firstEntryOf(history))?.author).toEqual({ kind: "deleted_member", number: 3 });
+  });
+
   it("garde l'entrée d'un auteur dont l'app ne connaît pas la forme (ADR 0023 §2)", async () => {
     const { history } = answering(
       json(makePageOutput({ entries: [makeEntryOutput({ author: { kind: "system" } })] })),
@@ -157,6 +169,12 @@ describe("lecture de l'historique d'un projet dans l'app web (ADR 0044 §6)", ()
     ["une forme inconnue qui porte un nom", { kind: "bot", name: "Robot" }],
     ["un membre sans nom", { kind: "member", userId: makeAuthor().userId }],
     ["un membre dont le nom n'est pas un texte", { kind: "member", name: 42 }],
+    ["une forme inconnue qui porte un numéro", { kind: "bot", number: 3 }],
+    ["un membre supprimé sans numéro", { kind: "deleted_member" }],
+    [
+      "un membre supprimé dont le numéro n'est pas un nombre",
+      { kind: "deleted_member", number: "3" },
+    ],
   ])("donne un auteur inconnu pour %s", async (_case, author) => {
     const { history } = answering(json(makePageOutput({ entries: [makeEntryOutput({ author })] })));
 

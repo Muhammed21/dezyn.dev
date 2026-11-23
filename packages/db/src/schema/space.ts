@@ -22,7 +22,7 @@ export const spaceMember = pgTable(
       .references(() => space.id),
     userId: uuid("user_id")
       .notNull()
-      .references(() => identityUser.id),
+      .references(() => identityUser.id, { onDelete: "cascade" }),
     role: text("role").notNull(),
     joinedAt: at("joined_at").notNull(),
     closedAt: at("closed_at"),
@@ -47,9 +47,7 @@ export const spaceInvitation = pgTable(
       .references(() => space.id),
     email: text("email").notNull(),
     tokenHash: text("token_hash").notNull().unique(),
-    invitedBy: uuid("invited_by")
-      .notNull()
-      .references(() => identityUser.id),
+    invitedBy: uuid("invited_by").references(() => identityUser.id, { onDelete: "set null" }),
     createdAt: at("created_at").notNull(),
     expiresAt: at("expires_at").notNull(),
     acceptedAt: at("accepted_at"),

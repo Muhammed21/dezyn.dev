@@ -96,6 +96,7 @@ export const startIdentityApp = async ({
   };
   try {
     const {
+      account,
       spaces,
       subscriptions,
       projects,
@@ -132,6 +133,7 @@ export const startIdentityApp = async ({
         db,
         auth,
         log: () => undefined,
+        account,
         spaces,
         subscriptions,
         projects,

@@ -864,6 +864,20 @@ describe("abonnement d'un espace lu dans l'app web (ADR 0050 §3)", () => {
     expect(read.ok && read.value.subscription?.payer).toMatchObject({ you: false, left: true });
   });
 
+  it("lit sans payeur un abonnement dont le payeur a supprimé son compte", async () => {
+    const { spaces } = answering(
+      json(makeReadSpace({ subscription: makeSubscription({ payer: null }) })),
+    );
+
+    const read = await spaces.readSpace({ spaceId: SPACE_ID });
+
+    expect(read.ok && read.value.subscription).toEqual({
+      status: "active",
+      currentPeriodEnd: new Date("2026-12-22T10:00:00.000Z"),
+      payer: undefined,
+    });
+  });
+
   it.each(["active", "canceling", "past_due", "ended"])("lit le statut %s", async (status) => {
     const { spaces } = answering(
       json(makeReadSpace({ subscription: makeSubscription({ status }) })),

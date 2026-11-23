@@ -260,3 +260,71 @@ describe("la fin d'un abonnement rend l'espace Free et enregistre son stockage (
     });
   });
 });
+
+describe("un abonnement dont le payeur a supprimé son compte reste suivi (ADR 0050 §3)", () => {
+  const WITHOUT_PAYER = { payerId: undefined };
+
+  it("une résiliation reçue après la suppression du payeur s'applique, sans payeur", () => {
+    const incoming = makeSubscription({
+      ...WITHOUT_PAYER,
+      status: "canceling",
+      modifiedAt: secondsAfter(MODIFIED_AT, 60),
+    });
+
+    expect(
+      subscriptionChangeOf({
+        stored: makeRecorded(WITHOUT_PAYER),
+        incoming,
+        plan: "team",
+        storedBytes: STORED_BYTES,
+      }),
+    ).toEqual({
+      kind: "applied",
+      subscription: withoutEndStorage(incoming),
+      planChange: undefined,
+    });
+  });
+
+  it("une révocation reçue après la suppression du payeur rend l'espace Free", () => {
+    const incoming = makeSubscription({
+      ...WITHOUT_PAYER,
+      status: "ended",
+      modifiedAt: secondsAfter(MODIFIED_AT, 60),
+    });
+
+    expect(
+      subscriptionChangeOf({
+        stored: makeRecorded(WITHOUT_PAYER),
+        incoming,
+        plan: "team",
+        storedBytes: STORED_BYTES,
+      }),
+    ).toEqual({
+      kind: "applied",
+      subscription: { ...incoming, storedBytesAtEnd: STORED_BYTES },
+      planChange: { before: "team", after: "free" },
+    });
+  });
+
+  it("un premier état dont le payeur n'existe pas est refusé", () => {
+    expect(
+      subscriptionChangeOf({
+        stored: undefined,
+        incoming: makeSubscription(WITHOUT_PAYER),
+        plan: "free",
+        storedBytes: STORED_BYTES,
+      }),
+    ).toEqual({ kind: "unknown_payer" });
+  });
+
+  it("un nouvel abonnement dont le payeur n'existe pas ne remplace pas un abonnement terminé", () => {
+    expect(
+      subscriptionChangeOf({
+        stored: makeRecorded({ ...WITHOUT_PAYER, id: "polar-subscription-0", status: "ended" }),
+        incoming: makeSubscription({ ...WITHOUT_PAYER, modifiedAt: secondsAfter(MODIFIED_AT, 60) }),
+        plan: "free",
+        storedBytes: STORED_BYTES,
+      }),
+    ).toEqual({ kind: "unknown_payer" });
+  });
+});

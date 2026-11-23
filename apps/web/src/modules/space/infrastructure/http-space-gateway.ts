@@ -60,7 +60,10 @@ const subscriptionOf = ({
 }: NonNullable<z.infer<typeof SpaceOutput>["subscription"]>): SpaceSubscription => ({
   status: subscriptionStatusOf(status),
   currentPeriodEnd: currentPeriodEnd === null ? undefined : new Date(currentPeriodEnd),
-  payer: { name: payer.name, email: payer.email, you: payer.you, left: payer.left },
+  payer:
+    payer === null
+      ? undefined
+      : { name: payer.name, email: payer.email, you: payer.you, left: payer.left },
 });
 
 const spaceOf = ({

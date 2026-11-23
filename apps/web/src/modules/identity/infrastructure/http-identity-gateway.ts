@@ -1,19 +1,27 @@
 import { z } from "zod";
 
+import { AccountDeletionOutput, LastOwnerProblem } from "@repo/contracts";
 import { err, ok, type Result } from "@repo/result";
 
 import {
   BAD_REQUEST,
+  CONFLICT,
   failureOf,
   type Fetch,
   type HttpFailure,
   parseJson,
   send,
+  NO_CONTENT,
   TOO_MANY_REQUESTS,
   UNAUTHORIZED,
   UNPROCESSABLE_ENTITY,
 } from "../../../platform/http.ts";
 import type { IdentityGateway, SignUpFailure } from "../application/identity-gateway.ts";
+import type {
+  AccountDeletion,
+  AccountDeletionFailure,
+  DeleteAccountFailure,
+} from "../domain/account.ts";
 import type { Session } from "../domain/session.ts";
 
 const AuthUser = z.object({ id: z.string(), email: z.string() });
@@ -42,6 +50,38 @@ const signUpRefusalOf = async (response: Response): Promise<SignUpFailure> => {
     return (refusal.ok && REFUSALS.get(refusal.value.code)) || "invalid_response";
   }
   return failureOf(response);
+};
+
+const deletionFailureOf = (response: Response): AccountDeletionFailure =>
+  response.status === UNAUTHORIZED ? "unauthenticated" : failureOf(response);
+
+const accountDeletionOf = ({
+  paidSpaces,
+  lastOwnerSpaces,
+}: z.infer<typeof AccountDeletionOutput>): AccountDeletion => ({
+  paidSpaces: paidSpaces.map(({ id, name, currentPeriodEnd }) => ({
+    id,
+    name,
+    currentPeriodEnd: currentPeriodEnd === null ? undefined : new Date(currentPeriodEnd),
+  })),
+  lastOwnerSpaces: lastOwnerSpaces.map(({ id, name }) => ({ id, name })),
+});
+
+const LastOwnerSpaces = LastOwnerProblem.extend({
+  spaces: z.array(z.object({ id: z.string(), name: z.string() })),
+});
+
+const deleteRefusalOf = async (response: Response): Promise<DeleteAccountFailure> => {
+  if (response.status !== CONFLICT) {
+    return { kind: deletionFailureOf(response) };
+  }
+  const problem = await parseJson(response, LastOwnerSpaces);
+  return problem.ok
+    ? {
+        kind: "last_owner",
+        spaces: problem.value.spaces.map(({ id, name }) => ({ id, name })),
+      }
+    : { kind: "invalid_response" };
 };
 
 const sessionOf = ({ id, email }: z.infer<typeof AuthUser>): Session => ({ userId: id, email });
@@ -112,5 +152,25 @@ export const createHttpIdentityGateway = ({
       return body;
     }
     return ok(body.value === null ? undefined : sessionOf(body.value.user));
+  },
+  accountDeletion: async () => {
+    const sent = await send(fetch, `${apiUrl}/v1/account/deletion`, { method: "GET" });
+    if (!sent.ok) {
+      return sent;
+    }
+    const response = sent.value;
+    if (!response.ok) {
+      return err(deletionFailureOf(response));
+    }
+    const body = await parseJson(response, AccountDeletionOutput);
+    return body.ok ? ok(accountDeletionOf(body.value)) : body;
+  },
+  deleteAccount: async () => {
+    const sent = await send(fetch, `${apiUrl}/v1/account`, { method: "DELETE" });
+    if (!sent.ok) {
+      return err({ kind: sent.error });
+    }
+    const response = sent.value;
+    return response.status === NO_CONTENT ? ok(undefined) : err(await deleteRefusalOf(response));
   },
 });

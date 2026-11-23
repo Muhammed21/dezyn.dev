@@ -42,7 +42,7 @@ export interface ProposalStore {
   pendingTokensOf(projectId: string): Promise<readonly TokenDefinition[]>;
   replace(proposalIds: readonly string[]): Promise<void>;
   findOpenBatch(writer: Writer): Promise<ProposalBatch | undefined>;
-  openBatchOf(candidate: ProposalBatch): Promise<ProposalBatch>;
+  openBatchOf(candidate: ProposalBatch & Writer): Promise<ProposalBatch>;
   closeBatch(batchId: string): Promise<void>;
   touchBatch(batchId: string, lastWrittenAt: Date): Promise<void>;
   propose(projectId: string, proposals: readonly Proposal[]): Promise<void>;

@@ -12,6 +12,7 @@ import { purgeHistory } from "./application/purge-history.ts";
 import { readHistory } from "./application/read-history.ts";
 import { recordProjectCall } from "./application/record-project-call.ts";
 import type { HistoryWriter } from "./domain/history-writer.ts";
+import { pseudonymizeAuthorOn } from "./infrastructure/postgres-author-pseudonymization.ts";
 import {
   postgresPurgeCandidates,
   postgresPurgeLock,
@@ -20,6 +21,8 @@ import {
 } from "./infrastructure/postgres-history-purge.ts";
 import { postgresHistoryReader } from "./infrastructure/postgres-history-reader.ts";
 import { postgresHistoryWriter } from "./infrastructure/postgres-history-writer.ts";
+
+export { pseudonymizeAuthorOn };
 
 export const historyWriterOn = (tx: PostgresTransaction, meter: StorageMeter) =>
   postgresHistoryWriter(tx, { newId: randomUUID, meter });

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { createApp } from "#create-app";
 import { createPostgresDatabase } from "#db";
 import {
+  makeAccount,
   makeHistory,
   makeIdempotent,
   makeProjectAccess,
@@ -40,6 +41,7 @@ const withIdentityApp = (run: (app: ReturnType<typeof createApp>) => Promise<voi
           db,
           auth,
           log: () => undefined,
+          account: makeAccount(),
           spaces: makeSpaces(),
           subscriptions: makeSubscriptions(),
           projects: makeProjects(),

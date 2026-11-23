@@ -6,7 +6,7 @@ export type SubscriptionStatus = (typeof SUBSCRIPTION_STATUSES)[number];
 
 export type SpaceSubscription = {
   readonly id: string;
-  readonly payerId: string;
+  readonly payerId: string | undefined;
   readonly status: SubscriptionStatus;
   readonly currentPeriodEnd: Date | undefined;
   readonly modifiedAt: Date;
@@ -20,6 +20,7 @@ export type PlanChange = { readonly before: Plan; readonly after: Plan };
 
 export type SubscriptionChange =
   | { readonly kind: "stale" }
+  | { readonly kind: "unknown_payer" }
   | { readonly kind: "other_subscription"; readonly storedId: string }
   | {
       readonly kind: "applied";
@@ -77,6 +78,9 @@ export const subscriptionChangeOf = ({
   readonly plan: Plan;
   readonly storedBytes: number;
 }): SubscriptionChange => {
+  if (incoming.payerId === undefined && stored?.id !== incoming.id) {
+    return { kind: "unknown_payer" };
+  }
   if (stored !== undefined && stored.id !== incoming.id && stored.status !== "ended") {
     return { kind: "other_subscription", storedId: stored.id };
   }

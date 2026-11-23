@@ -25,12 +25,14 @@ const SUBSCRIPTION_STATUSES = ["active", "canceling", "past_due", "ended"] as co
 const SpaceSubscriptionOutput = z.looseObject({
   status: openEnum(SUBSCRIPTION_STATUSES),
   currentPeriodEnd: z.iso.datetime().nullable(),
-  payer: z.looseObject({
-    name: z.string(),
-    email: z.string(),
-    you: z.boolean(),
-    left: z.boolean(),
-  }),
+  payer: z
+    .looseObject({
+      name: z.string(),
+      email: z.string(),
+      you: z.boolean(),
+      left: z.boolean(),
+    })
+    .nullable(),
 });
 
 export const MySpaceOutput = z.looseObject({

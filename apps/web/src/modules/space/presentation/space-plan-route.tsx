@@ -162,11 +162,22 @@ const SubscriptionDetails = ({
   readonly goTo: GoTo;
 }) => {
   const { payer, currentPeriodEnd } = subscription;
+  const end =
+    currentPeriodEnd === undefined
+      ? "à la fin de la période payée"
+      : `le ${PERIOD_DATE.format(currentPeriodEnd)}`;
+  if (payer === undefined) {
+    return (
+      <section aria-labelledby="abonnement">
+        <h2 id="abonnement">Abonnement</h2>
+        <p>
+          Le payeur de l'abonnement a supprimé son compte : le plan Team prend fin {end}. Souscrivez
+          à nouveau au plan Team après cette date pour le garder.
+        </p>
+      </section>
+    );
+  }
   if (!payer.you && payer.left) {
-    const end =
-      currentPeriodEnd === undefined
-        ? "à la fin de la période payée"
-        : `le ${PERIOD_DATE.format(currentPeriodEnd)}`;
     return (
       <section aria-labelledby="abonnement">
         <h2 id="abonnement">Abonnement</h2>
@@ -274,7 +285,7 @@ const SpacePlan = ({
           goTo={goTo}
         />
       )}
-      {subscription?.status === "ended" && subscription.payer.you && (
+      {subscription?.status === "ended" && subscription.payer?.you === true && (
         <PortalButton
           label="Voir mes factures"
           spaceId={spaceId}

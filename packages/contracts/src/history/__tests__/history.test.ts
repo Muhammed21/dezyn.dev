@@ -73,6 +73,18 @@ describe("le contrat de sortie de l'historique reste ouvert (ADR 0023)", () => {
     ).toEqual(author);
   });
 
+  it("lit un membre supprimé et son numéro dans l'espace (ADR 0015)", () => {
+    const author = { kind: "deleted_member", number: 3 };
+
+    expect(
+      HistoryOutput.parse({
+        nextCursor: null,
+        purgedBefore: null,
+        entries: [makeEntry({ author })],
+      }).entries[0]?.author,
+    ).toEqual(author);
+  });
+
   it("refuse un auteur sans forme", () => {
     expect(
       HistoryOutput.safeParse({
@@ -139,6 +151,13 @@ describe("le contrat de sortie de l'historique reste ouvert (ADR 0023)", () => {
                       kind: { const: "member" },
                       membership: { anyOf: [{ enum: ["active", "left"] }, { type: "string" }] },
                     },
+                  },
+                  {
+                    properties: {
+                      kind: { const: "deleted_member" },
+                      number: { type: "integer", exclusiveMinimum: 0 },
+                    },
+                    required: ["kind", "number"],
                   },
                   {},
                 ],

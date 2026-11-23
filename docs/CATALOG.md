@@ -70,6 +70,7 @@ Chaque page de `docs/`, une ligne chacune : titre, [mode](README.md#carte), stat
 - [0048 — `history_maintainer` purge aussi les clés d'idempotence de plus de 24 heures](adr/0048-history-maintainer-purge-aussi-les-cles-d-idempotence-de-plus-de-24-heures.md) — _explanation · Accepté_ — Quel rôle supprime les clés d'idempotence de plus de 24 heures, et avec quels droits ?
 - [0049 — Une entrée d'historique porte sa taille, et le Worker de purge a 10 secondes par requête](adr/0049-une-entree-d-historique-porte-sa-taille-et-le-worker-de-purge-a-10-secondes-par-requete.md) — _explanation · Accepté_ — Comment la purge retire-t-elle la taille d'un lot d'entrées de 1 Mo sans relire les entrées, et quel délai a chacune de ses requêtes ?
 - [0050 — Polar en Merchant of Record, un abonnement par espace, et un espace gelé sans perte au retour en Free](adr/0050-polar-en-merchant-of-record-un-abonnement-par-espace-et-un-espace-gele-sans-perte-au-retour-en-free.md) — _explanation · Accepté_ — Par quel prestataire et sous quelle forme un espace souscrit-il au plan Team, et que devient un espace qui redevient Free au-dessus des limites Free ?
+- [0051 — Le seul membre d'un espace supprime son compte et laisse un espace orphelin](adr/0051-le-seul-membre-d-un-espace-supprime-son-compte-et-laisse-un-espace-orphelin.md) — _explanation · Accepté_ — Que devient un espace dont le seul membre supprime son compte ?
 - [Décisions d'architecture](adr/README.md) — _explanation_ — Format et circuit : voir `.claude/rules/adr-et-spikes.md`.
 
 ## Spikes — recherche bornée

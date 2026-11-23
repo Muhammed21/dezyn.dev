@@ -5,6 +5,8 @@ import type { HistoryUseCases } from "#modules/history/application/history-use-c
 import { historyRoutes } from "#modules/history/presentation/history-routes.ts";
 import { registerReadHistory } from "#modules/history/presentation/read-history-tool.ts";
 import type { Auth } from "#modules/identity/application/auth.ts";
+import type { AccountUseCases } from "#modules/identity/application/delete-account.ts";
+import { accountRoutes } from "#modules/identity/presentation/account-routes.ts";
 import { authPages } from "#modules/identity/presentation/auth-pages.ts";
 import { CONSENT_PATH, LOGIN_PATH } from "#modules/identity/presentation/pages.ts";
 import { registerWhoami } from "#modules/identity/presentation/whoami-tool.ts";
@@ -104,6 +106,7 @@ export const createApp = ({
   db,
   auth,
   log,
+  account,
   spaces,
   subscriptions,
   projects,
@@ -117,6 +120,7 @@ export const createApp = ({
   readonly db: Database;
   readonly auth: Auth;
   readonly log: LogSink;
+  readonly account: AccountUseCases;
   readonly spaces: SpaceUseCases;
   readonly subscriptions: SubscriptionUseCases;
   readonly projects: ProjectUseCases;
@@ -209,6 +213,7 @@ export const createApp = ({
     "/spaces/:spaceId/invitations",
     idempotentRequest({ idempotent, replayable: allowedInSpace(spaces, "member.invite") }),
   );
+  v1.route("/account", accountRoutes(account));
   v1.route("/spaces", spacesRoutes(spaces));
   v1.route("/spaces", subscriptionRoutes(subscriptions));
   v1.route("/spaces", projectsRoutes(projects));

@@ -13,6 +13,7 @@ const NON_ADDITIVE_MIGRATIONS = [
   "0011_proposal_position.sql",
   "0020_history_entry_stored_size.sql",
   "0021_history_entry_stored_size_trigger_removal.sql",
+  "0026_account_deletion.sql",
 ];
 
 const additiveMigrations = readdirSync(MIGRATIONS).filter(
@@ -63,6 +64,17 @@ describe("rejectedStatements sur les migrations du dépôt", () => {
       `DROP FUNCTION history_entry_stored_size("history_entry")`,
       "DROP FUNCTION history_entry_json_length(jsonb)",
     ]);
+  });
+
+  it("refuse les clés étrangères refaites et les colonnes rendues nullables de 0026_account_deletion.sql, pas le GRANT", () => {
+    const rejected = rejectedStatements(readMigration("0026_account_deletion.sql"));
+
+    expect(rejected).toHaveLength(22);
+    expect(rejected).toContain(
+      `ALTER TABLE "space_subscription" ALTER COLUMN "payer_id" DROP NOT NULL`,
+    );
+    expect(rejected.filter((statement) => statement.includes("DROP CONSTRAINT"))).toHaveLength(9);
+    expect(rejected.filter((statement) => statement.includes("GRANT"))).toEqual([]);
   });
 
   it("refuse la suppression d'une colonne ajoutée à 0014_identity_rate_limit.sql", () => {

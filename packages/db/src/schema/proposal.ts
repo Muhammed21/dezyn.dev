@@ -11,9 +11,7 @@ export const proposalBatch = pgTable(
     projectId: uuid("project_id")
       .notNull()
       .references(() => project.id),
-    userId: uuid("user_id")
-      .notNull()
-      .references(() => identityUser.id),
+    userId: uuid("user_id").references(() => identityUser.id, { onDelete: "set null" }),
     clientId: text("client_id").notNull(),
     intent: text("intent"),
     state: text("state").notNull(),

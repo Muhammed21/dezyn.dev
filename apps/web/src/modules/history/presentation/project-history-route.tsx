@@ -46,6 +46,9 @@ const authorNameOf = (author: HistoryAuthor) => {
   if (author.kind === "unknown") {
     return "auteur inconnu";
   }
+  if (author.kind === "deleted_member") {
+    return `Membre supprimé n°${author.number}`;
+  }
   return author.left ? `${author.name} (a quitté l'espace)` : author.name;
 };
 

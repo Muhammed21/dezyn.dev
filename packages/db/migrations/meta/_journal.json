@@ -183,6 +183,13 @@
       "when": 1795396100821,
       "tag": "0025_space_subscription_cancel_requested_at",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1795424212570,
+      "tag": "0026_account_deletion",
+      "breakpoints": true
     }
   ]
 }
