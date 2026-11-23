@@ -108,7 +108,7 @@ Laisser `DEPLOY_ENABLED` à `false` jusqu'à l'étape 5.
    gh variable set DEPLOY_ENABLED --body true
    ```
 
-4. **Le Worker de purge** `dezyn-purge` (ADR 0042) passe toutes les 15 minutes, purge l'historique des espaces à leur limite et supprime les clés d'idempotence de plus de 24 heures. Il n'a ni route ni URL `workers.dev`, et se connecte par son propre Hyperdrive, en `history_maintainer` :
+4. **Le Worker de purge** `dezyn-purge` (ADR 0042) passe toutes les 15 minutes, purge l'historique des espaces à leur limite, supprime les clés d'idempotence de plus de 24 heures, et supprime les espaces orphelins après la fin de leur période payée (ADR 0052). Il n'a ni route ni URL `workers.dev`, et se connecte par son propre Hyperdrive, en `history_maintainer` :
 
    ```
    (cd apps/api && npx wrangler hyperdrive create dezyn-purge-prod --caching-disabled --connection-string="$(npx neonctl@2.47.0 connection-string production --project-id <projet> --role-name history_maintainer)")
@@ -126,7 +126,7 @@ Laisser `DEPLOY_ENABLED` à `false` jusqu'à l'étape 5.
    (cd apps/api && npx wrangler secret put RESEND_API_KEY --config wrangler.purge.jsonc)
    ```
 
-   Chaque passage journalise `history_purge_pass` avec le nombre d'espaces purgés, puis `idempotency_purge_pass` avec le nombre de clés supprimées. Une purge qui échoue journalise `history purge failed` ou `idempotency purge failed`, l'autre purge s'exécute quand même, puis le passage finit en échec : `(cd apps/api && npx wrangler tail dezyn-purge --config wrangler.purge.jsonc)`. Sur le plan Workers Free, un passage peut dépasser les 10 ms de CPU par invocation et s'interrompre ; le lot en cours est annulé par sa transaction et le passage suivant reprend. Le plan Workers Paid lève cette limite (#161, ADR 0043).
+   Chaque passage journalise `history_purge_pass` avec le nombre d'espaces purgés, puis `idempotency_purge_pass` avec le nombre de clés supprimées, puis `orphan_space_purge_pass` avec le nombre d'espaces orphelins supprimés (`purgedSpaces`) et de ceux qui attendent la fin de leur période (`waitingSpaces`). Une purge qui échoue journalise `history purge failed`, `idempotency purge failed` ou `orphan space purge failed`, les autres purges s'exécutent quand même, puis le passage finit en échec : `(cd apps/api && npx wrangler tail dezyn-purge --config wrangler.purge.jsonc)`. Sur le plan Workers Free, un passage peut dépasser les 10 ms de CPU par invocation et s'interrompre ; le lot en cours est annulé par sa transaction et le passage suivant reprend. Le plan Workers Paid lève cette limite (#161, ADR 0043).
 
    Pour lancer un passage sans attendre le cron, depuis un poste : `pnpm --filter @repo/api run purge`, avec `DATABASE_URL_HISTORY_MAINTAINER` sur la branche visée. Les emails partent alors par le SMTP de `SMTP_HOST`, `SMTP_PORT` et `MAIL_FROM`.
 

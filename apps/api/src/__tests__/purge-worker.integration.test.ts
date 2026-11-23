@@ -7,6 +7,7 @@ import { createTestHarness } from "wrangler";
 import { createPostgresDatabase, type PostgresDatabase } from "#db";
 import type { LogRecord } from "#platform/logging.ts";
 import { seedSpaceAtItsLimit } from "#testing/history-fixtures.ts";
+import { NOTHING_LEFT, remainsOfSpace, seedSpaceWithData } from "#testing/orphan-space-fixtures.ts";
 import { assertSchemaVersion, LATEST_MIGRATION } from "@repo/db";
 import { migrate, schema } from "@repo/db";
 import { withThrowawayDatabase } from "@repo/db/testing";
@@ -391,5 +392,68 @@ describe("les deux purges d'un passage du Worker dezyn-purge sont indépendantes
           expect.objectContaining({ level: "error", msg: "idempotency purge failed" }),
         ]),
       );
+    }));
+});
+
+describe("le Worker dezyn-purge purge les espaces orphelins (ADR 0051)", () => {
+  it("supprime un espace orphelin sans abonnement, compte ceux qui attendent, et journalise le passage", () =>
+    withThrowawayDatabase(async ({ migratorUrl, appUrl, maintainerUrl }) => {
+      await migrate({ connectionString: migratorUrl });
+      const app = createPostgresDatabase({ url: appUrl });
+      try {
+        const orphan = await seedSpaceWithData(app);
+        await seedSpaceWithData(app, {
+          subscription: { status: "canceling", currentPeriodEnd: minutesAgo(-60) },
+        });
+
+        const { logged, thrown } = await runPurgePass(maintainerUrl);
+
+        expect(thrown).toBeUndefined();
+        expect(await remainsOfSpace(app, orphan.spaceId)).toEqual(NOTHING_LEFT);
+        expect(logged).toContainEqual({
+          level: "info",
+          msg: "orphan_space_purge_pass",
+          purgedSpaces: 1,
+          waitingSpaces: 1,
+        });
+      } finally {
+        await app.close();
+      }
+    }));
+
+  it("purge l'historique et les clés quand la purge des espaces orphelins échoue, journalise l'échec et le relève", () =>
+    withThrowawayDatabase(async ({ migratorUrl, appUrl, maintainerUrl }) => {
+      await migrate({ connectionString: migratorUrl });
+      const app = createPostgresDatabase({ url: appUrl });
+      try {
+        const { projectId } = await seedSpaceAtItsLimit(app);
+        await seedSpaceWithData(app);
+        await revokeAsMigrator(
+          migratorUrl,
+          sql`revoke delete on "space_invitation" from history_maintainer`,
+        );
+
+        const { logged, thrown } = await runPurgePass(maintainerUrl);
+
+        expect(thrown).toEqual(
+          expect.objectContaining({ message: expect.stringContaining("space_invitation") }),
+        );
+        expect(
+          await app.orm.select().from(historyEntry).where(eq(historyEntry.projectId, projectId)),
+        ).toEqual([]);
+        expect(logged).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ msg: "history_purge_pass", purgedSpaces: 1 }),
+            expect.objectContaining({ msg: "idempotency_purge_pass", purgedKeys: 0 }),
+            expect.objectContaining({
+              level: "error",
+              msg: "orphan space purge failed",
+              error: expect.stringContaining("space_invitation"),
+            }),
+          ]),
+        );
+      } finally {
+        await app.close();
+      }
     }));
 });
