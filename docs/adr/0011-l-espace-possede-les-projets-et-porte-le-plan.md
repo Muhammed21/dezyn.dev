@@ -1,6 +1,6 @@
 # 0011 — L'espace possède les projets et porte le plan, ses membres sont propriétaires ou éditeurs
 
-- Statut : Accepté — auteur des entrées d'historique d'un compte supprimé remplacé par [0015](0015-l-historique-garde-les-actions-d-un-compte-supprime-sous-un-membre-supprime.md) ; §4 (un espace gelé garde ses éditeurs, suspendus) amendé par [0050](0050-polar-en-merchant-of-record-un-abonnement-par-espace-et-un-espace-gele-sans-perte-au-retour-en-free.md)
+- Statut : Accepté — auteur des entrées d'historique d'un compte supprimé remplacé par [0015](0015-l-historique-garde-les-actions-d-un-compte-supprime-sous-un-membre-supprime.md) ; §4 (un espace gelé garde ses éditeurs, suspendus) amendé par [0050](0050-polar-en-merchant-of-record-un-abonnement-par-espace-et-un-espace-gele-sans-perte-au-retour-en-free.md) ; §5 (le seul membre d'un espace supprime son compte) amendé par [0051](0051-le-seul-membre-d-un-espace-supprime-son-compte-et-laisse-un-espace-orphelin.md)
 - Date : 2026-10-15
 - Décideurs : Muhammed
 - Amende : ADR 0006 (les limites de projets et de stockage et la purge s'appliquent par espace ; le nombre de membres distingue aussi les plans), ADR 0007 (les limites des plans s'appliquent par espace, pas par utilisateur)
