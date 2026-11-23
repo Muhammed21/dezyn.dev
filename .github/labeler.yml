@@ -1,4 +1,5 @@
-# Tier floors by changed path. Claude's review can raise the tier and never lower it; a PR that matches none starts low.
+# Tier floors by changed path, read by .github/scripts/review-tier.sh (globs: ** and * only).
+# Claude's review can raise the tier and never lower it; a PR that matches none starts low.
 # What each tier means: REVIEW.md § Paliers.
 review:critical:
   - changed-files:
