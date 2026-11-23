@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# Keeps one review tier label on the PR (the highest; low when none), measures its size, and sets review:oversized.
+# Keeps one review tier label on the PR (the highest of its labels and of its path floor from .github/labeler.yml;
+# low when none), measures its size, and sets review:oversized. Labels change one by one, never by replacing the list.
 # Env: REPO, PR. DRY_RUN=1 prints the label edits instead of applying them.
 set -euo pipefail
 source "$(dirname "$0")/review-config.sh"
+source "$(dirname "$0")/review-floor.sh"
 
 : "${REPO:?}" "${PR:?}"
 
@@ -14,8 +16,15 @@ edit_labels() {
 labels=$(gh api "repos/$REPO/pulls/$PR" -q '[.labels[].name] | join(" ")')
 has() { [[ " $labels " == *" $1 "* ]]; }
 
+floor=$(gh api "repos/$REPO/pulls/$PR/files" --paginate -q '.[].filename' |
+  review_floor "$(dirname "$0")/../labeler.yml")
+
 tier=low
-if has review:critical; then tier=critical; elif has review:standard; then tier=standard; fi
+if has review:critical || [ "$floor" = critical ]; then
+  tier=critical
+elif has review:standard || [ "$floor" = standard ]; then
+  tier=standard
+fi
 remove=()
 for t in critical standard low; do
   [ "$t" != "$tier" ] && has "review:$t" && remove+=("review:$t")

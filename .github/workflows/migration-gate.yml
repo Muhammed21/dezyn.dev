@@ -1,31 +1,45 @@
 name: Migration gate
 
-# Une migration non additive attend l'approbation du mainteneur : retirer le label la donne.
+# Une migration non additive attend l'approbation du mainteneur : son retrait du label la donne (ADR 0053).
+# pull_request_target : le workflow et le script sont ceux de main, jamais ceux de la PR.
+# Aucun code de la PR ne tourne ici : ses migrations sont lues comme des données, par git show,
+# dans un checkout à part. Aucun secret n'est utilisé. Le gate tourne sur chaque PR, pour être un contrôle requis.
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review, unlabeled]
-    paths:
-      - packages/db/migrations/**
+  pull_request_target:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review, edited, labeled, unlabeled]
 
 concurrency:
   group: migration-gate-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
-permissions:
-  contents: read
-  pull-requests: write
-  issues: write
+permissions: {}
 
 jobs:
   gate:
     name: Migration gate
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
     steps:
-      - uses: actions/checkout@v5
+      - name: Gate from main
+        uses: actions/checkout@v5
         with:
-          fetch-depth: 2
+          persist-credentials: false
+          sparse-checkout: |
+            packages/db/scripts
+            packages/db/src/migration-gate
+      - name: Migrations of the pull request, as data
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: .pull-request
+          persist-credentials: false
+          sparse-checkout: packages/db/migrations
       - uses: actions/setup-node@v5
         with:
           node-version-file: .node-version
@@ -33,3 +47,4 @@ jobs:
       - run: node packages/db/scripts/migration-gate.ts
         env:
           GH_TOKEN: ${{ github.token }}
+          PULL_REQUEST_CHECKOUT: .pull-request
