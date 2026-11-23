@@ -169,6 +169,13 @@
       "when": 1795386103174,
       "tag": "0023_space_subscription_stored_bytes_at_end",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1795391692812,
+      "tag": "0024_history_maintainer_stored_bytes_at_end",
+      "breakpoints": true
     }
   ]
 }

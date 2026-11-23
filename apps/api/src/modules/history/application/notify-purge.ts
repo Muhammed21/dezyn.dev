@@ -1,15 +1,11 @@
-import type { Plan } from "#modules/space/contracts/plan.ts";
+import { purgeLimitOf } from "#modules/space/contracts/storage-limit.ts";
 import { errorDetails, type LogSink } from "#platform/logging.ts";
 import type { Mailer } from "#platform/mailer.ts";
 
 import { purgeNoticeOf } from "../domain/purge-notice.ts";
-import type { PurgedSpace } from "./purge-history.ts";
+import type { PurgedSpace, SpaceStorage } from "./purge-history.ts";
 
-export type PurgeRecipients = {
-  readonly plan: Plan;
-  readonly storedBytes: number;
-  readonly owners: readonly string[];
-};
+export type PurgeRecipients = SpaceStorage & { readonly owners: readonly string[] };
 
 export interface PurgeNotices {
   recipientsOf(spaceId: string): Promise<PurgeRecipients>;
@@ -27,8 +23,14 @@ export const notifyPurge =
   }) =>
   async ({ spaceId, name, projects }: PurgedSpace): Promise<void> => {
     try {
-      const { plan, storedBytes, owners } = await notices.recipientsOf(spaceId);
-      const notice = purgeNoticeOf({ spaceName: name, plan, storedBytes, projects });
+      const { owners, ...storage } = await notices.recipientsOf(spaceId);
+      const notice = purgeNoticeOf({
+        spaceName: name,
+        plan: storage.plan,
+        storedBytes: storage.usage.storedBytes,
+        limitBytes: purgeLimitOf(storage),
+        projects,
+      });
       await Promise.all(
         owners.map(async (to) => {
           const sent = await mailer.send({ to, ...notice });

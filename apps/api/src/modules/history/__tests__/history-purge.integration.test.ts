@@ -14,6 +14,7 @@ import type { Mailer, OutgoingEmail } from "#platform/mailer.ts";
 import { type EntryPayload, jsonSizeOfEntry, makeStoredEntry } from "#testing/history-fixtures.ts";
 import { seedStoredBytes, storageMeterOn, storedBytesOf } from "#testing/project-storage.ts";
 import { makeOutbox } from "#testing/space-fixtures.ts";
+import { seedSubscription } from "#testing/subscription-fixtures.ts";
 import { migrate, schema } from "@repo/db";
 import { withThrowawayDatabase } from "@repo/db/testing";
 import { err, ok } from "@repo/result";
@@ -33,6 +34,14 @@ const FROZEN_STORAGE = 3_000_000_000;
 const FREE_LIMIT = 500_000_000;
 
 const FREE_TARGET = 450_000_000;
+
+const FROZEN_LIMIT = 600_000_000;
+
+const JUST_ABOVE_FREE_LIMIT = 510_000_000;
+
+const JUST_ABOVE_FREE_TARGET = 459_000_000;
+
+const TEAM_LIMIT = 20_000_000_000;
 
 const FAR_ABOVE_FREE_LIMIT = 510_000_000;
 
@@ -113,7 +122,11 @@ const seedSpace = async (app: PostgresDatabase) => {
 
 const seedEndedSubscriptionOf = (
   app: PostgresDatabase,
-  { spaceId, userId }: { readonly spaceId: string; readonly userId: string },
+  {
+    spaceId,
+    userId,
+    storedBytesAtEnd,
+  }: { readonly spaceId: string; readonly userId: string; readonly storedBytesAtEnd: number },
 ) =>
   app.orm.insert(spaceSubscription).values({
     spaceId,
@@ -122,7 +135,7 @@ const seedEndedSubscriptionOf = (
     status: "ended",
     currentPeriodEnd: STARTED_AT,
     polarModifiedAt: STARTED_AT,
-    storedBytesAtEnd: FROZEN_STORAGE,
+    storedBytesAtEnd,
   });
 
 const seedProjectIn = async (
@@ -256,23 +269,139 @@ describe("un espace sous sa limite n'est pas purgé", () => {
     }));
 });
 
-describe("un espace gelé n'est pas purgé, en attendant la limite de son abonnement terminé (ADR 0050 §5, §6)", () => {
-  it("un espace Free gelé à 3 Go ne perd aucune entrée", () =>
+describe("un espace gelé est purgé au-delà de son stockage à la fin de l'abonnement (ADR 0050 §6)", () => {
+  it("un espace gelé sous son stockage de fin d'abonnement ne perd aucune entrée", () =>
     withDatabases(async ({ app, maintainer }) => {
       const seeded = await seedSpace(app);
-      await seedEndedSubscriptionOf(app, seeded);
+      await seedEndedSubscriptionOf(app, { ...seeded, storedBytesAtEnd: FROZEN_STORAGE });
       const projectId = await seedProjectIn(app, {
         spaceId: seeded.spaceId,
-        storedBytes: FROZEN_STORAGE,
+        storedBytes: FROZEN_STORAGE - 1,
       });
       const entries = await seedEntries(app, seeded, { projectId, count: 3 });
 
       expect(await purgeOf(maintainer)()).toEqual([]);
 
       expect(await remainingIdsOf(app, projectId)).toEqual(idsOf(entries));
-      expect(await storedBytesOf(app, projectId)).toBe(FROZEN_STORAGE);
+      expect(await storedBytesOf(app, projectId)).toBe(FROZEN_STORAGE - 1);
     }));
 
+  it("un espace gelé à son stockage de fin d'abonnement redescend à 90 % de celui-ci", () =>
+    withDatabases(async ({ app, maintainer }) => {
+      const seeded = await seedSpace(app);
+      await seedEndedSubscriptionOf(app, { ...seeded, storedBytesAtEnd: FROZEN_LIMIT });
+      const projectId = await seedProjectIn(app, {
+        spaceId: seeded.spaceId,
+        storedBytes: FROZEN_LIMIT,
+      });
+      const entries = await seedEntries(app, seeded, {
+        projectId,
+        count: 4,
+        payloadBytes: BIG_PAYLOAD,
+      });
+
+      await purgeOf(maintainer)();
+
+      expect(await remainingIdsOf(app, projectId)).toEqual(idsOf(entries.slice(3)));
+      expect(await storedBytesOf(app, projectId)).toBe(FROZEN_LIMIT - sizeOf(entries.slice(0, 3)));
+    }));
+
+  it("s'arrête à 90 % du stockage de fin d'abonnement, même quand le gel se lève en route", () =>
+    withDatabases(async ({ app, maintainer }) => {
+      const seeded = await seedSpace(app);
+      await seedEndedSubscriptionOf(app, { ...seeded, storedBytesAtEnd: JUST_ABOVE_FREE_LIMIT });
+      const projectId = await seedProjectIn(app, { spaceId: seeded.spaceId, storedBytes: 0 });
+      const entries = await seedEntries(app, seeded, {
+        projectId,
+        count: 3,
+        payloadBytes: BIG_PAYLOAD,
+      });
+      await seedStoredBytes(app, {
+        projectId,
+        bytes: JUST_ABOVE_FREE_TARGET + sizeOf(entries.slice(0, 2)),
+      });
+
+      await purgeOf(maintainer)();
+
+      expect(await remainingIdsOf(app, projectId)).toEqual(idsOf(entries.slice(2)));
+      expect(await storedBytesOf(app, projectId)).toBe(JUST_ABOVE_FREE_TARGET);
+    }));
+
+  it("un espace gelé qui avait moins de 500 Mo à la fin de son abonnement est purgé à 500 Mo", () =>
+    withDatabases(async ({ app, maintainer }) => {
+      const seeded = await seedSpace(app);
+      await seedEndedSubscriptionOf(app, { ...seeded, storedBytesAtEnd: 100_000_000 });
+      await seedMember(app, { spaceId: seeded.spaceId, role: "owner" });
+      await seedMember(app, { spaceId: seeded.spaceId, role: "editor" });
+      const projectId = await seedProjectIn(app, {
+        spaceId: seeded.spaceId,
+        storedBytes: FREE_LIMIT,
+      });
+      const entries = await seedEntries(app, seeded, {
+        projectId,
+        count: 3,
+        payloadBytes: BIG_PAYLOAD,
+      });
+
+      await purgeOf(maintainer)();
+
+      expect(await remainingIdsOf(app, projectId)).toEqual(idsOf(entries.slice(2)));
+    }));
+
+  it("un espace gelé qui avait plus de 20 Go à la fin de son abonnement est purgé à 20 Go", () =>
+    withDatabases(async ({ app, maintainer }) => {
+      const seeded = await seedSpace(app);
+      await seedEndedSubscriptionOf(app, { ...seeded, storedBytesAtEnd: 21_000_000_000 });
+      const projectId = await seedProjectIn(app, {
+        spaceId: seeded.spaceId,
+        storedBytes: TEAM_LIMIT,
+      });
+      await seedEntries(app, seeded, { projectId, count: 3 });
+
+      const purged = await purgeOf(maintainer)();
+
+      expect(purged).toEqual([expect.objectContaining({ spaceId: seeded.spaceId })]);
+      expect(await remainingIdsOf(app, projectId)).toEqual([]);
+    }));
+
+  it("un espace gelé par ses membres, à 500 Mo et sous son stockage de fin d'abonnement, n'est pas purgé", () =>
+    withDatabases(async ({ app, maintainer }) => {
+      const seeded = await seedSpace(app);
+      await seedEndedSubscriptionOf(app, { ...seeded, storedBytesAtEnd: FROZEN_STORAGE });
+      await seedMember(app, { spaceId: seeded.spaceId, role: "owner" });
+      await seedMember(app, { spaceId: seeded.spaceId, role: "editor" });
+      const projectId = await seedProjectIn(app, {
+        spaceId: seeded.spaceId,
+        storedBytes: FREE_LIMIT,
+      });
+      const entries = await seedEntries(app, seeded, { projectId, count: 3 });
+
+      expect(await purgeOf(maintainer)()).toEqual([]);
+      expect(await remainingIdsOf(app, projectId)).toEqual(idsOf(entries));
+    }));
+
+  it("l'email d'un espace gelé purgé donne son stockage de fin d'abonnement comme limite", () =>
+    withDatabases(async ({ app, maintainer }) => {
+      const seeded = await seedSpace(app);
+      await seedEndedSubscriptionOf(app, { ...seeded, storedBytesAtEnd: FROZEN_LIMIT });
+      await seedMember(app, { spaceId: seeded.spaceId, role: "owner" });
+      const projectId = await seedProjectIn(app, {
+        spaceId: seeded.spaceId,
+        storedBytes: FROZEN_LIMIT,
+      });
+      await seedEntries(app, seeded, { projectId, count: 4, payloadBytes: BIG_PAYLOAD });
+      const { sent, mailer } = makeOutbox();
+
+      await purgeOf(maintainer, { mailer })();
+
+      const storedAfter = (await storedBytesOf(app, projectId)) ?? 0;
+      expect(sent[0]?.text).toContain(
+        `L'espace « Studio Ada » utilise maintenant ${Math.floor(storedAfter / 1_000_000)} Mo sur 600 Mo.`,
+      );
+    }));
+});
+
+describe("un espace qui n'est pas gelé garde la limite de son plan (ADR 0006 §4, ADR 0050 §5)", () => {
   it("un espace Free jamais abonné à 3 Go est toujours purgé", () =>
     withDatabases(async ({ app, maintainer }) => {
       const seeded = await seedSpace(app);
@@ -291,7 +420,7 @@ describe("un espace gelé n'est pas purgé, en attendant la limite de son abonne
   it("un espace Free sorti d'un abonnement, pile à 500 Mo, n'est pas gelé et reste purgé", () =>
     withDatabases(async ({ app, maintainer }) => {
       const seeded = await seedSpace(app);
-      await seedEndedSubscriptionOf(app, seeded);
+      await seedEndedSubscriptionOf(app, { ...seeded, storedBytesAtEnd: FROZEN_STORAGE });
       const projectId = await seedProjectIn(app, {
         spaceId: seeded.spaceId,
         storedBytes: FREE_LIMIT,
@@ -303,20 +432,28 @@ describe("un espace gelé n'est pas purgé, en attendant la limite de son abonne
       expect(purged).toEqual([expect.objectContaining({ spaceId: seeded.spaceId })]);
     }));
 
-  it("un espace Free sorti d'un abonnement, gelé par ses membres seuls, n'est pas purgé", () =>
+  it("un espace Team à 3 Go n'est pas purgé, et à 20 Go il l'est", () =>
     withDatabases(async ({ app, maintainer }) => {
-      const seeded = await seedSpace(app);
-      await seedEndedSubscriptionOf(app, seeded);
-      await seedMember(app, { spaceId: seeded.spaceId, role: "owner" });
-      await seedMember(app, { spaceId: seeded.spaceId, role: "editor" });
-      const projectId = await seedProjectIn(app, {
-        spaceId: seeded.spaceId,
-        storedBytes: FREE_LIMIT,
+      const under = await seedSpace(app);
+      const reached = await seedSpace(app);
+      await seedSubscription(app, { spaceId: under.spaceId, payerId: under.userId });
+      await seedSubscription(app, { spaceId: reached.spaceId, payerId: reached.userId });
+      const underProject = await seedProjectIn(app, {
+        spaceId: under.spaceId,
+        storedBytes: FROZEN_STORAGE,
       });
-      const entries = await seedEntries(app, seeded, { projectId, count: 3 });
+      const reachedProject = await seedProjectIn(app, {
+        spaceId: reached.spaceId,
+        storedBytes: TEAM_LIMIT,
+      });
+      const underEntries = await seedEntries(app, under, { projectId: underProject, count: 2 });
+      await seedEntries(app, reached, { projectId: reachedProject, count: 2 });
 
-      expect(await purgeOf(maintainer)()).toEqual([]);
-      expect(await remainingIdsOf(app, projectId)).toEqual(idsOf(entries));
+      const purged = await purgeOf(maintainer)();
+
+      expect(purged).toEqual([expect.objectContaining({ spaceId: reached.spaceId })]);
+      expect(await remainingIdsOf(app, underProject)).toEqual(idsOf(underEntries));
+      expect(await remainingIdsOf(app, reachedProject)).toEqual([]);
     }));
 });
 

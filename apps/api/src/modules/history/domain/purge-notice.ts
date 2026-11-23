@@ -27,18 +27,20 @@ export const purgeNoticeOf = ({
   spaceName,
   plan,
   storedBytes,
+  limitBytes,
   projects,
 }: {
   readonly spaceName: string;
   readonly plan: Plan;
   readonly storedBytes: number;
+  readonly limitBytes: number;
   readonly projects: readonly PurgedProjectNotice[];
 }): PurgeNotice => ({
   subject: `L'historique de l'espace « ${spaceName} » a été purgé sur dezyn`,
   text: [
     `L'espace « ${spaceName} » a atteint sa limite de stockage : dezyn a supprimé les plus anciennes entrées de l'historique de ses projets.`,
     projects.map(projectLineOf).join("\n"),
-    `L'espace « ${spaceName} » utilise maintenant ${sizeOf(storedBytes)} sur ${sizeOf(storageLimitOf(plan))}.`,
+    `L'espace « ${spaceName} » utilise maintenant ${sizeOf(storedBytes)} sur ${sizeOf(limitBytes)}.`,
     ...(plan === "free"
       ? [`Le plan Team offre ${sizeOf(storageLimitOf("team"))} de stockage.`]
       : []),
