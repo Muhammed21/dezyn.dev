@@ -518,6 +518,47 @@ describe("le payeur rendu éditeur part comme s'il quittait l'espace (ADR 0050 �
     );
   });
 
+  it("redemander le rôle éditeur pour un payeur déjà rétrogradé ne redemande rien et ne prévient personne", () => {
+    const merchantOfRecord = makeMerchantOfRecord();
+    const outbox = makeOutbox();
+    return withIdentityApp(
+      async (app, db) => {
+        const { payer, owner, spaceId } = await seedPaidSpaceWithOwner(app, db);
+        const demotion = { accessToken: owner.accessToken, spaceId, memberId: payer.userId };
+        await changeRole(app, demotion);
+
+        const response = await changeRole(app, demotion);
+
+        expect(response.status).toBe(200);
+        expect(merchantOfRecord.cancellations).toHaveLength(1);
+        expect(outbox.sent).toHaveLength(1);
+      },
+      { billing: billingWith(merchantOfRecord), mailer: outbox.mailer },
+    );
+  });
+
+  it("redemander le rôle propriétaire pour le payeur, déjà propriétaire, ne résilie rien", () => {
+    const merchantOfRecord = makeMerchantOfRecord();
+    const outbox = makeOutbox();
+    return withIdentityApp(
+      async (app, db) => {
+        const { payer, owner, spaceId } = await seedPaidSpaceWithOwner(app, db);
+
+        const response = await changeRole(app, {
+          accessToken: owner.accessToken,
+          spaceId,
+          memberId: payer.userId,
+          role: "owner",
+        });
+
+        expect(response.status).toBe(200);
+        expect(merchantOfRecord.cancellations).toEqual([]);
+        expect(outbox.sent).toEqual([]);
+      },
+      { billing: billingWith(merchantOfRecord), mailer: outbox.mailer },
+    );
+  });
+
   it("une rétrogradation refusée ne demande aucune résiliation", () => {
     const merchantOfRecord = makeMerchantOfRecord();
     return withIdentityApp(

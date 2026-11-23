@@ -8,6 +8,7 @@ import {
   roleChangeRefusal,
 } from "../domain/member-management.ts";
 import type { Role } from "../domain/space.ts";
+import type { RoleChange } from "./spaces.ts";
 
 export type ClosedReason = "role_changed" | "removed";
 
@@ -70,15 +71,17 @@ export const changeRole =
     readonly newId: () => string;
     readonly now: () => Date;
   }) =>
-  (
-    request: Request & { readonly role: Role },
-  ): Promise<Result<{ readonly userId: string; readonly role: Role }, RoleChangeFailure>> =>
+  (request: Request & { readonly role: Role }): Promise<Result<RoleChange, RoleChangeFailure>> =>
     management.run(request.spaceId, async ({ members, close, open }) => {
       const target = managedMember(members, request);
       if (!target.ok) {
         return target;
       }
-      const changed = { userId: target.value.userId, role: request.role };
+      const changed = {
+        userId: target.value.userId,
+        role: request.role,
+        previousRole: target.value.role,
+      };
       if (target.value.role === request.role) {
         return ok(changed);
       }

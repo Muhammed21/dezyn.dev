@@ -178,7 +178,11 @@ export const composeModules = ({
       },
       changeRole: async (request: Parameters<typeof spaces.changeRole>[0]) => {
         const changed = await spaces.changeRole(request);
-        if (changed.ok && changed.value.role === "editor") {
+        if (
+          changed.ok &&
+          changed.value.previousRole === "owner" &&
+          changed.value.role === "editor"
+        ) {
           await subscriptions.payerLeaves({
             spaceId: request.spaceId,
             userId: request.memberId,

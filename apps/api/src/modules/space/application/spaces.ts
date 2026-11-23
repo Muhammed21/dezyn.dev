@@ -37,8 +37,14 @@ export type SpaceUseCases = {
   readonly leaveSpace: (key: MembershipKey) => Promise<Result<void, DepartureFailure>>;
   readonly changeRole: (
     request: MemberRequest & { readonly role: Role },
-  ) => Promise<Result<{ readonly userId: string; readonly role: Role }, RoleChangeFailure>>;
+  ) => Promise<Result<RoleChange, RoleChangeFailure>>;
   readonly removeMember: (request: MemberRequest) => Promise<Result<void, RemovalFailure>>;
+};
+
+export type RoleChange = {
+  readonly userId: string;
+  readonly role: Role;
+  readonly previousRole: Role;
 };
 
 type MemberRequest = {
