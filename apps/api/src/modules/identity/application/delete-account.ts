@@ -1,5 +1,7 @@
 import { err, ok, type Result } from "@repo/result";
 
+import type { PasswordRefusal } from "./auth.ts";
+
 export type SpaceRef = { readonly id: string; readonly name: string };
 
 export type PaidSpace = SpaceRef & { readonly currentPeriodEnd: Date | undefined };
@@ -25,14 +27,20 @@ export type AccountDeletion = {
   readonly lastOwnerSpaces: readonly SpaceRef[];
 };
 
-export type AccountDeletionRefusal = {
-  readonly kind: "last_owner";
-  readonly spaces: readonly SpaceRef[];
+export type AccountDeletionRefusal =
+  | { readonly kind: "last_owner"; readonly spaces: readonly SpaceRef[] }
+  | { readonly kind: PasswordRefusal };
+
+export type AccountDeletionRequest = {
+  readonly userId: string;
+  readonly checkPassword: () => Promise<Result<void, PasswordRefusal>>;
 };
 
 export type AccountUseCases = {
   readonly accountDeletionOf: (userId: string) => Promise<AccountDeletion>;
-  readonly deleteAccount: (userId: string) => Promise<Result<void, AccountDeletionRefusal>>;
+  readonly deleteAccount: (
+    request: AccountDeletionRequest,
+  ) => Promise<Result<void, AccountDeletionRefusal>>;
 };
 
 export const accountDeletionOf =
@@ -53,7 +61,18 @@ export const deleteAccount =
     readonly announce: (departures: readonly Departure[]) => Promise<void>;
     readonly now: () => Date;
   }) =>
-  async (userId: string): Promise<Result<void, AccountDeletionRefusal>> => {
+  async ({
+    userId,
+    checkPassword,
+  }: AccountDeletionRequest): Promise<Result<void, AccountDeletionRefusal>> => {
+    const lastOwnerSpaces = await unitOfWork.run((steps) => steps.lastOwnerSpaces(userId));
+    if (lastOwnerSpaces.length > 0) {
+      return err({ kind: "last_owner", spaces: lastOwnerSpaces });
+    }
+    const checked = await checkPassword();
+    if (!checked.ok) {
+      return err({ kind: checked.error });
+    }
     const deleted = await unitOfWork.run(
       async (steps): Promise<Result<readonly Departure[], AccountDeletionRefusal>> => {
         const spaces = await steps.lastOwnerSpaces(userId);

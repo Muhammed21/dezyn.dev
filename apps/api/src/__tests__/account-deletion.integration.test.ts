@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 
 import { createPostgresDatabase, type PostgresDatabase } from "#db";
+import { PASSWORD_CHECK_RATE_LIMIT } from "#modules/identity/infrastructure/better-auth.ts";
 import { orphanSpacePurge } from "#modules/space/space-module.ts";
 import { replayPendingCancellations } from "#modules/subscription/subscription-module.ts";
 import {
@@ -69,11 +70,32 @@ const signInCookie = async (app: App, user: typeof ADA) => {
   return pair;
 };
 
-const deleteAccount = (app: App, cookie: string) =>
+const deleteAccount = (
+  app: App,
+  {
+    cookie,
+    body,
+    ip = makeClientIp(),
+  }: { readonly cookie: string; readonly body: object; readonly ip?: string },
+) =>
   app.request(`${BASE_URL}/v1/account`, {
     method: "DELETE",
-    headers: { cookie, origin: WEB_URL },
+    headers: {
+      cookie,
+      origin: WEB_URL,
+      "content-type": "application/json",
+      "x-forwarded-for": ip,
+    },
+    body: JSON.stringify(body),
   });
+
+const deleteAccountOf = async (app: App, user: typeof ADA) =>
+  deleteAccount(app, {
+    cookie: await signInCookie(app, user),
+    body: { password: user.password },
+  });
+
+const WRONG_PASSWORD = "pas-le-bon-mot-de-passe";
 
 const readDeletion = async (app: App, cookie: string) => {
   const response = await app.request(`${BASE_URL}/v1/account/deletion`, {
@@ -162,7 +184,7 @@ describe("un utilisateur supprime son compte (ADR 0015, ADR 0050 §3)", () => {
       async (app, db) => {
         const { payer, spaceId } = await seedEveryReference(app, db);
 
-        const response = await deleteAccount(app, await signInCookie(app, ADA));
+        const response = await deleteAccountOf(app, ADA);
 
         expect(response.status).toBe(204);
         expect(await userExists(db, payer.userId)).toBe(false);
@@ -187,7 +209,7 @@ describe("un utilisateur supprime son compte (ADR 0015, ADR 0050 §3)", () => {
     withIdentityApp(async (app, db) => {
       const { payer } = await seedEveryReference(app, db);
 
-      await deleteAccount(app, await signInCookie(app, ADA));
+      await deleteAccountOf(app, ADA);
 
       const response = await callMcp(app, { token: payer.accessToken, method: "tools/list" });
       expect(response.status).toBe(401);
@@ -198,7 +220,7 @@ describe("un utilisateur supprime son compte (ADR 0015, ADR 0050 §3)", () => {
       await obtainAccessToken(app);
       const cookie = await signInCookie(app, ADA);
 
-      await deleteAccount(app, cookie);
+      await deleteAccount(app, { cookie, body: { password: ADA.password } });
 
       const response = await app.request(`${BASE_URL}/v1/account/deletion`, {
         headers: { cookie, origin: WEB_URL },
@@ -210,7 +232,7 @@ describe("un utilisateur supprime son compte (ADR 0015, ADR 0050 §3)", () => {
     withIdentityApp(async (app, db) => {
       const { owner, projectId } = await seedEveryReference(app, db);
 
-      await deleteAccount(app, await signInCookie(app, ADA));
+      await deleteAccountOf(app, ADA);
 
       const { entries } = HistoryOutput.parse({
         entries: await historyOf(app, { accessToken: owner.accessToken, projectId }),
@@ -227,7 +249,7 @@ describe("un utilisateur supprime son compte (ADR 0015, ADR 0050 §3)", () => {
     withIdentityApp(async (app, db) => {
       const { owner, projectId } = await seedEveryReference(app, db);
 
-      await deleteAccount(app, await signInCookie(app, ADA));
+      await deleteAccountOf(app, ADA);
 
       const response = await app.request(`${BASE_URL}/v1/projects/${projectId}/tokens`, {
         headers: { authorization: `Bearer ${owner.accessToken}` },
@@ -264,8 +286,8 @@ describe("un utilisateur supprime son compte (ADR 0015, ADR 0050 §3)", () => {
         token: makeColorToken({ name: "couleur.bord" }),
       });
 
-      await deleteAccount(app, await signInCookie(app, ADA));
-      await deleteAccount(app, await signInCookie(app, LINUS));
+      await deleteAccountOf(app, ADA);
+      await deleteAccountOf(app, LINUS);
 
       const authorsOf = async (projectId: string) =>
         (
@@ -289,7 +311,7 @@ describe("un utilisateur supprime son compte (ADR 0015, ADR 0050 §3)", () => {
       const grace = await obtainAccessToken(app, { user: GRACE });
       await seedMember(db, { spaceId, userId: grace.userId, role: "editor" });
 
-      const response = await deleteAccount(app, await signInCookie(app, ADA));
+      const response = await deleteAccountOf(app, ADA);
 
       expect(response.status).toBe(409);
       expect(LastOwnerProblem.parse(await response.json())).toMatchObject({
@@ -307,7 +329,7 @@ describe("un utilisateur supprime son compte (ADR 0015, ADR 0050 §3)", () => {
         .set({ closedAt: new Date("2026-11-01T10:00:00.000Z") })
         .where(eq(schema.spaceMember.userId, ada.userId));
 
-      const response = await deleteAccount(app, await signInCookie(app, ADA));
+      const response = await deleteAccountOf(app, ADA);
 
       expect(response.status).toBe(204);
       expect(await userExists(db, ada.userId)).toBe(false);
@@ -318,7 +340,7 @@ describe("un utilisateur supprime son compte (ADR 0015, ADR 0050 §3)", () => {
       const ada = await obtainAccessToken(app);
       const spaceId = await personalSpaceOf(db, ada.userId);
 
-      const response = await deleteAccount(app, await signInCookie(app, ADA));
+      const response = await deleteAccountOf(app, ADA);
 
       expect(response.status).toBe(204);
       expect(
@@ -352,7 +374,7 @@ describe("un utilisateur supprime son compte (ADR 0015, ADR 0050 §3)", () => {
         await invite(app, { accessToken: ada.accessToken, spaceId, email: GRACE.email });
         const grace = await obtainAccessToken(app, { user: GRACE });
 
-        await deleteAccount(app, await signInCookie(app, ADA));
+        await deleteAccountOf(app, ADA);
 
         expect(
           await db.orm
@@ -391,7 +413,7 @@ describe("un utilisateur supprime son compte (ADR 0015, ADR 0050 §3)", () => {
           email: LINUS.email,
         });
 
-        await deleteAccount(app, await signInCookie(app, ADA));
+        await deleteAccountOf(app, ADA);
 
         expect(
           await db.orm
@@ -433,7 +455,7 @@ describe("un utilisateur supprime son compte (ADR 0015, ADR 0050 §3)", () => {
         history_entry: 4,
         space_subscription: 1,
       });
-      await deleteAccount(app, await signInCookie(app, ADA));
+      await deleteAccountOf(app, ADA);
       const maintainer = createPostgresDatabase({ url: maintainerUrl });
 
       try {
@@ -454,12 +476,156 @@ describe("un utilisateur supprime son compte (ADR 0015, ADR 0050 §3)", () => {
 
       const response = await app.request(`${BASE_URL}/v1/account`, {
         method: "DELETE",
-        headers: { authorization: `Bearer ${ada.accessToken}`, origin: WEB_URL },
+        headers: {
+          authorization: `Bearer ${ada.accessToken}`,
+          origin: WEB_URL,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ password: ADA.password }),
       });
 
       expect(response.status).toBe(403);
       expect(await userExists(db, ada.userId)).toBe(true);
     }));
+});
+
+const attemptsUpToTheLimit = (attempt: () => Response | Promise<Response>) =>
+  Array.from({ length: PASSWORD_CHECK_RATE_LIMIT.max }).reduce<Promise<readonly number[]>>(
+    async (previous) => [...(await previous), (await attempt()).status],
+    Promise.resolve([]),
+  );
+
+describe("la suppression du compte demande le mot de passe actuel", () => {
+  it("sans mot de passe, la suppression est refusée et le compte reste intact", () =>
+    withIdentityApp(async (app, db) => {
+      const ada = await obtainAccessToken(app);
+
+      const response = await deleteAccount(app, {
+        cookie: await signInCookie(app, ADA),
+        body: {},
+      });
+
+      expect(response.status).toBe(400);
+      expect(await userExists(db, ada.userId)).toBe(true);
+    }));
+
+  it("avec un mauvais mot de passe, la suppression est refusée sans renvoyer le mot de passe, et le compte reste intact", () =>
+    withIdentityApp(async (app, db) => {
+      const ada = await obtainAccessToken(app);
+
+      const response = await deleteAccount(app, {
+        cookie: await signInCookie(app, ADA),
+        body: { password: WRONG_PASSWORD },
+      });
+
+      expect(response.status).toBe(403);
+      const problem = await response.text();
+      expect(JSON.parse(problem)).toMatchObject({
+        type: "https://dezyn.dev/problems/wrong-password",
+        title: "Mot de passe incorrect",
+        status: 403,
+      });
+      expect(problem).not.toContain(WRONG_PASSWORD);
+      expect(await userExists(db, ada.userId)).toBe(true);
+    }));
+
+  it("des essais répétés avec un mauvais mot de passe finissent limités en débit, même avec le bon mot de passe ensuite", () =>
+    withIdentityApp(async (app, db) => {
+      const ada = await obtainAccessToken(app);
+      const cookie = await signInCookie(app, ADA);
+      const ip = makeClientIp();
+
+      const statuses = await attemptsUpToTheLimit(() =>
+        deleteAccount(app, { cookie, ip, body: { password: WRONG_PASSWORD } }),
+      );
+      const limited = await deleteAccount(app, { cookie, ip, body: { password: ADA.password } });
+
+      expect(statuses).toEqual(Array(PASSWORD_CHECK_RATE_LIMIT.max).fill(403));
+      expect(limited.status).toBe(429);
+      expect(await limited.json()).toMatchObject({ title: "Trop d'essais", status: 429 });
+      expect(await userExists(db, ada.userId)).toBe(true);
+    }));
+
+  it("la limite compte les essais par adresse IP", () =>
+    withIdentityApp(async (app, db) => {
+      const ada = await obtainAccessToken(app);
+      const cookie = await signInCookie(app, ADA);
+
+      await attemptsUpToTheLimit(() =>
+        deleteAccount(app, { cookie, ip: makeClientIp(), body: { password: WRONG_PASSWORD } }),
+      );
+      const response = await deleteAccount(app, { cookie, body: { password: ADA.password } });
+
+      expect(response.status).toBe(204);
+      expect(await userExists(db, ada.userId)).toBe(false);
+    }));
+
+  it("les essais sur la vérification du mot de passe de better-auth comptent dans la même limite", () =>
+    withIdentityApp(async (app, db) => {
+      const ada = await obtainAccessToken(app);
+      const cookie = await signInCookie(app, ADA);
+      const ip = makeClientIp();
+
+      await attemptsUpToTheLimit(() =>
+        app.request(`${BASE_URL}/auth/verify-password`, {
+          method: "POST",
+          headers: {
+            cookie,
+            origin: WEB_URL,
+            "content-type": "application/json",
+            "x-forwarded-for": ip,
+          },
+          body: JSON.stringify({ password: WRONG_PASSWORD }),
+        }),
+      );
+      const limited = await deleteAccount(app, { cookie, ip, body: { password: ADA.password } });
+
+      expect(limited.status).toBe(429);
+      expect(await userExists(db, ada.userId)).toBe(true);
+    }));
+
+  it("le dernier propriétaire reçoit le même refus 409 quel que soit le mot de passe", () =>
+    withIdentityApp(async (app, db) => {
+      const ada = await obtainAccessToken(app);
+      const spaceId = await personalSpaceOf(db, ada.userId);
+      const grace = await obtainAccessToken(app, { user: GRACE });
+      await seedMember(db, { spaceId, userId: grace.userId, role: "editor" });
+      const cookie = await signInCookie(app, ADA);
+      const refusalWith = async (password: string) => {
+        const response = await deleteAccount(app, { cookie, body: { password } });
+        const { correlationId: _correlationId, ...problem } = await response.json();
+        return { status: response.status, problem };
+      };
+
+      const wrong = await refusalWith(WRONG_PASSWORD);
+      const right = await refusalWith(ADA.password);
+
+      expect(wrong.status).toBe(409);
+      expect(wrong).toEqual(right);
+      expect(await userExists(db, ada.userId)).toBe(true);
+    }));
+
+  it("le mot de passe n'apparaît dans aucun journal, qu'il soit refusé ou accepté", () => {
+    const records: unknown[] = [];
+    const log = (record: unknown) => {
+      records.push(record);
+    };
+    return withIdentityApp(
+      async (app) => {
+        await obtainAccessToken(app);
+        const cookie = await signInCookie(app, ADA);
+
+        await deleteAccount(app, { cookie, body: { password: WRONG_PASSWORD } });
+        await deleteAccount(app, { cookie, body: { password: ADA.password } });
+
+        expect(records.length).toBeGreaterThan(0);
+        const logged = JSON.stringify(records);
+        expect(logged).not.toContain(WRONG_PASSWORD);
+        expect(logged).not.toContain(ADA.password);
+      },
+      { log, authLog: log, requestLog: log },
+    );
+  });
 });
 
 describe("avant de supprimer son compte, l'utilisateur voit ce qui l'en empêche et ce qui sera résilié", () => {
@@ -527,7 +693,7 @@ describe("la suppression du payeur résilie chaque abonnement qu'il paie en fin 
       async (app, db) => {
         const { owner, spaceId } = await seedPaidSpaceWithOwner(app, db);
 
-        await deleteAccount(app, await signInCookie(app, ADA));
+        await deleteAccountOf(app, ADA);
 
         expect(merchantOfRecord.cancellations).toEqual([
           { spaceId, subscriptionId: SUBSCRIPTION_ID },
@@ -550,7 +716,7 @@ describe("la suppression du payeur résilie chaque abonnement qu'il paie en fin 
       async (app, db) => {
         const { spaceId } = await seedPaidSpaceWithOwner(app, db);
 
-        await deleteAccount(app, await signInCookie(app, ADA));
+        await deleteAccountOf(app, ADA);
         const replayed = makeMerchantOfRecord();
         await replayPendingCancellations({
           db,
@@ -569,7 +735,7 @@ describe("la suppression du payeur résilie chaque abonnement qu'il paie en fin 
       async (app, db) => {
         const { spaceId } = await seedPaidSpaceWithOwner(app, db);
 
-        await deleteAccount(app, await signInCookie(app, ADA));
+        await deleteAccountOf(app, ADA);
 
         expect(outbox.sent).toEqual([
           {
@@ -587,7 +753,7 @@ describe("la suppression du payeur résilie chaque abonnement qu'il paie en fin 
   it("la résiliation puis la révocation reçues de Polar après la suppression s'appliquent, et l'espace redevient Free", () =>
     withIdentityApp(async (app, db) => {
       const { payer, owner, spaceId } = await seedPaidSpaceWithOwner(app, db);
-      await deleteAccount(app, await signInCookie(app, ADA));
+      await deleteAccountOf(app, ADA);
 
       const canceled = await postPolarWebhook(app, {
         event: makeSubscriptionEvent({

@@ -2,6 +2,13 @@ import type { MemberIdentity, SessionFailure } from "#platform/member-identity.t
 import type { AccessTokenIdentity, VerificationFailure } from "@repo/auth-verifier";
 import type { Result } from "@repo/result";
 
+export type PasswordRefusal = "wrong_password" | "too_many_attempts" | "unavailable";
+
+export type PasswordCheck = {
+  readonly headers: Headers;
+  readonly password: string;
+};
+
 export type Auth = {
   readonly baseURL: string;
   readonly handle: (request: Request) => Promise<Response>;
@@ -14,4 +21,5 @@ export type Auth = {
     headers: Headers,
   ) => Promise<Result<MemberIdentity | undefined, SessionFailure>>;
   readonly checkSigningKey: () => Promise<Result<void, "unusable">>;
+  readonly verifyPassword: (check: PasswordCheck) => Promise<Result<void, PasswordRefusal>>;
 };

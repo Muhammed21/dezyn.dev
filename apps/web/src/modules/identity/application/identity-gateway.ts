@@ -32,5 +32,5 @@ export type IdentityGateway = {
   readonly signOut: () => Promise<Result<undefined, SignOutFailure>>;
   readonly currentSession: () => Promise<Result<Session | undefined, SessionFailure>>;
   readonly accountDeletion: () => Promise<Result<AccountDeletion, AccountDeletionFailure>>;
-  readonly deleteAccount: () => Promise<Result<undefined, DeleteAccountFailure>>;
+  readonly deleteAccount: (password: string) => Promise<Result<undefined, DeleteAccountFailure>>;
 };

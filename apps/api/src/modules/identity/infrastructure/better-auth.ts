@@ -14,9 +14,9 @@ import type { Clock } from "#platform/clock.ts";
 import { errorDetails, type LogSink } from "#platform/logging.ts";
 import { createAccessTokenVerifier } from "@repo/auth-verifier";
 import { schema } from "@repo/db";
-import { err, ok } from "@repo/result";
+import { err, ok, type Result } from "@repo/result";
 
-import type { Auth } from "../application/auth.ts";
+import type { Auth, PasswordRefusal } from "../application/auth.ts";
 import { defaultToNativeForLoopback } from "../domain/client-registration.ts";
 import { refreshGrantOutcome } from "../domain/refresh-grant.ts";
 import { postgresActiveGrants } from "./postgres-active-grants.ts";
@@ -25,6 +25,10 @@ const DAY_SECONDS = 86_400;
 const HOUR_SECONDS = 3_600;
 
 export const REGISTRATION_RATE_LIMIT = { window: HOUR_SECONDS, max: 10 } as const;
+
+export const PASSWORD_CHECK_RATE_LIMIT = { window: 15 * 60, max: 5 } as const;
+
+const VERIFY_PASSWORD_PATH = "/verify-password";
 
 export const IDENTITY_SCHEMA = {
   user: schema.identityUser,
@@ -122,7 +126,10 @@ export const identityAuthOptions = ({
     rateLimit: {
       enabled: true,
       storage: "database",
-      customRules: { "/oauth2/register": REGISTRATION_RATE_LIMIT },
+      customRules: {
+        "/oauth2/register": REGISTRATION_RATE_LIMIT,
+        [VERIFY_PASSWORD_PATH]: PASSWORD_CHECK_RATE_LIMIT,
+      },
     },
     emailAndPassword: { enabled: true },
     hooks: {
@@ -213,6 +220,27 @@ const withoutSessionTokens = async (response: Response) => {
   });
 };
 
+const PASSWORD_CHECKS = new Map<number, Result<void, PasswordRefusal>>([
+  [200, ok(undefined)],
+  [400, err("wrong_password")],
+  [429, err("too_many_attempts")],
+]);
+
+const forwardedHeaders = ({
+  headers,
+  trustedIpHeader,
+}: {
+  readonly headers: Headers;
+  readonly trustedIpHeader: string;
+}) =>
+  new Headers([
+    ["content-type", "application/json"],
+    ...["cookie", "origin", trustedIpHeader].flatMap((name): [string, string][] => {
+      const value = headers.get(name);
+      return value === null ? [] : [[name, value]];
+    }),
+  ]);
+
 export const createIdentityAuth = async ({
   db,
   secret,
@@ -291,6 +319,21 @@ export const createIdentityAuth = async ({
       } catch (error) {
         log({ level: "error", msg: "signing key check failed", ...errorDetails(error) });
         return err("unusable");
+      }
+    },
+    verifyPassword: async ({ headers, password }) => {
+      try {
+        const response = await auth.handler(
+          new Request(new URL(`/auth${VERIFY_PASSWORD_PATH}`, baseURL), {
+            method: "POST",
+            headers: forwardedHeaders({ headers, trustedIpHeader }),
+            body: JSON.stringify({ password }),
+          }),
+        );
+        return PASSWORD_CHECKS.get(response.status) ?? err("unavailable");
+      } catch (error) {
+        log({ level: "error", msg: "password check failed", ...errorDetails(error) });
+        return err("unavailable");
       }
     },
     authorizationServerMetadata,

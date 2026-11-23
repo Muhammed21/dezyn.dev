@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { err, ok } from "@repo/result";
 
+import type { PasswordRefusal } from "../auth.ts";
 import {
   type AccountDeletionSteps,
   type AccountDeletionUnitOfWork,
@@ -33,10 +34,11 @@ const makeAccount = ({
   readonly paidSpaces?: readonly PaidSpace[];
 } = {}) => {
   const done: string[] = [];
+  const owned = [...lastOwnerSpaces];
   const committed: string[] = [];
   const announced: Departure[][] = [];
   const steps: AccountDeletionSteps<Departure> = {
-    lastOwnerSpaces: async (userId) => (userId === USER_ID ? lastOwnerSpaces : []),
+    lastOwnerSpaces: async (userId) => (userId === USER_ID ? [...owned] : []),
     paidSpaces: async (userId) => (userId === USER_ID ? paidSpaces : []),
     leavePaidSpaces: async ({ userId, at }) => {
       done.push(`leavePaidSpaces ${userId} ${at.toISOString()}`);
@@ -63,17 +65,36 @@ const makeAccount = ({
     committed,
     announced,
     unitOfWork,
+    becomeLastOwnerOf: (space: SpaceRef) => {
+      owned.push(space);
+    },
     announce: async (departures: readonly Departure[]) => {
       announced.push([...departures]);
     },
   };
 };
 
+const makePasswordCheck = (outcome: PasswordRefusal | "accepted" = "accepted") => {
+  const checks: string[] = [];
+  return {
+    checks,
+    checkPassword: async () => {
+      checks.push("vérification");
+      return outcome === "accepted" ? ok(undefined) : err(outcome);
+    },
+  };
+};
+
+const deletionOf = (checkPassword = makePasswordCheck().checkPassword) => ({
+  userId: USER_ID,
+  checkPassword,
+});
+
 describe("la suppression d'un compte (ADR 0011 §5, ADR 0015, ADR 0050 §3)", () => {
   it("quitte les espaces payés, supprime les invitations des espaces qu'il laisse orphelins, pseudonymise l'historique puis supprime l'utilisateur", async () => {
     const account = makeAccount();
 
-    const deleted = await deleteAccount({ ...account, now: () => NOW })(USER_ID);
+    const deleted = await deleteAccount({ ...account, now: () => NOW })(deletionOf());
 
     expect(deleted).toEqual(ok(undefined));
     expect(account.committed).toEqual([
@@ -87,7 +108,7 @@ describe("la suppression d'un compte (ADR 0011 §5, ADR 0015, ADR 0050 §3)", ()
   it("annonce le départ du payeur de chaque espace payé, une fois la suppression faite", async () => {
     const account = makeAccount({ paidSpaces: [makePaidSpace()] });
 
-    await deleteAccount({ ...account, now: () => NOW })(USER_ID);
+    await deleteAccount({ ...account, now: () => NOW })(deletionOf());
 
     expect(account.announced).toEqual([[{ spaceId: STUDIO.id }]]);
   });
@@ -95,11 +116,60 @@ describe("la suppression d'un compte (ADR 0011 §5, ADR 0015, ADR 0050 §3)", ()
   it("le dernier propriétaire d'un espace ne supprime rien et voit les espaces à transmettre", async () => {
     const account = makeAccount({ lastOwnerSpaces: [STUDIO], paidSpaces: [makePaidSpace()] });
 
-    const deleted = await deleteAccount({ ...account, now: () => NOW })(USER_ID);
+    const deleted = await deleteAccount({ ...account, now: () => NOW })(deletionOf());
 
     expect(deleted).toEqual(err({ kind: "last_owner", spaces: [STUDIO] }));
     expect(account.committed).toEqual([]);
     expect(account.announced).toEqual([]);
+  });
+
+  it.each(["wrong_password", "too_many_attempts", "unavailable"] as const)(
+    "un mot de passe refusé (%s) ne supprime rien et n'annonce rien",
+    async (refusal) => {
+      const account = makeAccount({ paidSpaces: [makePaidSpace()] });
+
+      const deleted = await deleteAccount({ ...account, now: () => NOW })(
+        deletionOf(makePasswordCheck(refusal).checkPassword),
+      );
+
+      expect(deleted).toEqual(err({ kind: refusal }));
+      expect(account.committed).toEqual([]);
+      expect(account.announced).toEqual([]);
+    },
+  );
+
+  it("vérifie le mot de passe une fois avant de supprimer", async () => {
+    const account = makeAccount();
+    const password = makePasswordCheck();
+
+    await deleteAccount({ ...account, now: () => NOW })(deletionOf(password.checkPassword));
+
+    expect(password.checks).toEqual(["vérification"]);
+  });
+
+  it("le dernier propriétaire est refusé avant toute vérification du mot de passe, qui ne se révèle donc pas", async () => {
+    const account = makeAccount({ lastOwnerSpaces: [STUDIO] });
+    const password = makePasswordCheck("wrong_password");
+
+    const deleted = await deleteAccount({ ...account, now: () => NOW })(
+      deletionOf(password.checkPassword),
+    );
+
+    expect(deleted).toEqual(err({ kind: "last_owner", spaces: [STUDIO] }));
+    expect(password.checks).toEqual([]);
+  });
+
+  it("un compte devenu dernier propriétaire pendant la vérification du mot de passe ne supprime rien", async () => {
+    const account = makeAccount();
+    const checkPassword = async () => {
+      account.becomeLastOwnerOf(STUDIO);
+      return ok(undefined);
+    };
+
+    const deleted = await deleteAccount({ ...account, now: () => NOW })(deletionOf(checkPassword));
+
+    expect(deleted).toEqual(err({ kind: "last_owner", spaces: [STUDIO] }));
+    expect(account.committed).toEqual([]);
   });
 });
 

@@ -30,6 +30,7 @@ export const makeAuth = (overrides: Partial<Auth> = {}): Auth => ({
   verifyAccessToken: () => Promise.resolve(err("invalid_token")),
   sessionOf: () => Promise.resolve(ok(undefined)),
   checkSigningKey: () => Promise.resolve(ok(undefined)),
+  verifyPassword: () => Promise.resolve(err("wrong_password")),
   ...overrides,
 });
 
@@ -102,14 +103,20 @@ export const makeApp = ({
   db = makeDatabase(),
   auth = makeAuth(),
   webUrl = "https://dezyn.dev",
-}: { readonly db?: Database; readonly auth?: Auth; readonly webUrl?: string } = {}) => {
+  account = makeAccount(),
+}: {
+  readonly db?: Database;
+  readonly auth?: Auth;
+  readonly webUrl?: string;
+  readonly account?: AccountUseCases;
+} = {}) => {
   const records: LogRecord[] = [];
   const app = createApp({
     webUrl,
     db,
     auth,
     log: (record) => records.push(record),
-    account: makeAccount(),
+    account,
     spaces: makeSpaces(),
     subscriptions: makeSubscriptions(),
     projects: makeProjects(),

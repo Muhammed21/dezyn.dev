@@ -20,7 +20,7 @@ import type {
 import { accountRoute } from "../account-route.tsx";
 
 type ReadDeletion = () => Promise<Result<AccountDeletion, AccountDeletionFailure>>;
-type DeleteAccount = () => Promise<Result<undefined, DeleteAccountFailure>>;
+type DeleteAccount = (password: string) => Promise<Result<undefined, DeleteAccountFailure>>;
 
 const STUDIO = { id: "4f2a9c1e-7b3d-4e8a-9f10-2c5d6e7f8a9b", name: "Studio Ada" };
 
@@ -83,6 +83,16 @@ const renderAccount = ({
 const confirmButton = (screen: Awaited<ReturnType<typeof renderAccount>>) =>
   screen.getByRole("button", { name: "Supprimer définitivement mon compte" });
 
+const PASSWORD = "un-mot-de-passe-solide";
+
+const passwordField = (screen: Awaited<ReturnType<typeof renderAccount>>) =>
+  screen.getByLabelText("Mot de passe actuel");
+
+const confirmWith = async (screen: Awaited<ReturnType<typeof renderAccount>>) => {
+  await passwordField(screen).fill(PASSWORD);
+  await confirmButton(screen).click();
+};
+
 describe("suppression du compte depuis l'app (ADR 0015, ADR 0050 §3)", () => {
   it("avertit que l'historique garde les actions du compte sous un membre supprimé", async () => {
     const screen = await renderAccount();
@@ -132,27 +142,68 @@ describe("suppression du compte depuis l'app (ADR 0015, ADR 0050 §3)", () => {
     expect(screen.getByRole("list", { name: "Abonnements résiliés" }).query()).toBeNull();
   });
 
-  it("supprime le compte à la confirmation, puis renvoie vers la connexion", async () => {
+  it("supprime le compte à la confirmation par le mot de passe saisi, puis renvoie vers la connexion", async () => {
     const asked: string[] = [];
     const screen = await renderAccount({
-      deleteAccount: () => {
-        asked.push("suppression");
+      deleteAccount: (password) => {
+        asked.push(password);
         return Promise.resolve(ok(undefined));
       },
     });
 
-    await confirmButton(screen).click();
+    await confirmWith(screen);
 
     await expect.element(screen.getByText("Page de connexion")).toBeVisible();
-    expect(asked).toEqual(["suppression"]);
+    expect(asked).toEqual([PASSWORD]);
   });
 
+  it("demande le mot de passe actuel, masqué, avant la suppression définitive", async () => {
+    const screen = await renderAccount();
+
+    await expect.element(passwordField(screen)).toHaveAttribute("type", "password");
+    await expect.element(passwordField(screen)).toHaveAttribute("autocomplete", "current-password");
+    await expect.element(confirmButton(screen)).toBeDisabled();
+  });
+
+  it("ne supprime rien tant qu'aucun mot de passe n'est saisi", async () => {
+    const asked: string[] = [];
+    const screen = await renderAccount({
+      deleteAccount: (password) => {
+        asked.push(password);
+        return Promise.resolve(ok(undefined));
+      },
+    });
+
+    await passwordField(screen).fill("x");
+    await passwordField(screen).clear();
+
+    await expect.element(confirmButton(screen)).toBeDisabled();
+    expect(asked).toEqual([]);
+  });
+
+  it.each([
+    ["wrong_password", "Mot de passe incorrect."],
+    ["rate_limited", "Trop d'essais. Réessayez dans quelques minutes."],
+  ] as const)("sur %s, l'annonce et garde le compte ouvert", async (kind, message) => {
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(["my-spaces"], [STUDIO]);
+    const screen = await renderAccount({
+      queryClient,
+      deleteAccount: () => Promise.resolve(err({ kind })),
+    });
+
+    await confirmWith(screen);
+
+    await expect.element(screen.getByRole("alert")).toHaveTextContent(message);
+    await expect.element(confirmButton(screen)).toBeEnabled();
+    expect(queryClient.getQueryData(["my-spaces"])).toEqual([STUDIO]);
+  });
   it("oublie les données du compte supprimé", async () => {
     const queryClient = new QueryClient();
     queryClient.setQueryData(["my-spaces"], [STUDIO]);
     const screen = await renderAccount({ queryClient });
 
-    await confirmButton(screen).click();
+    await confirmWith(screen);
 
     await expect.element(screen.getByText("Page de connexion")).toBeVisible();
     expect(queryClient.getQueryData(["my-spaces"])).toBeUndefined();
@@ -166,7 +217,7 @@ describe("suppression du compte depuis l'app (ADR 0015, ADR 0050 §3)", () => {
       deleteAccount: () => Promise.resolve(err({ kind: "last_owner", spaces: [STUDIO] })),
     });
 
-    await confirmButton(screen).click();
+    await confirmWith(screen);
 
     await expect.element(screen.getByRole("alert")).toBeVisible();
     expect(queryClient.getQueryData(["my-spaces"])).toEqual([STUDIO]);
@@ -175,7 +226,7 @@ describe("suppression du compte depuis l'app (ADR 0015, ADR 0050 §3)", () => {
   it("désactive la confirmation pendant la suppression", async () => {
     const screen = await renderAccount({ deleteAccount: () => new Promise(() => {}) });
 
-    await confirmButton(screen).click();
+    await confirmWith(screen);
 
     await expect.element(confirmButton(screen)).toBeDisabled();
   });
@@ -210,7 +261,7 @@ describe("suppression du compte depuis l'app (ADR 0015, ADR 0050 §3)", () => {
       deleteAccount: () => Promise.resolve(err({ kind: "last_owner", spaces: [STUDIO] })),
     });
 
-    await confirmButton(screen).click();
+    await confirmWith(screen);
 
     await expect
       .element(screen.getByRole("alert"))
@@ -225,7 +276,7 @@ describe("suppression du compte depuis l'app (ADR 0015, ADR 0050 §3)", () => {
     async (kind) => {
       const screen = await renderAccount({ deleteAccount: () => Promise.resolve(err({ kind })) });
 
-      await confirmButton(screen).click();
+      await confirmWith(screen);
 
       await expect
         .element(screen.getByRole("alert"))
@@ -238,7 +289,7 @@ describe("suppression du compte depuis l'app (ADR 0015, ADR 0050 §3)", () => {
       deleteAccount: () => Promise.resolve(err({ kind: "unauthenticated" })),
     });
 
-    await confirmButton(screen).click();
+    await confirmWith(screen);
 
     await expect.element(screen.getByText("Page de connexion")).toBeVisible();
   });

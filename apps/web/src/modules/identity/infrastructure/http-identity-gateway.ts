@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { AccountDeletionOutput, LastOwnerProblem } from "@repo/contracts";
+import { AccountDeletionOutput, LastOwnerProblem, WrongPasswordProblem } from "@repo/contracts";
 import { err, ok, type Result } from "@repo/result";
 
 import {
@@ -8,6 +8,7 @@ import {
   CONFLICT,
   failureOf,
   type Fetch,
+  FORBIDDEN,
   type HttpFailure,
   parseJson,
   send,
@@ -72,6 +73,13 @@ const LastOwnerSpaces = LastOwnerProblem.extend({
 });
 
 const deleteRefusalOf = async (response: Response): Promise<DeleteAccountFailure> => {
+  if (response.status === TOO_MANY_REQUESTS) {
+    return { kind: "rate_limited" };
+  }
+  if (response.status === FORBIDDEN) {
+    const problem = await parseJson(response, WrongPasswordProblem);
+    return { kind: problem.ok ? "wrong_password" : problem.error };
+  }
   if (response.status !== CONFLICT) {
     return { kind: deletionFailureOf(response) };
   }
@@ -165,8 +173,12 @@ export const createHttpIdentityGateway = ({
     const body = await parseJson(response, AccountDeletionOutput);
     return body.ok ? ok(accountDeletionOf(body.value)) : body;
   },
-  deleteAccount: async () => {
-    const sent = await send(fetch, `${apiUrl}/v1/account`, { method: "DELETE" });
+  deleteAccount: async (password) => {
+    const sent = await send(fetch, `${apiUrl}/v1/account`, {
+      method: "DELETE",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ password }),
+    });
     if (!sent.ok) {
       return err({ kind: sent.error });
     }
