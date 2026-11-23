@@ -36,7 +36,7 @@ const withDatabases = (run: (databases: Databases) => Promise<void>) =>
   });
 
 const purgeOf = (maintainer: PostgresDatabase, now: Date = NOW) =>
-  orphanSpacePurge({ db: maintainer, now: () => now })();
+  orphanSpacePurge({ db: maintainer, log: () => undefined, now: () => now })();
 
 describe("la purge des espaces orphelins, avec le rôle history_maintainer (ADR 0051)", () => {
   it("supprime un espace sans membre ouvert ni abonnement, avec toutes ses données", () =>

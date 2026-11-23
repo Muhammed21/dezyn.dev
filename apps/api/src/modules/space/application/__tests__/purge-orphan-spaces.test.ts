@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import type { LogRecord, LogSink } from "#platform/logging.ts";
+
 import type { OrphanSpace, OrphanSubscription } from "../../domain/orphan-space.ts";
 import {
   type OrphanPurgeStep,
@@ -37,13 +39,19 @@ const steppingClock = (stepMs: number) => {
   };
 };
 
-const makeUnitOfWork = (stepsBySpace: Readonly<Record<string, readonly OrphanPurgeStep[]>>) => {
+type PlannedStep = OrphanPurgeStep | Error;
+
+const makeUnitOfWork = (stepsBySpace: Readonly<Record<string, readonly PlannedStep[]>>) => {
   const calls: string[] = [];
   const unitOfWork: OrphanPurgeUnitOfWork = {
     step: async ({ spaceId }) => {
       const taken = calls.filter((called) => called === spaceId).length;
       calls.push(spaceId);
-      return stepsBySpace[spaceId]?.[taken] ?? "purged";
+      const planned = stepsBySpace[spaceId]?.[taken] ?? "purged";
+      if (planned instanceof Error) {
+        throw planned;
+      }
+      return planned;
     },
   };
   return { calls, unitOfWork };
@@ -53,16 +61,19 @@ const passOf = ({
   orphans,
   unitOfWork,
   now = () => STARTED_AT,
+  log = () => undefined,
 }: {
   readonly orphans: readonly OrphanSpace[];
   readonly unitOfWork: OrphanPurgeUnitOfWork;
   readonly now?: () => Date;
+  readonly log?: LogSink;
 }) =>
   purgeOrphanSpaces({
     orphans: { list: async () => orphans },
     unitOfWork,
     now,
     budgetMs: BUDGET_MS,
+    log,
   })();
 
 describe("un passage de la purge des espaces orphelins (ADR 0051)", () => {
@@ -150,5 +161,54 @@ describe("un passage de la purge des espaces orphelins (ADR 0051)", () => {
 
     expect(pass).toEqual({ purgedSpaces: 1, waitingSpaces: 0 });
     expect(calls).toEqual(["premier"]);
+  });
+});
+
+describe("un espace dont la purge échoue ne bloque pas les suivants", () => {
+  it("journalise l'échec de l'espace, purge les suivants, puis relève le premier échec", async () => {
+    const timeout = new Error("canceling statement due to statement timeout");
+    const { calls, unitOfWork } = makeUnitOfWork({
+      gros: ["continued", timeout],
+      suivant: ["purged"],
+      dernier: [new Error("connexion perdue")],
+    });
+    const records: LogRecord[] = [];
+
+    await expect(
+      passOf({
+        orphans: [makeOrphan("gros"), makeOrphan("suivant"), makeOrphan("dernier")],
+        unitOfWork,
+        log: (record) => records.push(record),
+      }),
+    ).rejects.toBe(timeout);
+    expect(calls).toEqual(["gros", "gros", "suivant", "dernier"]);
+    expect(records).toEqual([
+      {
+        level: "error",
+        msg: "orphan space purge step failed",
+        spaceId: "gros",
+        error: "canceling statement due to statement timeout",
+        stack: timeout.stack,
+      },
+      expect.objectContaining({
+        level: "error",
+        msg: "orphan space purge step failed",
+        spaceId: "dernier",
+        error: "connexion perdue",
+      }),
+    ]);
+  });
+
+  it("un passage sans échec ne journalise rien", async () => {
+    const { unitOfWork } = makeUnitOfWork({ premier: ["purged"] });
+    const records: LogRecord[] = [];
+
+    await passOf({
+      orphans: [makeOrphan("premier")],
+      unitOfWork,
+      log: (record) => records.push(record),
+    });
+
+    expect(records).toEqual([]);
   });
 });

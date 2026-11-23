@@ -46,9 +46,11 @@ export const orphanPurgeLockOn = postgresOrphanPurgeLock;
 
 export const orphanSpacePurge = ({
   db,
+  log,
   now: clock = now,
 }: {
   readonly db: PostgresDatabase;
+  readonly log: LogSink;
   readonly now?: () => Date;
 }) =>
   purgeOrphanSpaces({
@@ -56,6 +58,7 @@ export const orphanSpacePurge = ({
     unitOfWork: postgresOrphanPurgeUnitOfWork(db),
     now: clock,
     budgetMs: ORPHAN_PURGE_BUDGET_MS,
+    log,
   });
 
 const newToken = () => randomBytes(32).toString("base64url");

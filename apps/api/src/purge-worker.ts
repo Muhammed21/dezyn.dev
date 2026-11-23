@@ -77,7 +77,7 @@ export const createPurgeWorker = ({
         log({ level: "info", msg: "idempotency_purge_pass", purgedKeys });
       });
       const orphanFailures = await loggingFailure(log, "orphan space purge failed", async () => {
-        const pass = await orphanSpacePurge({ db })();
+        const pass = await orphanSpacePurge({ db, log })();
         log({ level: "info", msg: "orphan_space_purge_pass", ...pass });
       });
       const [first] = [...historyFailures, ...keyFailures, ...orphanFailures];

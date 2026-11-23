@@ -362,7 +362,7 @@ describe("un utilisateur supprime son compte (ADR 0015, ADR 0050 §3)", () => {
       const maintainer = createPostgresDatabase({ url: maintainerUrl });
 
       try {
-        expect(await orphanSpacePurge({ db: maintainer })()).toEqual({
+        expect(await orphanSpacePurge({ db: maintainer, log: () => undefined })()).toEqual({
           purgedSpaces: 1,
           waitingSpaces: 0,
         });

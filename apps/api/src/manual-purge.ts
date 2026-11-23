@@ -36,7 +36,7 @@ export const runManualPurge = async ({
   try {
     const purged = await historyPurge({ db, meterOn: storageMeterOn, mailer, log })();
     const purgedKeys = await purgeExpiredIdempotencyKeys(db);
-    const orphans = await orphanSpacePurge({ db })();
+    const orphans = await orphanSpacePurge({ db, log })();
     print(JSON.stringify({ purged, purgedKeys, orphans }, null, 2));
   } finally {
     await db.close();

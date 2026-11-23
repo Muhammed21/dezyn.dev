@@ -1,3 +1,5 @@
+import { errorDetails, type LogSink } from "#platform/logging.ts";
+
 import {
   type OrphanSpace,
   orphanSpaceIsPurgeable,
@@ -28,11 +30,13 @@ export const purgeOrphanSpaces =
     unitOfWork,
     now,
     budgetMs,
+    log,
   }: {
     readonly orphans: OrphanSpaces;
     readonly unitOfWork: OrphanPurgeUnitOfWork;
     readonly now: () => Date;
     readonly budgetMs: number;
+    readonly log: LogSink;
   }) =>
   async (): Promise<OrphanPurgePass> => {
     const startedAt = now();
@@ -48,9 +52,28 @@ export const purgeOrphanSpaces =
     };
     const listed = await orphans.list();
     const toPurge = listed.filter(({ subscription }) => purgeable(subscription));
-    const purgedSpaces = await toPurge.reduce<Promise<number>>(
-      async (previous, { spaceId }) => (await previous) + ((await purgeSpace(spaceId)) ? 1 : 0),
-      Promise.resolve(0),
+    const outcome = await toPurge.reduce<
+      Promise<{ readonly purgedSpaces: number; readonly failures: readonly unknown[] }>
+    >(
+      async (previous, { spaceId }) => {
+        const { purgedSpaces, failures } = await previous;
+        try {
+          return { purgedSpaces: purgedSpaces + ((await purgeSpace(spaceId)) ? 1 : 0), failures };
+        } catch (error) {
+          log({
+            level: "error",
+            msg: "orphan space purge step failed",
+            spaceId,
+            ...errorDetails(error),
+          });
+          return { purgedSpaces, failures: [...failures, error] };
+        }
+      },
+      Promise.resolve({ purgedSpaces: 0, failures: [] }),
     );
-    return { purgedSpaces, waitingSpaces: listed.length - toPurge.length };
+    const [firstFailure] = outcome.failures;
+    if (firstFailure !== undefined) {
+      throw firstFailure;
+    }
+    return { purgedSpaces: outcome.purgedSpaces, waitingSpaces: listed.length - toPurge.length };
   };
