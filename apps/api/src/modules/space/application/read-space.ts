@@ -19,12 +19,14 @@ export type SpaceFinder = {
 export type SpaceSubscription = {
   readonly status: string;
   readonly currentPeriodEnd: Date | undefined;
-  readonly payer: {
-    readonly id: string;
-    readonly name: string;
-    readonly email: string;
-    readonly left: boolean;
-  };
+  readonly payer:
+    | {
+        readonly id: string;
+        readonly name: string;
+        readonly email: string;
+        readonly left: boolean;
+      }
+    | undefined;
 };
 
 export type SpaceSubscriptions = {
@@ -39,7 +41,7 @@ export type SubscriptionView = {
     readonly email: string;
     readonly you: boolean;
     readonly left: boolean;
-  };
+  } | null;
 };
 
 export type SpaceWithStorage = MySpace & {
@@ -49,13 +51,21 @@ export type SpaceWithStorage = MySpace & {
   readonly subscription?: SubscriptionView;
 };
 
+const payerViewOf = (payer: SpaceSubscription["payer"], userId: string) => {
+  if (payer === undefined) {
+    return null;
+  }
+  const { id, ...named } = payer;
+  return { ...named, you: id === userId };
+};
+
 const subscriptionViewOf = (
-  { status, currentPeriodEnd, payer: { id, ...payer } }: SpaceSubscription,
+  { status, currentPeriodEnd, payer }: SpaceSubscription,
   userId: string,
 ): SubscriptionView => ({
   status,
   currentPeriodEnd: currentPeriodEnd ?? null,
-  payer: { ...payer, you: id === userId },
+  payer: payerViewOf(payer, userId),
 });
 
 export const readSpace =

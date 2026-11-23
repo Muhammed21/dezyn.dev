@@ -43,12 +43,14 @@ export type SpaceStorage = {
 export type SpaceSubscription = {
   readonly status: SubscriptionStatus;
   readonly currentPeriodEnd: Date | undefined;
-  readonly payer: {
-    readonly name: string;
-    readonly email: string;
-    readonly you: boolean;
-    readonly left: boolean;
-  };
+  readonly payer:
+    | {
+        readonly name: string;
+        readonly email: string;
+        readonly you: boolean;
+        readonly left: boolean;
+      }
+    | undefined;
 };
 
 export type FreeLimit = (typeof FREE_LIMITS)[number];

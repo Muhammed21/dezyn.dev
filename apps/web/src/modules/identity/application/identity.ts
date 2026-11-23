@@ -19,4 +19,6 @@ export const identityUseCases = ({ gateway }: { readonly gateway: IdentityGatewa
   },
   signOut: () => gateway.signOut(),
   currentSession: () => gateway.currentSession(),
+  accountDeletion: () => gateway.accountDeletion(),
+  deleteAccount: () => gateway.deleteAccount(),
 });

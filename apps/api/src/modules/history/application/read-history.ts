@@ -3,12 +3,14 @@ import { err, ok, type Result } from "@repo/result";
 
 import { encodeCursor, type HistoryPosition } from "./history-cursor.ts";
 
-export type HistoryAuthor = {
-  readonly kind: "member";
-  readonly userId: string;
-  readonly name: string;
-  readonly membership: "active" | "left";
-};
+export type HistoryAuthor =
+  | {
+      readonly kind: "member";
+      readonly userId: string;
+      readonly name: string;
+      readonly membership: "active" | "left";
+    }
+  | { readonly kind: "deleted_member"; readonly number: number };
 
 export type HistoryEntry = {
   readonly id: string;

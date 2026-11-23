@@ -26,6 +26,7 @@ export {
 export { ProjectOutput, ProjectsOutput } from "./project/projects.ts";
 export { DeclaredFigmaStatesOutput, TokenOutput, TokensOutput } from "./token/tokens.ts";
 export { HistoryOutput } from "./history/history.ts";
+export { AccountDeletionOutput } from "./account/account-deletion.ts";
 export {
   IDEMPOTENCY_KEY_HEADER,
   IDEMPOTENCY_REPLAYED_HEADER,

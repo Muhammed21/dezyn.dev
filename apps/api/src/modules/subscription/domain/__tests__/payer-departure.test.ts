@@ -113,4 +113,26 @@ describe("le départ du payeur résilie l'abonnement en fin de période (ADR 005
       ].join("\n\n"),
     });
   });
+
+  it("le payeur qui supprime son compte : l'email dit qu'il a supprimé son compte", () => {
+    const departure = payerDepartureOf({
+      subscription: makeDepartedSubscription(),
+      leaverId: PAYER_ID,
+      webUrl: "https://dezyn.dev",
+      reason: "account_deleted",
+    });
+
+    expect(departure).toEqual({
+      subscriptionId: "polar-subscription-1",
+      cancel: true,
+      notice: {
+        subject: "L'abonnement Team de l'espace « Studio Ada » prend fin le 22 décembre 2026",
+        text: [
+          "Ada Lovelace a supprimé son compte dezyn. Ada Lovelace payait l'abonnement Team de l'espace « Studio Ada » : il est résilié et prend fin le 22 décembre 2026.",
+          "Jusqu'à cette date, l'espace reste au plan Team. Après cette date, souscrivez à nouveau au plan Team pour le garder.",
+          `Page « Plan » de l'espace : ${planUrl}`,
+        ].join("\n\n"),
+      },
+    });
+  });
 });

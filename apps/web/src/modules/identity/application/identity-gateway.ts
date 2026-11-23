@@ -1,5 +1,10 @@
 import type { Result } from "@repo/result";
 
+import type {
+  AccountDeletion,
+  AccountDeletionFailure,
+  DeleteAccountFailure,
+} from "../domain/account.ts";
 import type { Credentials, Registration, Session } from "../domain/session.ts";
 
 export type SignInFailure =
@@ -26,4 +31,6 @@ export type IdentityGateway = {
   readonly signUp: (registration: Registration) => Promise<Result<Session, SignUpFailure>>;
   readonly signOut: () => Promise<Result<undefined, SignOutFailure>>;
   readonly currentSession: () => Promise<Result<Session | undefined, SessionFailure>>;
+  readonly accountDeletion: () => Promise<Result<AccountDeletion, AccountDeletionFailure>>;
+  readonly deleteAccount: () => Promise<Result<undefined, DeleteAccountFailure>>;
 };

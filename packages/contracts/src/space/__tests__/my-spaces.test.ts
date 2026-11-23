@@ -148,6 +148,16 @@ describe("sortie de l'abonnement d'un espace, lu par ses propriétaires (ADR 005
     expect(SpaceOutput.parse(read)).toEqual(read);
   });
 
+  it("lit un abonnement dont le payeur a supprimé son compte, sans payeur", () => {
+    const read = makeSpace({
+      ...NOT_FROZEN,
+      storage: makeStorage(),
+      subscription: makeSubscription({ payer: null }),
+    });
+
+    expect(SpaceOutput.parse(read)).toEqual(read);
+  });
+
   it("lit un abonnement sans fin de période", () => {
     const read = makeSpace({
       ...NOT_FROZEN,

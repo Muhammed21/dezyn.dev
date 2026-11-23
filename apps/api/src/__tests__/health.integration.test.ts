@@ -3,6 +3,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { createApp } from "#create-app";
 import { createPostgresDatabase } from "#db";
 import {
+  makeAccount,
   makeAuth,
   makeHistory,
   makeIdempotent,
@@ -29,6 +30,7 @@ describe("GET /health", () => {
       db: reachableDatabase,
       auth: makeAuth(),
       log: () => undefined,
+      account: makeAccount(),
       spaces: makeSpaces(),
       subscriptions: makeSubscriptions(),
       projects: makeProjects(),
@@ -51,6 +53,7 @@ describe("GET /health", () => {
       db: unroutableDatabase,
       auth: makeAuth(),
       log: () => undefined,
+      account: makeAccount(),
       spaces: makeSpaces(),
       subscriptions: makeSubscriptions(),
       projects: makeProjects(),
@@ -76,6 +79,7 @@ describe("GET /health", () => {
       db: closedDatabase,
       auth: makeAuth(),
       log: () => undefined,
+      account: makeAccount(),
       spaces: makeSpaces(),
       subscriptions: makeSubscriptions(),
       projects: makeProjects(),

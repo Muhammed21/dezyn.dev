@@ -36,7 +36,7 @@ export const identityOAuthClient = pgTable(
     subjectType: text("subject_type"),
     scopes: text("scopes").array(),
     clientCredentialsScopes: text("client_credentials_scopes").array().default([]),
-    userId: uuid("user_id").references(() => identityUser.id),
+    userId: uuid("user_id").references(() => identityUser.id, { onDelete: "set null" }),
     createdAt: at("created_at"),
     updatedAt: at("updated_at"),
     name: text("name"),
@@ -114,7 +114,7 @@ export const identityOAuthRefreshToken = pgTable(
     sessionId: uuid("session_id").references(() => identitySession.id, { onDelete: "set null" }),
     userId: uuid("user_id")
       .notNull()
-      .references(() => identityUser.id),
+      .references(() => identityUser.id, { onDelete: "cascade" }),
     referenceId: text("reference_id"),
     authorizationCodeId: text("authorization_code_id"),
     resources: text("resources").array(),
@@ -146,7 +146,7 @@ export const identityOAuthAccessToken = pgTable(
       .notNull()
       .references(() => identityOAuthClient.clientId),
     sessionId: uuid("session_id").references(() => identitySession.id, { onDelete: "set null" }),
-    userId: uuid("user_id").references(() => identityUser.id),
+    userId: uuid("user_id").references(() => identityUser.id, { onDelete: "cascade" }),
     referenceId: text("reference_id"),
     authorizationCodeId: text("authorization_code_id"),
     resources: text("resources").array(),
@@ -174,7 +174,7 @@ export const identityOAuthConsent = pgTable(
     clientId: text("client_id")
       .notNull()
       .references(() => identityOAuthClient.clientId),
-    userId: uuid("user_id").references(() => identityUser.id),
+    userId: uuid("user_id").references(() => identityUser.id, { onDelete: "cascade" }),
     referenceId: text("reference_id"),
     resources: text("resources").array(),
     requestedUserInfoClaims: text("requested_user_info_claims").array(),

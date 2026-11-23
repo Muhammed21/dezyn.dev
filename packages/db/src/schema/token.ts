@@ -102,9 +102,7 @@ export const tokenFigmaState = pgTable("token_figma_state", {
   figmaVariables: jsonb("figma_variables"),
   rejectedValue: jsonb("rejected_value"),
   declaredAt: timestamp("declared_at", { withTimezone: true }).notNull(),
-  userId: uuid("user_id")
-    .notNull()
-    .references(() => identityUser.id),
+  userId: uuid("user_id").references(() => identityUser.id, { onDelete: "set null" }),
   clientId: text("client_id").notNull(),
   proposalId: uuid("proposal_id").references(() => proposal.id),
 });

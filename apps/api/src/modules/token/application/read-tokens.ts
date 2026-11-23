@@ -26,7 +26,9 @@ export type TokenFigmaState = {
   readonly state: FigmaState;
   readonly figmaVariables?: readonly string[];
   readonly declaredAt: Date;
-  readonly author: { readonly kind: "member"; readonly userId: string; readonly name: string };
+  readonly author:
+    | { readonly kind: "member"; readonly userId: string; readonly name: string }
+    | { readonly kind: "deleted_member" };
   readonly clientId: string;
 };
 

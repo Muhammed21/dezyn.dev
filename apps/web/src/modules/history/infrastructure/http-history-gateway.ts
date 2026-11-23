@@ -17,10 +17,15 @@ import type { HistoryAuthor, HistoryEntry } from "../domain/history.ts";
 
 type EntryOutput = z.infer<typeof HistoryOutput>["entries"][number];
 
-const authorOf = (author: EntryOutput["author"]): HistoryAuthor =>
-  author.kind === "member" && "name" in author && typeof author.name === "string"
-    ? { kind: "member", name: author.name, left: author.membership === "left" }
-    : { kind: "unknown" };
+const authorOf = (author: EntryOutput["author"]): HistoryAuthor => {
+  if (author.kind === "member" && "name" in author && typeof author.name === "string") {
+    return { kind: "member", name: author.name, left: author.membership === "left" };
+  }
+  if (author.kind === "deleted_member" && "number" in author && typeof author.number === "number") {
+    return { kind: "deleted_member", number: author.number };
+  }
+  return { kind: "unknown" };
+};
 
 const entryOf = ({ id, action, author, clientId, occurredAt }: EntryOutput): HistoryEntry => ({
   id,

@@ -283,3 +283,93 @@ describe("déconnexion d'un membre depuis l'app web (ADR 0044 §7)", () => {
     expect(await unreachable().signOut()).toEqual(err("unavailable"));
   });
 });
+
+const SPACE = { id: "6d1f0c2e-3a4b-4c5d-8e6f-7a8b9c0d1e2f", name: "Studio Ada" };
+
+const makeDeletionOutput = (overrides: Readonly<Record<string, unknown>> = {}) => ({
+  paidSpaces: [{ ...SPACE, currentPeriodEnd: "2026-12-22T10:00:00.000Z" }],
+  lastOwnerSpaces: [],
+  ...overrides,
+});
+
+const LAST_OWNER_PROBLEM = {
+  type: "https://dezyn.dev/problems/last-owner",
+  title: "Dernier propriétaire d'un espace",
+  status: 409,
+  spaces: [SPACE],
+};
+
+describe("ce que la suppression du compte annonce, lu depuis l'app web", () => {
+  it("lit les espaces payés, avec leur date de fin, et les espaces sans autre propriétaire", async () => {
+    const { identity, calls } = answering(json(makeDeletionOutput({ lastOwnerSpaces: [SPACE] })));
+
+    expect(await identity.accountDeletion()).toEqual(
+      ok({
+        paidSpaces: [{ ...SPACE, currentPeriodEnd: new Date("2026-12-22T10:00:00.000Z") }],
+        lastOwnerSpaces: [SPACE],
+      }),
+    );
+    expect(calls).toEqual([
+      {
+        url: `${API_URL}/v1/account/deletion`,
+        init: { method: "GET", credentials: "include" },
+      },
+    ]);
+  });
+
+  it("lit un espace payé sans date de fin connue", async () => {
+    const { identity } = answering(
+      json(makeDeletionOutput({ paidSpaces: [{ ...SPACE, currentPeriodEnd: null }] })),
+    );
+
+    expect(await identity.accountDeletion()).toEqual(
+      ok({ paidSpaces: [{ ...SPACE, currentPeriodEnd: undefined }], lastOwnerSpaces: [] }),
+    );
+  });
+
+  it.each([
+    ["sans session", json({}, 401), "unauthenticated"],
+    ["dans une réponse illisible", json({ paidSpaces: "aucun" }), "invalid_response"],
+    ["quand l'API est en panne", json({}, 503), "unavailable"],
+  ] as const)("échoue %s", async (_case, response, failure) => {
+    expect(await answering(response).identity.accountDeletion()).toEqual(err(failure));
+  });
+
+  it("donne unavailable quand l'API est injoignable", async () => {
+    expect(await unreachable().accountDeletion()).toEqual(err("unavailable"));
+  });
+});
+
+describe("suppression du compte depuis l'app web (ADR 0015)", () => {
+  it("supprime le compte de la session", async () => {
+    const { identity, calls } = answering(() => new Response(null, { status: 204 }));
+
+    expect(await identity.deleteAccount()).toEqual(ok(undefined));
+    expect(calls).toEqual([
+      { url: `${API_URL}/v1/account`, init: { method: "DELETE", credentials: "include" } },
+    ]);
+  });
+
+  it("nomme les espaces dont le compte est le dernier propriétaire", async () => {
+    const { identity } = answering(json(LAST_OWNER_PROBLEM, 409));
+
+    expect(await identity.deleteAccount()).toEqual(err({ kind: "last_owner", spaces: [SPACE] }));
+  });
+
+  it.each([
+    ["sans session", json({}, 401), "unauthenticated"],
+    ["sur un conflit illisible", json({ title: "?" }, 409), "invalid_response"],
+    [
+      "sur un refus du dernier propriétaire sans ses espaces",
+      json({ ...LAST_OWNER_PROBLEM, spaces: undefined }, 409),
+      "invalid_response",
+    ],
+    ["quand l'API est en panne", json({}, 503), "unavailable"],
+  ] as const)("échoue %s", async (_case, response, failure) => {
+    expect(await answering(response).identity.deleteAccount()).toEqual(err({ kind: failure }));
+  });
+
+  it("donne unavailable quand l'API est injoignable", async () => {
+    expect(await unreachable().deleteAccount()).toEqual(err({ kind: "unavailable" }));
+  });
+});

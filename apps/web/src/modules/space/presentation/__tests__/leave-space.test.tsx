@@ -270,6 +270,7 @@ describe("quitter l'espace (ADR 0011 §5)", () => {
 
   it.each([
     ["un propriétaire qui ne paie pas", makeSubscription()],
+    ["un abonnement dont le payeur a supprimé son compte", makeSubscription({ payer: undefined })],
     ["le payeur d'un abonnement terminé", makeSubscription({ ...PAID_BY_ME, status: "ended" })],
   ])("%s n'est pas averti d'une résiliation", async (_case, subscription) => {
     const screen = await renderLeaveSpace({

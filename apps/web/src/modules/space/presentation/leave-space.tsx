@@ -40,7 +40,11 @@ const PayerWarning = ({
 }: {
   readonly subscription: SpaceSubscription | undefined;
 }) => {
-  if (subscription === undefined || !subscription.payer.you || subscription.status === "ended") {
+  if (
+    subscription === undefined ||
+    subscription.payer?.you !== true ||
+    subscription.status === "ended"
+  ) {
     return null;
   }
   const end = endOf(subscription.currentPeriodEnd);

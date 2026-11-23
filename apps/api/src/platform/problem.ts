@@ -12,7 +12,9 @@ export type Problem = {
   readonly title: string;
   readonly status: ContentfulStatusCode;
   readonly errors?: readonly { readonly path: string; readonly message: string }[];
-  readonly extensions?: Readonly<Record<string, string | number>>;
+  readonly extensions?: Readonly<
+    Record<string, string | number | readonly Readonly<Record<string, string>>[]>
+  >;
 };
 
 export const INTERNAL_ERROR: Problem = {

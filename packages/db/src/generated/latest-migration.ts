@@ -1,1 +1,1 @@
-export const LATEST_MIGRATION = { tag: "0025_space_subscription_cancel_requested_at", when: 1795396100821 };
+export const LATEST_MIGRATION = { tag: "0026_account_deletion", when: 1795424212570 };

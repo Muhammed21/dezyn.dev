@@ -10,9 +10,7 @@ export const spaceSubscription = pgTable("space_subscription", {
     .primaryKey()
     .references(() => space.id),
   polarSubscriptionId: text("polar_subscription_id").notNull(),
-  payerId: uuid("payer_id")
-    .notNull()
-    .references(() => identityUser.id),
+  payerId: uuid("payer_id").references(() => identityUser.id, { onDelete: "set null" }),
   status: text("status").notNull(),
   currentPeriodEnd: at("current_period_end"),
   polarModifiedAt: at("polar_modified_at").notNull(),

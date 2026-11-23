@@ -1,6 +1,7 @@
 import { createApp } from "#create-app";
 import type { HistoryUseCases } from "#modules/history/application/history-use-cases.ts";
 import type { Auth } from "#modules/identity/application/auth.ts";
+import type { AccountUseCases } from "#modules/identity/application/delete-account.ts";
 import type { ProjectUseCases } from "#modules/project/application/project-use-cases.ts";
 import type { ProposalUseCases } from "#modules/proposal/application/proposal-use-cases.ts";
 import type { SpaceUseCases } from "#modules/space/application/spaces.ts";
@@ -86,6 +87,11 @@ export const makeProposals = (): ProposalUseCases => ({
   projectOfBatch: () => Promise.resolve(undefined),
 });
 
+export const makeAccount = (): AccountUseCases => ({
+  accountDeletionOf: () => Promise.resolve({ paidSpaces: [], lastOwnerSpaces: [] }),
+  deleteAccount: () => Promise.resolve(ok(undefined)),
+});
+
 export const makeIdempotent =
   (): Idempotent =>
   async ({ run }) => ({ kind: "executed", response: (await run()).response });
@@ -103,6 +109,7 @@ export const makeApp = ({
     db,
     auth,
     log: (record) => records.push(record),
+    account: makeAccount(),
     spaces: makeSpaces(),
     subscriptions: makeSubscriptions(),
     projects: makeProjects(),

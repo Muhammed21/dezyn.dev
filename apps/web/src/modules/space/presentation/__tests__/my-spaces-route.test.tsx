@@ -54,11 +54,17 @@ const renderMySpaces = (
       return <p>Page de l'espace {spacePage.useParams().spaceId}</p>;
     },
   });
+  const account = createRoute({
+    getParentRoute: () => root,
+    path: "/compte",
+    component: () => <p>Page du compte</p>,
+  });
   const router = createRouter({
     routeTree: root.addChildren([
       mySpacesRoute({ parent: root, listMySpaces, signOut }),
       signIn,
       spacePage,
+      account,
     ]),
     history: createMemoryHistory({ initialEntries: ["/"] }),
   });
@@ -92,6 +98,14 @@ describe("page de mes espaces (ADR 0044 §6)", () => {
     await screen.getByRole("link", { name: "Studio Ada" }).click();
 
     await expect.element(screen.getByText(`Page de l'espace ${makeSpace().id}`)).toBeVisible();
+  });
+
+  it("mène à la suppression du compte", async () => {
+    const screen = await renderMySpaces(() => Promise.resolve(ok([makeSpace()])));
+
+    await screen.getByRole("link", { name: "Supprimer mon compte" }).click();
+
+    await expect.element(screen.getByText("Page du compte")).toBeVisible();
   });
 
   it("renvoie vers la connexion quand le membre n'a pas de session", async () => {

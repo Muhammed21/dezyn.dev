@@ -5,6 +5,7 @@ import { createPostgresDatabase } from "#db";
 import type { LogRecord } from "#platform/logging.ts";
 import { makeClientIp } from "#testing/authorization-flow.ts";
 import {
+  makeAccount,
   makeHistory,
   makeIdempotent,
   makeProjectAccess,
@@ -64,6 +65,7 @@ const withIdentityApp = (run: (identityApp: IdentityApp) => Promise<void>) =>
         db,
         auth,
         log,
+        account: makeAccount(),
         spaces: makeSpaces(),
         subscriptions: makeSubscriptions(),
         projects: makeProjects(),

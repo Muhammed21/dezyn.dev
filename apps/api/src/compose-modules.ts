@@ -1,6 +1,11 @@
 import type { PostgresDatabase, PostgresTransaction } from "#db";
 import type { HistoryWriter } from "#modules/history/contracts/history-writer.ts";
-import { historyModule, historyWriterOn } from "#modules/history/history-module.ts";
+import {
+  historyModule,
+  historyWriterOn,
+  pseudonymizeAuthorOn,
+} from "#modules/history/history-module.ts";
+import { accountModule } from "#modules/identity/identity-module.ts";
 import type { ProjectChannel } from "#modules/project/contracts/project-channel.ts";
 import type { ProjectSignals } from "#modules/project/contracts/project-signals.ts";
 import {
@@ -17,10 +22,11 @@ import {
   proposalWriterOn,
 } from "#modules/proposal/proposal-module.ts";
 import type { MembershipKey } from "#modules/space/contracts/membership.ts";
-import { spaceModule } from "#modules/space/space-module.ts";
+import { lastOwnerSpacesOn, spaceModule } from "#modules/space/space-module.ts";
 import {
   type Billing,
   cancelRequestOn,
+  payerAccountDeletionOn,
   spaceSubscriptionsOf,
   subscriptionModule,
 } from "#modules/subscription/subscription-module.ts";
@@ -133,7 +139,18 @@ export const composeModules = ({
     clock,
     billing,
   });
+  const account = accountModule({
+    db,
+    stepsOn: (tx) => ({
+      ...payerAccountDeletionOn(tx),
+      lastOwnerSpaces: lastOwnerSpacesOn(tx),
+      pseudonymizeHistory: pseudonymizeAuthorOn(tx),
+    }),
+    announce: subscriptions.payerDeletedAccount,
+    clock,
+  });
   return {
+    account,
     spaces: {
       ...spaces,
       leaveSpace: async (key: MembershipKey) => {

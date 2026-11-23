@@ -70,6 +70,7 @@ const MySpaces = ({
         ))}
       </ul>
       <SignOutButton signOut={signOut} />
+      <Link to="/compte">Supprimer mon compte</Link>
     </main>
   );
 };

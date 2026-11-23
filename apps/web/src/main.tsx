@@ -6,6 +6,7 @@ import { createRoot } from "react-dom/client";
 import { createHistory } from "./modules/history/history-module.ts";
 import { projectHistoryRoute } from "./modules/history/presentation/project-history-route.tsx";
 import { createIdentity } from "./modules/identity/identity-module.ts";
+import { accountRoute } from "./modules/identity/presentation/account-route.tsx";
 import { signInRoute } from "./modules/identity/presentation/sign-in-route.tsx";
 import { signUpRoute } from "./modules/identity/presentation/sign-up-route.tsx";
 import { projectBanners } from "./modules/project/presentation/project-banners.tsx";
@@ -80,6 +81,11 @@ const appRouter = ({
       signInRoute({ parent: root, signIn: identity.signIn }),
       invitationRoute({ parent: root, acceptInvitation: spaces.acceptInvitation }),
       signUpRoute({ parent: root, signUp: identity.signUp }),
+      accountRoute({
+        parent: root,
+        accountDeletion: identity.accountDeletion,
+        deleteAccount: identity.deleteAccount,
+      }),
       spaceProjectsRoute({
         parent: root,
         listProjects: projects.listProjects,

@@ -11,7 +11,7 @@ export type ProposalKind = (typeof PROPOSAL_KINDS)[number];
 export type ProposalBatch = {
   readonly id: string;
   readonly projectId: string;
-  readonly userId: string;
+  readonly userId: string | null;
   readonly clientId: string;
   readonly intent: string | null;
   readonly state: BatchState;
