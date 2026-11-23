@@ -1,5 +1,5 @@
 import type { GateDecision } from "./gate-decision.ts";
-import { APPROVAL_LABEL } from "./gate-trigger.ts";
+import { APPROVAL_LABEL } from "./maintainer-approval.ts";
 import type { MigrationFinding } from "./migration-findings.ts";
 
 const HEADLINES: Readonly<Record<GateDecision["outcome"], string>> = {
