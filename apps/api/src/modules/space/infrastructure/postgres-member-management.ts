@@ -24,8 +24,11 @@ export const postgresMemberManagement = (
         })
         .from(spaceMember)
         .where(and(eq(spaceMember.spaceId, spaceId), isNull(spaceMember.closedAt)));
+      const members = rows.map((row) => StoredMembership.parse(row));
+      const wasOwner = (userId: string) =>
+        members.some((member) => member.userId === userId && member.role === "owner");
       return work({
-        members: rows.map((row) => StoredMembership.parse(row)),
+        members,
         close: async ({ userId, reason, closedAt }) => {
           await tx
             .update(spaceMember)
@@ -37,7 +40,7 @@ export const postgresMemberManagement = (
                 isNull(spaceMember.closedAt),
               ),
             );
-          if (reason === "removed") {
+          if (reason === "removed" || wasOwner(userId)) {
             await departureOn(tx)({ spaceId, userId, at: closedAt });
           }
         },

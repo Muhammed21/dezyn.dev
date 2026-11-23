@@ -33,7 +33,7 @@ Ce qui fait passer un espace au plan Team : souscrit chez Polar pour un seul esp
 _À éviter_ : licence, souscription (pour l'objet), forfait, plan (pour l'abonnement lui-même)
 
 **Payeur** :
-L'utilisateur qui paie l'abonnement d'un espace, client de Polar ; c'est un propriétaire de l'espace quand il souscrit. Lui seul ouvre le portail client de Polar pour cet espace ; les autres propriétaires voient qui paie. Un utilisateur peut payer plusieurs espaces, chacun par son propre abonnement. Quand le payeur quitte l'espace ou qu'un autre propriétaire l'en retire, l'abonnement est résilié en fin de période et les autres propriétaires sont prévenus ; ils souscrivent à nouveau après la date de fin.
+L'utilisateur qui paie l'abonnement d'un espace, client de Polar ; c'est un propriétaire de l'espace quand il souscrit. Lui seul ouvre le portail client de Polar pour cet espace ; les autres propriétaires voient qui paie. Un utilisateur peut payer plusieurs espaces, chacun par son propre abonnement. Quand le payeur quitte l'espace, qu'un autre propriétaire l'en retire ou le rend éditeur, l'abonnement est résilié en fin de période et les autres propriétaires sont prévenus ; ils souscrivent à nouveau après la date de fin.
 _À éviter_ : client, acheteur, titulaire, owner
 
 **Espace gelé** :

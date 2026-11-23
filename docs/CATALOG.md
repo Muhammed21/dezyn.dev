@@ -73,6 +73,7 @@ Chaque page de `docs/`, une ligne chacune : titre, [mode](README.md#carte), stat
 - [0051 — Le seul membre d'un espace supprime son compte et laisse un espace orphelin](adr/0051-le-seul-membre-d-un-espace-supprime-son-compte-et-laisse-un-espace-orphelin.md) — _explanation · Accepté_ — Que devient un espace dont le seul membre supprime son compte ?
 - [0052 — Le Worker de purge supprime un espace orphelin après la fin de sa période payée](adr/0052-le-worker-de-purge-supprime-un-espace-orphelin-apres-la-fin-de-sa-periode-payee.md) — _explanation · Accepté_ — Quel Worker et quel rôle suppriment un espace orphelin, à partir de quand, et dans quel ordre ?
 - [0053 — Le gate de migrations s'exécute depuis main, et seul un mainteneur approuve un contenu de migrations](adr/0053-le-gate-de-migrations-s-execute-depuis-main-et-seul-un-mainteneur-approuve-un-contenu-de-migrations.md) — _explanation · Proposé_ — Depuis quel code le gate s'exécute-t-il, qui peut approuver une migration non additive, et comment l'approbation reste-t-elle liée au contenu relu ?
+- [0055 — Un abonnement payé par un non-propriétaire est révoqué et remboursé automatiquement](adr/0055-un-abonnement-paye-par-un-non-proprietaire-est-revoque-et-rembourse-automatiquement.md) — _explanation · Accepté_ — Que fait dezyn, chez Polar, d'un nouvel abonnement dont le payeur n'est plus propriétaire de l'espace ?
 - [Décisions d'architecture](adr/README.md) — _explanation_ — Format et circuit : voir `.claude/rules/adr-et-spikes.md`.
 
 ## Spikes — recherche bornée

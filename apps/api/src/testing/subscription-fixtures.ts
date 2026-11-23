@@ -194,8 +194,46 @@ export const seedMember = (
     spaceId,
     userId,
     role,
-  }: { readonly spaceId: string; readonly userId: string; readonly role: "owner" | "editor" },
+    closedAt = null,
+  }: {
+    readonly spaceId: string;
+    readonly userId: string;
+    readonly role: "owner" | "editor";
+    readonly closedAt?: Date | null;
+  },
 ) =>
+  db.orm.insert(schema.spaceMember).values({
+    id: randomUUID(),
+    spaceId,
+    userId,
+    role,
+    joinedAt: new Date(),
+    closedAt,
+    closedReason: closedAt === null ? null : "left",
+  });
+
+export const refusedSubscriptionsOf = (db: PostgresDatabase, spaceId: string) =>
   db.orm
-    .insert(schema.spaceMember)
-    .values({ id: randomUUID(), spaceId, userId, role, joinedAt: new Date() });
+    .select()
+    .from(schema.spaceRefusedSubscription)
+    .where(eq(schema.spaceRefusedSubscription.spaceId, spaceId));
+
+export const seedRefusedSubscription = (
+  db: PostgresDatabase,
+  {
+    spaceId,
+    payerId,
+    settlingSince = null,
+  }: {
+    readonly spaceId: string;
+    readonly payerId: string;
+    readonly settlingSince?: Date | null;
+  },
+) =>
+  db.orm.insert(schema.spaceRefusedSubscription).values({
+    polarSubscriptionId: "0d3f6a2b-7c1e-4b8a-9f2d-5e6a7b8c9d0e",
+    spaceId,
+    payerId,
+    receivedAt: MODIFIED_AT,
+    settlingSince,
+  });

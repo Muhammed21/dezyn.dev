@@ -10,6 +10,7 @@ import { openPortal } from "./application/open-portal.ts";
 import { payerDeletedAccount, payerLeaves } from "./application/payer-leaves.ts";
 import { receiveNotification } from "./application/receive-notification.ts";
 import { replayCancellations } from "./application/replay-cancellations.ts";
+import { replayRefusals } from "./application/settle-refusals.ts";
 import { startCheckout } from "./application/start-checkout.ts";
 import type { SubscriptionUseCases } from "./application/subscription-use-cases.ts";
 import type { DepartedSubscription } from "./domain/payer-departure.ts";
@@ -24,6 +25,7 @@ import {
   paidSubscriptionsOn,
   postgresCancelRequests,
   postgresPayerDepartures,
+  postgresRefusals,
   postgresSpacePayers,
   postgresSpacePlans,
   postgresSpaceSubscriptions,
@@ -56,15 +58,28 @@ export const payerAccountDeletionOn = (tx: PostgresTransaction) => ({
   },
 });
 
-export const replayPendingCancellations = ({
+export const replayPendingPolarRequests = ({
   db,
   merchant,
   log,
+  clock = () => new Date(),
 }: {
   readonly db: PostgresDatabase;
   readonly merchant: MerchantOfRecord;
   readonly log: LogSink;
-}) => replayCancellations({ requests: postgresCancelRequests(db), merchant, log });
+  readonly clock?: Clock;
+}) => {
+  const cancellations = replayCancellations({
+    requests: postgresCancelRequests(db),
+    merchant,
+    log,
+  });
+  const refusals = replayRefusals({ refusals: postgresRefusals(db), merchant, log, now: clock });
+  return async (): Promise<void> => {
+    await cancellations();
+    await refusals();
+  };
+};
 
 export type Billing = {
   readonly merchant: MerchantOfRecord;
@@ -129,6 +144,8 @@ export const subscriptionModule = ({
           ? unavailableNotificationReader
           : polarNotificationReader({ webhookSecret: billing.webhookSecret }),
       unitOfWork: postgresSubscriptionUnitOfWork(db),
+      refusals: postgresRefusals(db),
+      merchant: billing?.merchant ?? unavailableMerchantOfRecord,
       log,
       now: clock,
     }),

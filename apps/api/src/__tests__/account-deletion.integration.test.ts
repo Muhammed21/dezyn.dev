@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import { createPostgresDatabase, type PostgresDatabase } from "#db";
 import { orphanSpacePurge } from "#modules/space/space-module.ts";
-import { replayPendingCancellations } from "#modules/subscription/subscription-module.ts";
+import { replayPendingPolarRequests } from "#modules/subscription/subscription-module.ts";
 import {
   ADA,
   type App,
@@ -552,7 +552,7 @@ describe("la suppression du payeur résilie chaque abonnement qu'il paie en fin 
 
         await deleteAccount(app, await signInCookie(app, ADA));
         const replayed = makeMerchantOfRecord();
-        await replayPendingCancellations({
+        await replayPendingPolarRequests({
           db,
           merchant: replayed.merchant,
           log: () => undefined,

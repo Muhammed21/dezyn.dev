@@ -126,6 +126,8 @@ describe("appliquer l'état d'un abonnement reçu de Polar (ADR 0050 §4)", () =
 
     expect(
       subscriptionChangeOf({
+        payerIsOwner: true,
+        refused: false,
         storedBytes: STORED_BYTES,
         stored: undefined,
         incoming,
@@ -146,7 +148,14 @@ describe("appliquer l'état d'un abonnement reçu de Polar (ADR 0050 §4)", () =
     });
 
     expect(
-      subscriptionChangeOf({ storedBytes: STORED_BYTES, stored, incoming, plan: "team" }),
+      subscriptionChangeOf({
+        payerIsOwner: true,
+        refused: false,
+        storedBytes: STORED_BYTES,
+        stored,
+        incoming,
+        plan: "team",
+      }),
     ).toEqual({
       kind: "applied",
       subscription: withoutEndStorage(incoming),
@@ -157,6 +166,8 @@ describe("appliquer l'état d'un abonnement reçu de Polar (ADR 0050 §4)", () =
   it("le même état reçu deux fois ne s'applique qu'une fois", () => {
     expect(
       subscriptionChangeOf({
+        payerIsOwner: true,
+        refused: false,
         storedBytes: STORED_BYTES,
         stored: makeRecorded(),
         incoming: makeSubscription(),
@@ -170,7 +181,14 @@ describe("appliquer l'état d'un abonnement reçu de Polar (ADR 0050 §4)", () =
     const incoming = makeSubscription({ modifiedAt: secondsAfter(MODIFIED_AT, -1) });
 
     expect(
-      subscriptionChangeOf({ storedBytes: STORED_BYTES, stored, incoming, plan: "team" }),
+      subscriptionChangeOf({
+        payerIsOwner: true,
+        refused: false,
+        storedBytes: STORED_BYTES,
+        stored,
+        incoming,
+        plan: "team",
+      }),
     ).toEqual({ kind: "stale" });
   });
 
@@ -182,7 +200,14 @@ describe("appliquer l'état d'un abonnement reçu de Polar (ADR 0050 §4)", () =
     });
 
     expect(
-      subscriptionChangeOf({ storedBytes: STORED_BYTES, stored, incoming, plan: "team" }),
+      subscriptionChangeOf({
+        payerIsOwner: true,
+        refused: false,
+        storedBytes: STORED_BYTES,
+        stored,
+        incoming,
+        plan: "team",
+      }),
     ).toEqual({
       kind: "other_subscription",
       storedId: "polar-subscription-a",
@@ -197,7 +222,14 @@ describe("appliquer l'état d'un abonnement reçu de Polar (ADR 0050 §4)", () =
     });
 
     expect(
-      subscriptionChangeOf({ storedBytes: STORED_BYTES, stored, incoming, plan: "team" }),
+      subscriptionChangeOf({
+        payerIsOwner: true,
+        refused: false,
+        storedBytes: STORED_BYTES,
+        stored,
+        incoming,
+        plan: "team",
+      }),
     ).toEqual({
       kind: "other_subscription",
       storedId: "polar-subscription-a",
@@ -215,7 +247,16 @@ describe("appliquer l'état d'un abonnement reçu de Polar (ADR 0050 §4)", () =
       modifiedAt: secondsAfter(MODIFIED_AT, 60),
     });
 
-    expect(subscriptionChangeOf({ storedBytes: 100, stored, incoming, plan: "free" })).toEqual({
+    expect(
+      subscriptionChangeOf({
+        payerIsOwner: true,
+        refused: false,
+        storedBytes: 100,
+        stored,
+        incoming,
+        plan: "free",
+      }),
+    ).toEqual({
       kind: "applied",
       subscription: withoutEndStorage(incoming),
       planChange: { before: "free", after: "team" },
@@ -227,7 +268,14 @@ describe("appliquer l'état d'un abonnement reçu de Polar (ADR 0050 §4)", () =
     const incoming = makeSubscription({ modifiedAt: secondsAfter(MODIFIED_AT, 1) });
 
     expect(
-      subscriptionChangeOf({ storedBytes: STORED_BYTES, stored, incoming, plan: "free" }),
+      subscriptionChangeOf({
+        payerIsOwner: true,
+        refused: false,
+        storedBytes: STORED_BYTES,
+        stored,
+        incoming,
+        plan: "free",
+      }),
     ).toEqual({
       kind: "applied",
       subscription: withoutEndStorage(incoming),
@@ -242,6 +290,8 @@ describe("la fin d'un abonnement rend l'espace Free et enregistre son stockage (
   it("une révocation rend l'espace Free, même au-dessus des limites Free, et enregistre son stockage", () => {
     expect(
       subscriptionChangeOf({
+        payerIsOwner: true,
+        refused: false,
         stored: makeRecorded(),
         incoming: revoked,
         plan: "team",
@@ -256,7 +306,14 @@ describe("la fin d'un abonnement rend l'espace Free et enregistre son stockage (
 
   it("un abonnement terminé dès son premier état enregistre aussi le stockage", () => {
     expect(
-      subscriptionChangeOf({ stored: undefined, incoming: revoked, plan: "free", storedBytes: 0 }),
+      subscriptionChangeOf({
+        payerIsOwner: true,
+        refused: false,
+        stored: undefined,
+        incoming: revoked,
+        plan: "free",
+        storedBytes: 0,
+      }),
     ).toEqual({
       kind: "applied",
       subscription: { ...revoked, storedBytesAtEnd: 0 },
@@ -269,6 +326,8 @@ describe("la fin d'un abonnement rend l'espace Free et enregistre son stockage (
 
     expect(
       subscriptionChangeOf({
+        payerIsOwner: true,
+        refused: false,
         stored: makeRecorded({ ...revoked, storedBytesAtEnd: STORED_BYTES }),
         incoming: later,
         plan: "free",
@@ -290,6 +349,8 @@ describe("la fin d'un abonnement rend l'espace Free et enregistre son stockage (
 
     expect(
       subscriptionChangeOf({
+        payerIsOwner: true,
+        refused: false,
         stored: makeRecorded({ ...revoked, storedBytesAtEnd: STORED_BYTES }),
         incoming: next,
         plan: "team",
@@ -315,6 +376,8 @@ describe("un abonnement dont le payeur a supprimé son compte reste suivi (ADR 0
 
     expect(
       subscriptionChangeOf({
+        payerIsOwner: true,
+        refused: false,
         stored: makeRecorded(WITHOUT_PAYER),
         incoming,
         plan: "team",
@@ -336,6 +399,8 @@ describe("un abonnement dont le payeur a supprimé son compte reste suivi (ADR 0
 
     expect(
       subscriptionChangeOf({
+        payerIsOwner: true,
+        refused: false,
         stored: makeRecorded(WITHOUT_PAYER),
         incoming,
         plan: "team",
@@ -351,6 +416,8 @@ describe("un abonnement dont le payeur a supprimé son compte reste suivi (ADR 0
   it("un premier état dont le payeur n'existe pas est refusé", () => {
     expect(
       subscriptionChangeOf({
+        payerIsOwner: true,
+        refused: false,
         stored: undefined,
         incoming: makeSubscription(WITHOUT_PAYER),
         plan: "free",
@@ -362,11 +429,162 @@ describe("un abonnement dont le payeur a supprimé son compte reste suivi (ADR 0
   it("un nouvel abonnement dont le payeur n'existe pas ne remplace pas un abonnement terminé", () => {
     expect(
       subscriptionChangeOf({
+        payerIsOwner: true,
+        refused: false,
         stored: makeRecorded({ ...WITHOUT_PAYER, id: "polar-subscription-0", status: "ended" }),
         incoming: makeSubscription({ ...WITHOUT_PAYER, modifiedAt: secondsAfter(MODIFIED_AT, 60) }),
         plan: "free",
         storedBytes: STORED_BYTES,
       }),
     ).toEqual({ kind: "unknown_payer" });
+  });
+});
+
+describe("le payeur d'un nouvel abonnement est un propriétaire de l'espace (ADR 0050 §3)", () => {
+  const NOT_OWNER = { payerIsOwner: false };
+
+  it("un premier abonnement payé par un utilisateur qui n'est pas propriétaire est refusé", () => {
+    expect(
+      subscriptionChangeOf({
+        ...NOT_OWNER,
+        refused: false,
+        stored: undefined,
+        incoming: makeSubscription(),
+        plan: "free",
+        storedBytes: STORED_BYTES,
+      }),
+    ).toEqual({ kind: "payer_not_owner" });
+  });
+
+  it("un nouvel abonnement payé par un non-propriétaire ne remplace pas un abonnement terminé", () => {
+    expect(
+      subscriptionChangeOf({
+        ...NOT_OWNER,
+        refused: false,
+        stored: makeRecorded({ id: "polar-subscription-0", status: "ended" }),
+        incoming: makeSubscription({ modifiedAt: secondsAfter(MODIFIED_AT, 60) }),
+        plan: "free",
+        storedBytes: STORED_BYTES,
+      }),
+    ).toEqual({ kind: "payer_not_owner" });
+  });
+
+  it("une révocation de l'abonnement enregistré s'applique, même si son payeur n'est plus propriétaire", () => {
+    const incoming = makeSubscription({
+      status: "ended",
+      modifiedAt: secondsAfter(MODIFIED_AT, 60),
+    });
+
+    expect(
+      subscriptionChangeOf({
+        ...NOT_OWNER,
+        refused: false,
+        stored: makeRecorded(),
+        incoming,
+        plan: "team",
+        storedBytes: STORED_BYTES,
+      }),
+    ).toEqual({
+      kind: "applied",
+      subscription: { ...incoming, storedBytesAtEnd: STORED_BYTES },
+      planChange: { before: "team", after: "free" },
+    });
+  });
+
+  it("un renouvellement de l'abonnement enregistré s'applique, même si son payeur n'est plus propriétaire", () => {
+    const incoming = makeSubscription({
+      currentPeriodEnd: new Date("2027-01-22T10:00:00.000Z"),
+      modifiedAt: secondsAfter(MODIFIED_AT, 60),
+    });
+
+    expect(
+      subscriptionChangeOf({
+        ...NOT_OWNER,
+        refused: false,
+        stored: makeRecorded(),
+        incoming,
+        plan: "team",
+        storedBytes: STORED_BYTES,
+      }),
+    ).toEqual({
+      kind: "applied",
+      subscription: withoutEndStorage(incoming),
+      planChange: undefined,
+    });
+  });
+
+  it("un payeur qui n'existe pas reste un payeur inconnu", () => {
+    expect(
+      subscriptionChangeOf({
+        ...NOT_OWNER,
+        refused: false,
+        stored: undefined,
+        incoming: makeSubscription({ payerId: undefined }),
+        plan: "free",
+        storedBytes: STORED_BYTES,
+      }),
+    ).toEqual({ kind: "unknown_payer" });
+  });
+
+  it("un nouvel abonnement payé par un non-propriétaire, alors qu'un autre est en cours, reste un autre abonnement", () => {
+    expect(
+      subscriptionChangeOf({
+        ...NOT_OWNER,
+        refused: false,
+        stored: makeRecorded({ id: "polar-subscription-0" }),
+        incoming: makeSubscription({ modifiedAt: secondsAfter(MODIFIED_AT, 60) }),
+        plan: "team",
+        storedBytes: STORED_BYTES,
+      }),
+    ).toEqual({ kind: "other_subscription", storedId: "polar-subscription-0" });
+  });
+});
+
+describe("un abonnement refusé le reste, même si son payeur redevient propriétaire (ADR 0055)", () => {
+  const REFUSED = { refused: true };
+
+  it("un nouvel état d'un abonnement refusé, payé par un propriétaire, est encore refusé", () => {
+    expect(
+      subscriptionChangeOf({
+        ...REFUSED,
+        payerIsOwner: true,
+        stored: undefined,
+        incoming: makeSubscription({ modifiedAt: secondsAfter(MODIFIED_AT, 60) }),
+        plan: "free",
+        storedBytes: STORED_BYTES,
+      }),
+    ).toEqual({ kind: "payer_not_owner" });
+  });
+
+  it("un abonnement refusé ne remplace pas un abonnement terminé", () => {
+    expect(
+      subscriptionChangeOf({
+        ...REFUSED,
+        payerIsOwner: true,
+        stored: makeRecorded({ id: "polar-subscription-0", status: "ended" }),
+        incoming: makeSubscription({ modifiedAt: secondsAfter(MODIFIED_AT, 60) }),
+        plan: "free",
+        storedBytes: STORED_BYTES,
+      }),
+    ).toEqual({ kind: "payer_not_owner" });
+  });
+
+  it("l'abonnement enregistré s'applique toujours, même marqué refusé", () => {
+    const incoming = makeSubscription({ modifiedAt: secondsAfter(MODIFIED_AT, 60) });
+
+    expect(
+      subscriptionChangeOf({
+        ...REFUSED,
+        payerIsOwner: true,
+        stored: makeRecorded(),
+        incoming,
+        plan: "team",
+        storedBytes: STORED_BYTES,
+      }),
+    ).toEqual({
+      kind: "applied",
+      subscription: withoutEndStorage(incoming),
+      planChange: undefined,
+    });
   });
 });

@@ -1,7 +1,7 @@
 import { createPostgresDatabase } from "#db";
 import {
   polarBilling,
-  replayPendingCancellations,
+  replayPendingPolarRequests,
 } from "#modules/subscription/subscription-module.ts";
 import { readWorkerConfig } from "#platform/api-config.ts";
 import { createJsonLineSink } from "#platform/json-line-sink.ts";
@@ -113,7 +113,7 @@ export const createWorker = ({
       }
       const db = createPostgresDatabase({ url: databaseUrl, log });
       try {
-        await replayPendingCancellations({
+        await replayPendingPolarRequests({
           db,
           merchant: polarBilling({ polar, log }).merchant,
           log,

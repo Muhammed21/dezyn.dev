@@ -161,16 +161,31 @@ export const composeModules = ({
       leaveSpace: async (key: MembershipKey) => {
         const left = await spaces.leaveSpace(key);
         if (left.ok) {
-          await subscriptions.payerLeaves(key);
+          await subscriptions.payerLeaves({ ...key, reason: "left" });
         }
         return left;
       },
       removeMember: async (request: Parameters<typeof spaces.removeMember>[0]) => {
         const removed = await spaces.removeMember(request);
         if (removed.ok) {
-          await subscriptions.payerLeaves({ spaceId: request.spaceId, userId: request.memberId });
+          await subscriptions.payerLeaves({
+            spaceId: request.spaceId,
+            userId: request.memberId,
+            reason: "left",
+          });
         }
         return removed;
+      },
+      changeRole: async (request: Parameters<typeof spaces.changeRole>[0]) => {
+        const changed = await spaces.changeRole(request);
+        if (changed.ok && changed.value.role === "editor") {
+          await subscriptions.payerLeaves({
+            spaceId: request.spaceId,
+            userId: request.memberId,
+            reason: "demoted",
+          });
+        }
+        return changed;
       },
     },
     subscriptions,

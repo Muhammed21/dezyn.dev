@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { and, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import type { PostgresDatabase, PostgresTransaction } from "#db";
@@ -11,6 +11,7 @@ import type { SpacePayers } from "../application/open-portal.ts";
 import type { PayerDepartures } from "../application/payer-leaves.ts";
 import type { SubscriptionUnitOfWork } from "../application/receive-notification.ts";
 import type { CancelRequests } from "../application/replay-cancellations.ts";
+import type { Refusals } from "../application/settle-refusals.ts";
 import type { SpacePlans } from "../application/start-checkout.ts";
 import {
   CANCELABLE_STATUSES,
@@ -19,7 +20,15 @@ import {
 } from "../domain/payer-departure.ts";
 import { SUBSCRIPTION_STATUSES } from "../domain/subscription.ts";
 
-const { identityUser, project, space, spaceMember, spacePlanChange, spaceSubscription } = schema;
+const {
+  identityUser,
+  project,
+  space,
+  spaceMember,
+  spacePlanChange,
+  spaceRefusedSubscription,
+  spaceSubscription,
+} = schema;
 
 const StoredPlan = z.enum(PLANS);
 
@@ -229,6 +238,38 @@ export const postgresSubscriptionUnitOfWork = (db: PostgresDatabase): Subscripti
             .where(eq(identityUser.id, userId));
           return user !== undefined;
         },
+        isOpenOwner: async ({ spaceId, userId }) => {
+          const [owner] = await tx
+            .select({ id: spaceMember.id })
+            .from(spaceMember)
+            .where(
+              and(
+                eq(spaceMember.spaceId, spaceId),
+                eq(spaceMember.userId, userId),
+                eq(spaceMember.role, "owner"),
+                isNull(spaceMember.closedAt),
+              ),
+            );
+          return owner !== undefined;
+        },
+        isRefused: async (subscriptionId) => {
+          const [refused] = await tx
+            .select({ id: spaceRefusedSubscription.polarSubscriptionId })
+            .from(spaceRefusedSubscription)
+            .where(eq(spaceRefusedSubscription.polarSubscriptionId, subscriptionId));
+          return refused !== undefined;
+        },
+        refuse: async ({ subscriptionId, spaceId, payerId, at }) => {
+          await tx
+            .insert(spaceRefusedSubscription)
+            .values({
+              polarSubscriptionId: subscriptionId,
+              spaceId,
+              payerId: payerId ?? null,
+              receivedAt: at,
+            })
+            .onConflictDoNothing();
+        },
         storedBytesOf: async (spaceId) => {
           const [stored] = await tx
             .select({ storedBytes: sql`coalesce(sum(${project.storedBytes}), 0)` })
@@ -279,4 +320,48 @@ export const postgresSubscriptionUnitOfWork = (db: PostgresDatabase): Subscripti
         },
       }),
     ),
+});
+
+const unsettled = or(
+  isNull(spaceRefusedSubscription.revokedAt),
+  isNull(spaceRefusedSubscription.refundedAt),
+);
+
+export const postgresRefusals = (db: PostgresDatabase): Refusals => ({
+  pending: () =>
+    db.orm
+      .select({
+        spaceId: spaceRefusedSubscription.spaceId,
+        subscriptionId: spaceRefusedSubscription.polarSubscriptionId,
+      })
+      .from(spaceRefusedSubscription)
+      .where(unsettled),
+  claim: async ({ subscriptionId, at, staleBefore }) => {
+    const [claimed] = await db.orm
+      .update(spaceRefusedSubscription)
+      .set({ settlingSince: at })
+      .where(
+        and(
+          eq(spaceRefusedSubscription.polarSubscriptionId, subscriptionId),
+          unsettled,
+          or(
+            isNull(spaceRefusedSubscription.settlingSince),
+            lt(spaceRefusedSubscription.settlingSince, staleBefore),
+          ),
+        ),
+      )
+      .returning({
+        revokedAt: spaceRefusedSubscription.revokedAt,
+        refundedAt: spaceRefusedSubscription.refundedAt,
+      });
+    return claimed === undefined
+      ? undefined
+      : { revoked: claimed.revokedAt !== null, refunded: claimed.refundedAt !== null };
+  },
+  release: async ({ subscriptionId, revokedAt, refundedAt }) => {
+    await db.orm
+      .update(spaceRefusedSubscription)
+      .set({ settlingSince: null, revokedAt, refundedAt })
+      .where(eq(spaceRefusedSubscription.polarSubscriptionId, subscriptionId));
+  },
 });

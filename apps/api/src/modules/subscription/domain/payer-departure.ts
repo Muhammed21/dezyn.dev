@@ -10,7 +10,7 @@ export type DepartedSubscription = {
   readonly spaceName: string;
 };
 
-export type PayerDepartureReason = "left" | "account_deleted";
+export type PayerDepartureReason = "left" | "demoted" | "account_deleted";
 
 export type PayerDepartureNotice = { readonly subject: string; readonly text: string };
 
@@ -50,9 +50,11 @@ const departureOf = ({
   readonly spaceName: string;
   readonly end: string;
 }) =>
-  reason === "left"
-    ? `${payerName} a quitté l'espace « ${spaceName} ». ${payerName} en payait l'abonnement Team : il est résilié et prend fin ${end}.`
-    : `${payerName} a supprimé son compte dezyn. ${payerName} payait l'abonnement Team de l'espace « ${spaceName} » : il est résilié et prend fin ${end}.`;
+  ({
+    left: `${payerName} a quitté l'espace « ${spaceName} ». ${payerName} en payait l'abonnement Team : il est résilié et prend fin ${end}.`,
+    demoted: `${payerName} n'est plus propriétaire de l'espace « ${spaceName} ». ${payerName} en payait l'abonnement Team : il est résilié et prend fin ${end}.`,
+    account_deleted: `${payerName} a supprimé son compte dezyn. ${payerName} payait l'abonnement Team de l'espace « ${spaceName} » : il est résilié et prend fin ${end}.`,
+  })[reason];
 
 const noticeOf = (
   { payerName, spaceId, spaceName, currentPeriodEnd }: DepartedSubscription,

@@ -5,6 +5,7 @@ import {
   type DepartedSubscription,
   type PayerDeparture,
   payerDepartureOf,
+  type PayerDepartureReason,
 } from "../domain/payer-departure.ts";
 import type { MerchantOfRecord } from "./merchant-of-record.ts";
 import { type CancelRequests, sendCancellation } from "./replay-cancellations.ts";
@@ -60,14 +61,17 @@ export const payerLeaves =
   async ({
     spaceId,
     userId,
+    reason,
   }: {
     readonly spaceId: string;
     readonly userId: string;
+    readonly reason: Exclude<PayerDepartureReason, "account_deleted">;
   }): Promise<void> => {
     const departure = payerDepartureOf({
       subscription: await dependencies.departures.subscriptionOf(spaceId),
       leaverId: userId,
       webUrl: dependencies.webUrl,
+      reason,
     });
     if (departure !== undefined) {
       await announceDeparture(dependencies)({ spaceId, departure });

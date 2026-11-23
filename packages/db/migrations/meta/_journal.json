@@ -204,6 +204,13 @@
       "when": 1795438390348,
       "tag": "0028_orphan_space_invitations",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1795446892879,
+      "tag": "0029_space_refused_subscription",
+      "breakpoints": true
     }
   ]
 }
