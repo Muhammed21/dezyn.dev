@@ -34,33 +34,75 @@ const withoutEndStorage = (subscription: SpaceSubscription): RecordedSubscriptio
   storedBytesAtEnd: undefined,
 });
 
+const UPDATED_EVENT = "subscription.updated";
+
+const EVENTS_OTHER_THAN_REVOKED = [
+  "subscription.active",
+  "subscription.past_due",
+  "subscription.updated",
+  "subscription.canceled",
+  "subscription.uncanceled",
+];
+
+const withAndWithoutCancelAtPeriodEnd = <T extends object>(cases: readonly T[]) =>
+  cases.flatMap((value) =>
+    [false, true].map((cancelAtPeriodEnd) => ({ ...value, cancelAtPeriodEnd })),
+  );
+
 describe("le statut d'un abonnement selon Polar (ADR 0050 §4)", () => {
   it("un abonnement actif est actif", () => {
-    expect(subscriptionStatusOf({ status: "active", cancelAtPeriodEnd: false })).toBe("active");
+    expect(
+      subscriptionStatusOf({ type: UPDATED_EVENT, status: "active", cancelAtPeriodEnd: false }),
+    ).toBe("active");
   });
 
   it("un abonnement actif résilié en fin de période est en résiliation", () => {
-    expect(subscriptionStatusOf({ status: "active", cancelAtPeriodEnd: true })).toBe("canceling");
+    expect(
+      subscriptionStatusOf({ type: UPDATED_EVENT, status: "active", cancelAtPeriodEnd: true }),
+    ).toBe("canceling");
   });
-
-  it.each([false, true])(
-    "un abonnement annulé par Polar est terminé, résiliation en fin de période ou non (%s)",
-    (cancelAtPeriodEnd) => {
-      expect(subscriptionStatusOf({ status: "canceled", cancelAtPeriodEnd })).toBe("ended");
-    },
-  );
 
   it.each([false, true])(
     "un abonnement en retard de paiement est en retard de paiement (résiliation : %s)",
     (cancelAtPeriodEnd) => {
-      expect(subscriptionStatusOf({ status: "past_due", cancelAtPeriodEnd })).toBe("past_due");
+      expect(
+        subscriptionStatusOf({ type: UPDATED_EVENT, status: "past_due", cancelAtPeriodEnd }),
+      ).toBe("past_due");
     },
   );
 
-  it.each(["trialing", "incomplete", "paused", "un-statut-inconnu"])(
+  it.each(
+    withAndWithoutCancelAtPeriodEnd(
+      ["canceled", "unpaid", "incomplete_expired"].flatMap((status) =>
+        EVENTS_OTHER_THAN_REVOKED.map((type) => ({ type, status })),
+      ),
+    ),
+  )(
+    "un abonnement au statut de fin $status est terminé, quel que soit l'événement ($type, résiliation : $cancelAtPeriodEnd)",
+    (event) => {
+      expect(subscriptionStatusOf(event)).toBe("ended");
+    },
+  );
+
+  it.each(
+    withAndWithoutCancelAtPeriodEnd(
+      ["active", "past_due", "canceled", "unpaid", "incomplete_expired", "un-statut-inconnu"].map(
+        (status) => ({ type: "subscription.revoked", status }),
+      ),
+    ),
+  )(
+    "un abonnement révoqué par Polar est terminé, quel que soit son statut ($status, résiliation : $cancelAtPeriodEnd)",
+    (event) => {
+      expect(subscriptionStatusOf(event)).toBe("ended");
+    },
+  );
+
+  it.each(["trialing", "incomplete", "paused", "trial_ended", "un-statut-inconnu"])(
     "le statut %s n'est pas reconnu",
     (status) => {
-      expect(subscriptionStatusOf({ status, cancelAtPeriodEnd: false })).toBeUndefined();
+      expect(
+        subscriptionStatusOf({ type: UPDATED_EVENT, status, cancelAtPeriodEnd: false }),
+      ).toBeUndefined();
     },
   );
 });

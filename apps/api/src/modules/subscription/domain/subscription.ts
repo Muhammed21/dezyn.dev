@@ -28,18 +28,26 @@ export type SubscriptionChange =
       readonly planChange: PlanChange | undefined;
     };
 
+const POLAR_ENDED_STATUSES: ReadonlySet<string> = new Set([
+  "canceled",
+  "unpaid",
+  "incomplete_expired",
+]);
+
 export const subscriptionStatusOf = ({
+  type,
   status,
   cancelAtPeriodEnd,
 }: {
+  readonly type: string;
   readonly status: string;
   readonly cancelAtPeriodEnd: boolean;
 }): SubscriptionStatus | undefined => {
+  if (type === "subscription.revoked" || POLAR_ENDED_STATUSES.has(status)) {
+    return "ended";
+  }
   if (status === "past_due") {
     return "past_due";
-  }
-  if (status === "canceled") {
-    return "ended";
   }
   if (status !== "active") {
     return undefined;
