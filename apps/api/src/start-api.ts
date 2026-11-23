@@ -34,6 +34,7 @@ export const startApi = async ({
   smtp,
   webUrl,
   polar,
+  serverTiming,
 }: {
   readonly databaseUrl: string;
   readonly migration: Migration;
@@ -46,6 +47,7 @@ export const startApi = async ({
   readonly smtp: { readonly host: string; readonly port: number; readonly from: string };
   readonly webUrl: string;
   readonly polar?: PolarConfig;
+  readonly serverTiming: boolean;
 }): Promise<RunningApi> => {
   await assertSchemaVersion({ connectionString: databaseUrl, migration });
   const db = createPostgresDatabase({ url: databaseUrl, log });
@@ -58,6 +60,7 @@ export const startApi = async ({
     baseURL,
     trustedIpHeader,
     webUrl,
+    serverTiming,
     ...(polar === undefined ? {} : { polar }),
   });
 

@@ -13,6 +13,7 @@ const CONFIG = {
   trustedIpHeader: "x-forwarded-for",
   smtp: { host: "127.0.0.1", port: 1025, from: "dezyn <no-reply@dezyn.test>" },
   webUrl: "http://127.0.0.1:5173",
+  serverTiming: false,
 };
 
 describe("startApi", () => {
@@ -50,6 +51,30 @@ describe("startApi", () => {
         await api.close();
       }
     }));
+
+  it.each([
+    [false, null],
+    [true, expect.stringMatching(/^db;dur=[\d.]+;desc="\d+ requetes", /)],
+  ])("serverTiming=%s : Server-Timing de la sonde de santé vaut %o", (serverTiming, header) =>
+    withThrowawayDatabase(async ({ migratorUrl, appUrl }) => {
+      await migrate({ connectionString: migratorUrl });
+      const api = await startApi({
+        databaseUrl: appUrl,
+        migration: LATEST_MIGRATION,
+        port: 0,
+        log: () => undefined,
+        ...CONFIG,
+        serverTiming,
+      });
+      try {
+        const response = await fetch(new URL("/health", api.url));
+
+        expect(response.headers.get("server-timing")).toEqual(header);
+      } finally {
+        await api.close();
+      }
+    }),
+  );
 
   it("n'écoute plus une fois arrêtée", () =>
     withThrowawayDatabase(async ({ migratorUrl, appUrl }) => {

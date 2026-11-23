@@ -32,6 +32,7 @@ describe("l'API lit sa configuration dans l'environnement", () => {
         smtp: { host: "127.0.0.1", port: 1025, from: "dezyn <no-reply@dezyn.test>" },
         webUrl: "http://127.0.0.1:5173",
         port: 3000,
+        serverTiming: false,
       }),
     );
   });
@@ -107,6 +108,7 @@ describe("le Worker lit sa configuration dans ses bindings", () => {
         baseURL: "https://api.dezyn.dev",
         trustedIpHeader: "cf-connecting-ip",
         webUrl: "https://dezyn.dev",
+        serverTiming: false,
       }),
     );
   });
@@ -261,6 +263,32 @@ describe.each([
         "BETTER_AUTH_URL : URL http(s) attendue",
         "BETTER_AUTH_SECRET_2 : 32 caractères au moins",
       ]),
+    );
+  });
+});
+
+describe.each([
+  ["l'API", (timing: Readonly<Record<string, string>>) => readApiConfig(makeEnv(timing))],
+  [
+    "le Worker",
+    (timing: Readonly<Record<string, string>>) => readWorkerConfig(makeBindings(timing)),
+  ],
+])("%s n'envoie Server-Timing que sur réglage explicite", (_, readConfig) => {
+  it("sans SERVER_TIMING, les réponses ne portent pas Server-Timing", () => {
+    expect(readConfig({})).toMatchObject(ok({ serverTiming: false }));
+  });
+
+  it("SERVER_TIMING=true fait porter Server-Timing aux réponses", () => {
+    expect(readConfig({ SERVER_TIMING: "true" })).toMatchObject(ok({ serverTiming: true }));
+  });
+
+  it("SERVER_TIMING=false ne fait pas porter Server-Timing aux réponses", () => {
+    expect(readConfig({ SERVER_TIMING: "false" })).toMatchObject(ok({ serverTiming: false }));
+  });
+
+  it.each(["", "1", "oui", "TRUE", "on"])("SERVER_TIMING=%j est refusée", (value) => {
+    expect(readConfig({ SERVER_TIMING: value })).toEqual(
+      err(["SERVER_TIMING : true ou false attendu"]),
     );
   });
 });

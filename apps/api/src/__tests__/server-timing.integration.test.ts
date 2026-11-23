@@ -36,7 +36,7 @@ const readTokens = (
 
 const readUnknownPage = (app: App) => app.request(`${BASE_URL}/page-inconnue`);
 
-describe("chaque réponse de l'API porte Server-Timing", () => {
+describe("Server-Timing activé, chaque réponse de l'API le porte", () => {
   it("la lecture des tokens d'un projet annonce le temps passé en base et ses requêtes SQL", () =>
     withIdentityApp(async (app, db) => {
       const project = await seedProject(app, db);

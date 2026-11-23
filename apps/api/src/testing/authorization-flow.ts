@@ -143,6 +143,7 @@ export const startIdentityApp = async ({
         proposals,
         idempotent,
         projectAccess,
+        serverTiming: true,
       }),
       db,
       migratorUrl: database.migratorUrl,
