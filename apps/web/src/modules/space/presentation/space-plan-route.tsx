@@ -161,7 +161,22 @@ const SubscriptionDetails = ({
   readonly openPortal: OpenPortal;
   readonly goTo: GoTo;
 }) => {
-  const { payer } = subscription;
+  const { payer, currentPeriodEnd } = subscription;
+  if (!payer.you && payer.left) {
+    const end =
+      currentPeriodEnd === undefined
+        ? "à la fin de la période payée"
+        : `le ${PERIOD_DATE.format(currentPeriodEnd)}`;
+    return (
+      <section aria-labelledby="abonnement">
+        <h2 id="abonnement">Abonnement</h2>
+        <p>
+          {payer.name} ({payer.email}), qui payait l'abonnement, a quitté l'espace : le plan Team
+          prend fin {end}. Souscrivez à nouveau au plan Team après cette date pour le garder.
+        </p>
+      </section>
+    );
+  }
   return (
     <section aria-labelledby="abonnement">
       <h2 id="abonnement">Abonnement</h2>

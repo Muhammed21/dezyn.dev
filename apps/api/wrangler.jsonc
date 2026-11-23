@@ -5,6 +5,7 @@
   "compatibility_date": "2026-10-20",
   "compatibility_flags": ["nodejs_compat"],
   "routes": [{ "pattern": "api.dezyn.dev", "custom_domain": true }],
+  "triggers": { "crons": ["*/15 * * * *"] },
   "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "ed807e2d1a7e437f9a17bb749123c6d2" }],
   "vars": {
     "BETTER_AUTH_URL": "https://api.dezyn.dev",
@@ -20,6 +21,7 @@
   "env": {
     "preview": {
       "routes": [],
+      "triggers": { "crons": [] },
       "hyperdrive": [],
       "workers_dev": true,
       "preview_urls": true,

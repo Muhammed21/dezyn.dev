@@ -1,14 +1,18 @@
 import { and, eq, isNull } from "drizzle-orm";
 
-import type { PostgresDatabase } from "#db";
+import type { PostgresDatabase, PostgresTransaction } from "#db";
 import { schema } from "@repo/db";
 
 import type { MemberManagement } from "../application/manage-members.ts";
+import type { DepartureListener } from "../application/member-departure.ts";
 import { StoredMembership } from "./stored-rows.ts";
 
 const { space, spaceMember } = schema;
 
-export const postgresMemberManagement = (db: PostgresDatabase): MemberManagement => ({
+export const postgresMemberManagement = (
+  db: PostgresDatabase,
+  departureOn: (tx: PostgresTransaction) => DepartureListener,
+): MemberManagement => ({
   run: (spaceId, work) =>
     db.orm.transaction(async (tx) => {
       await tx.select({ id: space.id }).from(space).where(eq(space.id, spaceId)).for("update");
@@ -33,6 +37,9 @@ export const postgresMemberManagement = (db: PostgresDatabase): MemberManagement
                 isNull(spaceMember.closedAt),
               ),
             );
+          if (reason === "removed") {
+            await departureOn(tx)({ spaceId, userId, at: closedAt });
+          }
         },
         open: async ({ id, userId, role, joinedAt }) => {
           await tx.insert(spaceMember).values({ id, spaceId, userId, role, joinedAt });

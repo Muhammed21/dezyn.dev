@@ -16,9 +16,11 @@ import {
   proposalReplacerOn,
   proposalWriterOn,
 } from "#modules/proposal/proposal-module.ts";
+import type { MembershipKey } from "#modules/space/contracts/membership.ts";
 import { spaceModule } from "#modules/space/space-module.ts";
 import {
   type Billing,
+  cancelRequestOn,
   spaceSubscriptionsOf,
   subscriptionModule,
 } from "#modules/subscription/subscription-module.ts";
@@ -71,6 +73,7 @@ export const composeModules = ({
     webUrl,
     log,
     subscriptions: spaceSubscriptionsOf(db),
+    departureOn: cancelRequestOn,
   });
   const writerOn = (tx: PostgresTransaction) =>
     wrapHistoryWriter(historyWriterOn(tx, storageMeterOn(tx)));
@@ -124,13 +127,30 @@ export const composeModules = ({
   const subscriptions = subscriptionModule({
     db,
     memberships: spaces.memberships,
+    mailer,
     webUrl,
     log,
     clock,
     billing,
   });
   return {
-    spaces,
+    spaces: {
+      ...spaces,
+      leaveSpace: async (key: MembershipKey) => {
+        const left = await spaces.leaveSpace(key);
+        if (left.ok) {
+          await subscriptions.payerLeaves(key);
+        }
+        return left;
+      },
+      removeMember: async (request: Parameters<typeof spaces.removeMember>[0]) => {
+        const removed = await spaces.removeMember(request);
+        if (removed.ok) {
+          await subscriptions.payerLeaves({ spaceId: request.spaceId, userId: request.memberId });
+        }
+        return removed;
+      },
+    },
     subscriptions,
     projects,
     history,

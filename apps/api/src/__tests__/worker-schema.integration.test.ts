@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import type { LogRecord } from "#platform/logging.ts";
 import type { Fetch } from "#platform/resend-mailer.ts";
 import { migrate } from "@repo/db";
 import { withThrowawayDatabase } from "@repo/db/testing";
@@ -84,5 +85,41 @@ describe("le Worker vérifie le schéma une fois par isolat", () => {
       await withRequests(async (send) => {
         expect(await send(worker)).toBe(503);
       }, appUrl);
+    }));
+});
+
+describe("la tâche planifiée du Worker passe par la base de Hyperdrive", () => {
+  it("vérifie le schéma, rejoue les résiliations en attente puis ferme la base", () =>
+    withThrowawayDatabase(async ({ migratorUrl, appUrl }) => {
+      await migrate({ connectionString: migratorUrl });
+      const checked: string[] = [];
+      const logged: LogRecord[] = [];
+      const closing: Promise<unknown>[] = [];
+      const worker = createWorker({
+        fetch: noOutgoingCall,
+        log: (record) => logged.push(record),
+        assertSchema: async (databaseUrl) => {
+          checked.push(databaseUrl);
+        },
+      });
+
+      await worker.scheduled(
+        { cron: "*/15 * * * *", scheduledTime: 0 },
+        {
+          ...makeBindings(appUrl),
+          POLAR_ACCESS_TOKEN: "polar_oat_test",
+          POLAR_WEBHOOK_SECRET: "whsec_test",
+          POLAR_TEAM_PRODUCT_ID: "5b0c1d2e-3f4a-4b5c-8d6e-7f8a9b0c1d2e",
+          POLAR_SERVER: "sandbox",
+        },
+        { waitUntil: (promise) => closing.push(promise) },
+      );
+      await Promise.all(closing);
+
+      expect(checked).toEqual([appUrl]);
+      expect(closing).toHaveLength(1);
+      expect(logged).toEqual([
+        { level: "info", msg: "polar_cancellation_replay_pass", replayed: 0, pending: 0 },
+      ]);
     }));
 });

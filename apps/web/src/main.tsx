@@ -16,6 +16,7 @@ import { proposalBatchRoute } from "./modules/proposal/presentation/proposal-bat
 import { createProposals } from "./modules/proposal/proposal-module.ts";
 import { invitationRoute } from "./modules/space/presentation/invitation-route.tsx";
 import { inviteMemberForm } from "./modules/space/presentation/invite-member.tsx";
+import { leaveSpaceAction } from "./modules/space/presentation/leave-space.tsx";
 import { mySpacesRoute } from "./modules/space/presentation/my-spaces-route.tsx";
 import { spaceFrozenAlert } from "./modules/space/presentation/space-frozen-alert.tsx";
 import { spaceMembers } from "./modules/space/presentation/space-members.tsx";
@@ -90,6 +91,10 @@ const appRouter = ({
           readSpace: spaces.readSpace,
           changeRole: spaces.changeRole,
           removeMember: spaces.removeMember,
+          LeaveSpace: leaveSpaceAction({
+            readSpace: spaces.readSpace,
+            leaveSpace: spaces.leaveSpace,
+          }),
         }),
         SpaceStorageAlert,
         SpacePaymentAlert,

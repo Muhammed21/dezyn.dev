@@ -131,20 +131,25 @@ export const seedSubscription = async (
     payerId,
     modifiedAt = MODIFIED_AT,
     currentPeriodEnd = PERIOD_END,
+    status = "active",
+    cancelRequestedAt = null,
   }: {
     readonly spaceId: string;
     readonly payerId: string;
     readonly modifiedAt?: Date;
     readonly currentPeriodEnd?: Date;
+    readonly status?: "active" | "canceling" | "past_due";
+    readonly cancelRequestedAt?: Date | null;
   },
 ) => {
   await db.orm.insert(schema.spaceSubscription).values({
     spaceId,
     polarSubscriptionId: "0d3f6a2b-7c1e-4b8a-9f2d-5e6a7b8c9d0e",
     payerId,
-    status: "active",
+    status,
     currentPeriodEnd,
     polarModifiedAt: modifiedAt,
+    cancelRequestedAt,
   });
   await db.orm.update(schema.space).set({ plan: "team" }).where(eq(schema.space.id, spaceId));
 };
@@ -182,3 +187,15 @@ export const planChangesOf = (db: PostgresDatabase, spaceId: string) =>
     })
     .from(schema.spacePlanChange)
     .where(eq(schema.spacePlanChange.spaceId, spaceId));
+
+export const seedMember = (
+  db: PostgresDatabase,
+  {
+    spaceId,
+    userId,
+    role,
+  }: { readonly spaceId: string; readonly userId: string; readonly role: "owner" | "editor" },
+) =>
+  db.orm
+    .insert(schema.spaceMember)
+    .values({ id: randomUUID(), spaceId, userId, role, joinedAt: new Date() });

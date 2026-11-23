@@ -40,6 +40,7 @@ import {
   type AcceptanceFailure,
   type CheckoutFailure,
   type InvitationFailure,
+  type LeaveFailure,
   knownActionsOf,
   knownFreeLimitsOf,
   planOf,
@@ -59,7 +60,7 @@ const subscriptionOf = ({
 }: NonNullable<z.infer<typeof SpaceOutput>["subscription"]>): SpaceSubscription => ({
   status: subscriptionStatusOf(status),
   currentPeriodEnd: currentPeriodEnd === null ? undefined : new Date(currentPeriodEnd),
-  payer: { name: payer.name, email: payer.email, you: payer.you },
+  payer: { name: payer.name, email: payer.email, you: payer.you, left: payer.left },
 });
 
 const spaceOf = ({
@@ -150,6 +151,19 @@ const removalRefusalOf: (response: Response) => Promise<RemovalFailure> = member
   conflictProblem: SelfRemovalProblem,
   conflict: "self_removal",
 });
+
+const leaveRefusalOf = async (response: Response): Promise<LeaveFailure> => {
+  if (response.status === UNAUTHORIZED) {
+    return "unauthenticated";
+  }
+  if (response.status === NOT_FOUND) {
+    return "not_found";
+  }
+  if (response.status === CONFLICT) {
+    return (await parseJson(response, LastOwnerProblem)).ok ? "last_owner" : "invalid_response";
+  }
+  return failureOf(response);
+};
 
 const checkoutRefusalOf = async (response: Response): Promise<CheckoutFailure> => {
   if (response.status === UNAUTHORIZED) {
@@ -346,5 +360,15 @@ export const createHttpSpaceGateway = ({
     }
     const response = sent.value;
     return response.status === NO_CONTENT ? ok(undefined) : err(await removalRefusalOf(response));
+  },
+  leaveSpace: async ({ spaceId }) => {
+    const sent = await send(fetch, `${apiUrl}/v1/spaces/${spaceId}/members/me`, {
+      method: "DELETE",
+    });
+    if (!sent.ok) {
+      return sent;
+    }
+    const response = sent.value;
+    return response.status === NO_CONTENT ? ok(undefined) : err(await leaveRefusalOf(response));
   },
 });

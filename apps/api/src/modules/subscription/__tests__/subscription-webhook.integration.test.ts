@@ -139,6 +139,7 @@ describe("le webhook « abonnement actif » de Polar passe l'espace en Team (ADR
         currentPeriodEnd: PERIOD_END,
         polarModifiedAt: MODIFIED_AT,
         storedBytesAtEnd: null,
+        cancelRequestedAt: null,
       });
     }));
 

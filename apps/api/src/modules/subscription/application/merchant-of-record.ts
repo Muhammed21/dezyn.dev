@@ -16,9 +16,15 @@ export type PortalRequest = {
 
 export type Portal = { readonly url: string };
 
+export type CancellationRequest = {
+  readonly spaceId: string;
+  readonly subscriptionId: string;
+};
+
 export interface MerchantOfRecord {
   createCheckout(request: CheckoutRequest): Promise<Result<Checkout, "unavailable">>;
   createPortal(request: PortalRequest): Promise<Result<Portal, "unavailable">>;
+  cancelAtPeriodEnd(request: CancellationRequest): Promise<Result<undefined, "unavailable">>;
 }
 
 export type SubscriptionEvent = {

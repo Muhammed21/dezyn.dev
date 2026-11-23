@@ -63,7 +63,7 @@ describe("la lecture d'un espace montre son abonnement aux propriétaires (ADR 0
       ).toEqual({
         status: "active",
         currentPeriodEnd: PERIOD_END.toISOString(),
-        payer: { name: ADA.name, email: ADA.email, you: true },
+        payer: { name: ADA.name, email: ADA.email, you: true, left: false },
       });
     }));
 
@@ -75,7 +75,7 @@ describe("la lecture d'un espace montre son abonnement aux propriétaires (ADR 0
 
       expect(
         (await readSpace(app, { accessToken: owner.accessToken, spaceId })).subscription?.payer,
-      ).toEqual({ name: ADA.name, email: ADA.email, you: false });
+      ).toEqual({ name: ADA.name, email: ADA.email, you: false, left: false });
     }));
 
   it("un éditeur ne lit pas l'abonnement", () =>

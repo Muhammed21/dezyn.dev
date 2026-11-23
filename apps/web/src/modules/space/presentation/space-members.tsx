@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Navigate } from "@tanstack/react-router";
+import type { ComponentType } from "react";
 
 import type { Result } from "@repo/result";
 
@@ -170,11 +171,13 @@ export const spaceMembers = ({
   readSpace,
   changeRole,
   removeMember,
+  LeaveSpace,
 }: {
   readonly listMembers: ListMembers;
   readonly readSpace: ReadSpace;
   readonly changeRole: ChangeRole;
   readonly removeMember: RemoveMember;
+  readonly LeaveSpace: ComponentType<{ readonly spaceId: string }>;
 }) => {
   const SpaceMembersOf = function SpaceMembersOf({ spaceId }: { readonly spaceId: string }) {
     const queryClient = useQueryClient();
@@ -228,6 +231,7 @@ export const spaceMembers = ({
         />
         {failure !== undefined && <RoleChangeOutcome failure={failure} />}
         {removalFailure !== undefined && <RemovalOutcome failure={removalFailure} />}
+        <LeaveSpace spaceId={spaceId} />
       </section>
     );
   };

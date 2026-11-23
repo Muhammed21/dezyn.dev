@@ -1,4 +1,8 @@
 import { createPostgresDatabase } from "#db";
+import {
+  polarBilling,
+  replayPendingCancellations,
+} from "#modules/subscription/subscription-module.ts";
 import { readWorkerConfig } from "#platform/api-config.ts";
 import { createJsonLineSink } from "#platform/json-line-sink.ts";
 import { errorDetails, type LogSink } from "#platform/logging.ts";
@@ -12,6 +16,8 @@ import { buildApi } from "./build-api.ts";
 type ExecutionContext = {
   readonly waitUntil: (promise: Promise<unknown>) => void;
 };
+
+type ScheduledController = { readonly cron: string; readonly scheduledTime: number };
 
 const SERVICE_UNAVAILABLE: Problem = {
   type: "about:blank",
@@ -83,6 +89,35 @@ export const createWorker = ({
           log,
         });
         return await app.fetch(request);
+      } finally {
+        ctx.waitUntil(db.close());
+      }
+    },
+    scheduled: async (
+      _controller: ScheduledController,
+      bindings: unknown,
+      ctx: ExecutionContext,
+    ): Promise<void> => {
+      const config = readWorkerConfig(bindings);
+      if (!config.ok) {
+        log({ level: "error", msg: "invalid configuration", issues: config.error });
+        return;
+      }
+      const { polar, databaseUrl } = config.value;
+      if (polar === undefined) {
+        log({ level: "info", msg: "polar_cancellation_replay_skipped" });
+        return;
+      }
+      if (!(await schemaIsCurrent({ assertSchema, databaseUrl, log }))) {
+        return;
+      }
+      const db = createPostgresDatabase({ url: databaseUrl, log });
+      try {
+        await replayPendingCancellations({
+          db,
+          merchant: polarBilling({ polar, log }).merchant,
+          log,
+        })();
       } finally {
         ctx.waitUntil(db.close());
       }

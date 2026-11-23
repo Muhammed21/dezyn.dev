@@ -7,6 +7,7 @@ import type {
   Checkout,
   CheckoutFailure,
   InvitationFailure,
+  LeaveFailure,
   Portal,
   PortalFailure,
   MembersFailure,
@@ -76,4 +77,10 @@ export const spaceUseCases = ({ gateway }: { readonly gateway: SpaceGateway }) =
     Uuid.safeParse(spaceId).success && Uuid.safeParse(memberId).success
       ? gateway.removeMember({ spaceId, memberId })
       : err("not_found"),
+  leaveSpace: async ({
+    spaceId,
+  }: {
+    readonly spaceId: string;
+  }): Promise<Result<undefined, LeaveFailure>> =>
+    Uuid.safeParse(spaceId).success ? gateway.leaveSpace({ spaceId }) : err("not_found"),
 });

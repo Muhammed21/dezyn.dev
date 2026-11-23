@@ -43,7 +43,12 @@ export type SpaceStorage = {
 export type SpaceSubscription = {
   readonly status: SubscriptionStatus;
   readonly currentPeriodEnd: Date | undefined;
-  readonly payer: { readonly name: string; readonly email: string; readonly you: boolean };
+  readonly payer: {
+    readonly name: string;
+    readonly email: string;
+    readonly you: boolean;
+    readonly left: boolean;
+  };
 };
 
 export type FreeLimit = (typeof FREE_LIMITS)[number];
@@ -76,6 +81,13 @@ export type RemovalFailure =
   | "not_found"
   | "forbidden"
   | "self_removal"
+  | "unavailable"
+  | "invalid_response";
+
+export type LeaveFailure =
+  | "unauthenticated"
+  | "not_found"
+  | "last_owner"
   | "unavailable"
   | "invalid_response";
 

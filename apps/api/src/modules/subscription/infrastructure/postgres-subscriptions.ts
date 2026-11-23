@@ -1,18 +1,21 @@
 import { randomUUID } from "node:crypto";
 
-import { eq, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 
-import type { PostgresDatabase } from "#db";
+import type { PostgresDatabase, PostgresTransaction } from "#db";
 import { PLANS } from "#modules/space/contracts/plan.ts";
 import { schema } from "@repo/db";
 
 import type { SpacePayers } from "../application/open-portal.ts";
+import type { PayerDepartures } from "../application/payer-leaves.ts";
 import type { SubscriptionUnitOfWork } from "../application/receive-notification.ts";
+import type { CancelRequests } from "../application/replay-cancellations.ts";
 import type { SpacePlans } from "../application/start-checkout.ts";
+import { CANCELABLE_STATUSES, isCancelable } from "../domain/payer-departure.ts";
 import { SUBSCRIPTION_STATUSES } from "../domain/subscription.ts";
 
-const { identityUser, project, space, spacePlanChange, spaceSubscription } = schema;
+const { identityUser, project, space, spaceMember, spacePlanChange, spaceSubscription } = schema;
 
 const StoredPlan = z.enum(PLANS);
 
@@ -47,7 +50,7 @@ const ReadSubscription = z
   .object({
     status: z.enum(SUBSCRIPTION_STATUSES),
     currentPeriodEnd: z.date().nullable(),
-    payer: z.object({ id: z.string(), name: z.string(), email: z.string() }),
+    payer: z.object({ id: z.string(), name: z.string(), email: z.string(), left: z.boolean() }),
   })
   .transform(({ currentPeriodEnd, ...subscription }) => ({
     ...subscription,
@@ -60,12 +63,107 @@ export const postgresSpaceSubscriptions = (db: PostgresDatabase) => ({
       .select({
         status: spaceSubscription.status,
         currentPeriodEnd: spaceSubscription.currentPeriodEnd,
-        payer: { id: identityUser.id, name: identityUser.name, email: identityUser.email },
+        payer: {
+          id: identityUser.id,
+          name: identityUser.name,
+          email: identityUser.email,
+          left: sql<boolean>`not exists (select 1 from ${spaceMember} where ${spaceMember.spaceId} = ${spaceSubscription.spaceId} and ${spaceMember.userId} = ${spaceSubscription.payerId} and ${spaceMember.closedAt} is null)`,
+        },
       })
       .from(spaceSubscription)
       .innerJoin(identityUser, eq(identityUser.id, spaceSubscription.payerId))
       .where(eq(spaceSubscription.spaceId, spaceId));
     return row === undefined ? undefined : ReadSubscription.parse(row);
+  },
+});
+
+const StoredDeparture = z
+  .object({
+    id: z.string(),
+    payerId: z.string(),
+    payerName: z.string(),
+    status: z.enum(SUBSCRIPTION_STATUSES),
+    currentPeriodEnd: z.date().nullable(),
+    spaceId: z.string(),
+    spaceName: z.string(),
+  })
+  .transform(({ currentPeriodEnd, ...departure }) => ({
+    ...departure,
+    currentPeriodEnd: currentPeriodEnd ?? undefined,
+  }));
+
+export const postgresPayerDepartures = (db: PostgresDatabase): PayerDepartures => ({
+  subscriptionOf: async (spaceId) => {
+    const [row] = await db.orm
+      .select({
+        id: spaceSubscription.polarSubscriptionId,
+        payerId: spaceSubscription.payerId,
+        payerName: identityUser.name,
+        status: spaceSubscription.status,
+        currentPeriodEnd: spaceSubscription.currentPeriodEnd,
+        spaceId: space.id,
+        spaceName: space.name,
+      })
+      .from(spaceSubscription)
+      .innerJoin(identityUser, eq(identityUser.id, spaceSubscription.payerId))
+      .innerJoin(space, eq(space.id, spaceSubscription.spaceId))
+      .where(eq(spaceSubscription.spaceId, spaceId));
+    return row === undefined ? undefined : StoredDeparture.parse(row);
+  },
+  openOwnerEmailsOf: async (spaceId) => {
+    const rows = await db.orm
+      .select({ email: identityUser.email })
+      .from(spaceMember)
+      .innerJoin(identityUser, eq(identityUser.id, spaceMember.userId))
+      .where(
+        and(
+          eq(spaceMember.spaceId, spaceId),
+          eq(spaceMember.role, "owner"),
+          isNull(spaceMember.closedAt),
+        ),
+      );
+    return rows.map(({ email }) => email);
+  },
+});
+
+export const cancelRequestOn =
+  (tx: PostgresTransaction) =>
+  async ({
+    spaceId,
+    userId,
+    at,
+  }: {
+    readonly spaceId: string;
+    readonly userId: string;
+    readonly at: Date;
+  }): Promise<void> => {
+    await tx
+      .update(spaceSubscription)
+      .set({ cancelRequestedAt: at })
+      .where(
+        and(
+          eq(spaceSubscription.spaceId, spaceId),
+          eq(spaceSubscription.payerId, userId),
+          inArray(spaceSubscription.status, CANCELABLE_STATUSES),
+          isNull(spaceSubscription.cancelRequestedAt),
+        ),
+      );
+  };
+
+export const postgresCancelRequests = (db: PostgresDatabase): CancelRequests => ({
+  pending: () =>
+    db.orm
+      .select({
+        spaceId: spaceSubscription.spaceId,
+        subscriptionId: spaceSubscription.polarSubscriptionId,
+      })
+      .from(spaceSubscription)
+      .where(isNotNull(spaceSubscription.cancelRequestedAt)),
+  sent: async (spaceId) => {
+    await db.orm
+      .update(spaceSubscription)
+      .set({ cancelRequestedAt: null })
+      .where(eq(spaceSubscription.spaceId, spaceId));
   },
 });
 
@@ -127,6 +225,7 @@ export const postgresSubscriptionUnitOfWork = (db: PostgresDatabase): Subscripti
             currentPeriodEnd: subscription.currentPeriodEnd ?? null,
             polarModifiedAt: subscription.modifiedAt,
             storedBytesAtEnd: subscription.storedBytesAtEnd ?? null,
+            ...(isCancelable(subscription.status) ? {} : { cancelRequestedAt: null }),
           };
           await tx
             .insert(spaceSubscription)

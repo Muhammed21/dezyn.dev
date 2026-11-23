@@ -105,3 +105,72 @@ describe("le Worker", () => {
     ]);
   });
 });
+
+const CRON = { cron: "*/15 * * * *", scheduledTime: 0 };
+
+const makePolarBindings = () => ({
+  ...makeBindings(),
+  POLAR_ACCESS_TOKEN: "polar_oat_test",
+  POLAR_WEBHOOK_SECRET: "whsec_test",
+  POLAR_TEAM_PRODUCT_ID: "5b0c1d2e-3f4a-4b5c-8d6e-7f8a9b0c1d2e",
+  POLAR_SERVER: "sandbox",
+});
+
+describe("la tâche planifiée du Worker rejoue les résiliations en attente", () => {
+  it("journalise une configuration invalide sans toucher la base", async () => {
+    const logged: LogRecord[] = [];
+    const checked: string[] = [];
+    const worker = createWorker({
+      fetch: noOutgoingCall,
+      log: (record) => logged.push(record),
+      assertSchema: async (databaseUrl) => {
+        checked.push(databaseUrl);
+      },
+    });
+
+    await worker.scheduled(CRON, { WEB_URL: "pas une url" }, makeContext());
+
+    expect(checked).toEqual([]);
+    expect(logged).toEqual([
+      expect.objectContaining({ level: "error", msg: "invalid configuration" }),
+    ]);
+  });
+
+  it("ne fait rien sans Polar configuré", async () => {
+    const logged: LogRecord[] = [];
+    const checked: string[] = [];
+    const worker = createWorker({
+      fetch: noOutgoingCall,
+      log: (record) => logged.push(record),
+      assertSchema: async (databaseUrl) => {
+        checked.push(databaseUrl);
+      },
+    });
+
+    await worker.scheduled(CRON, makeBindings(), makeContext());
+
+    expect(checked).toEqual([]);
+    expect(logged).toEqual([{ level: "info", msg: "polar_cancellation_replay_skipped" }]);
+  });
+
+  it("journalise un schéma en retard sans rejouer", async () => {
+    const logged: LogRecord[] = [];
+    const worker = createWorker({
+      fetch: noOutgoingCall,
+      log: (record) => logged.push(record),
+      assertSchema: async () => {
+        throw SCHEMA_BEHIND;
+      },
+    });
+
+    await worker.scheduled(CRON, makePolarBindings(), makeContext());
+
+    expect(logged).toEqual([
+      expect.objectContaining({
+        level: "error",
+        msg: "schema check failed",
+        error: SCHEMA_BEHIND.message,
+      }),
+    ]);
+  });
+});

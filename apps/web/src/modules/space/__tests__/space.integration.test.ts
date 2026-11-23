@@ -444,6 +444,34 @@ describe("retrait d'un membre par l'app web, contre la vraie API (ADR 0017 §2)"
   });
 });
 
+describe("départ d'un membre par l'app web, contre la vraie API (ADR 0011 §5)", () => {
+  it("Grace éditrice quitte l'espace : l'espace n'est plus dans sa liste", () => {
+    const outbox = makeOutbox();
+    return withIdentityApp(
+      async (app, db) => {
+        const { grace, spaceId } = await graceJoined(app, db, outbox);
+
+        expect(await grace.spaces.leaveSpace({ spaceId })).toEqual(ok(undefined));
+        const spaces = await grace.spaces.listMySpaces();
+        expect(spaces.ok && spaces.value.map(({ id }) => id)).not.toContain(spaceId);
+      },
+      { mailer: outbox.mailer },
+    );
+  });
+
+  it("Ada dernière propriétaire reçoit last_owner", () => {
+    const outbox = makeOutbox();
+    return withIdentityApp(
+      async (app, db) => {
+        const { ada, spaceId } = await graceJoined(app, db, outbox);
+
+        expect(await ada.spaces.leaveSpace({ spaceId })).toEqual(err("last_owner"));
+      },
+      { mailer: outbox.mailer },
+    );
+  });
+});
+
 describe("passage au plan Team depuis l'app web, contre la vraie API (ADR 0050)", () => {
   it("un propriétaire obtient l'URL du checkout, puis lit son espace au plan Team après le webhook de Polar", () =>
     withIdentityApp(async (app, db) => {
@@ -490,7 +518,7 @@ describe("passage au plan Team depuis l'app web, contre la vraie API (ADR 0050)"
           subscription: {
             status: "canceling",
             currentPeriodEnd: PERIOD_END,
-            payer: { name: ADA.name, email: ADA.email, you: true },
+            payer: { name: ADA.name, email: ADA.email, you: true, left: false },
           },
         }),
       );

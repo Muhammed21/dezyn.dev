@@ -130,6 +130,8 @@ Laisser `DEPLOY_ENABLED` à `false` jusqu'à l'étape 5.
 
    Pour lancer un passage sans attendre le cron, depuis un poste : `pnpm --filter @repo/api run purge`, avec `DATABASE_URL_HISTORY_MAINTAINER` sur la branche visée. Les emails partent alors par le SMTP de `SMTP_HOST`, `SMTP_PORT` et `MAIL_FROM`.
 
+   `dezyn-api` a son propre cron, toutes les 15 minutes, qui rejoue auprès de Polar les résiliations en fin de période que Polar n'a pas reçues au départ du payeur. Chaque passage journalise `polar_cancellation_replay_pass` avec le nombre de résiliations rejouées et le nombre encore en attente ; une résiliation refusée journalise `payer departure: cancel the subscription at period end by hand in Polar` et reste en attente pour le passage suivant : `(cd apps/api && npx wrangler tail dezyn-api)`. La preview n'a pas ce cron.
+
 ## 6. La preview
 
 `preview.yml` publie des versions des Workers `dezyn-api-preview` et `dezyn-web-preview`, qui doivent donc exister avant le premier run. Les créer une fois, sans secret ni binding de production (ADR 0034) :
