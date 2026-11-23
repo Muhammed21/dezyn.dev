@@ -31,7 +31,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-      - uses: actions/labeler@v5
       - id: tier
         run: .github/scripts/review-tier.sh
         env:
