@@ -3,7 +3,8 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 
-import type { PostgresDatabase } from "#db";
+import { createPostgresDatabase, type PostgresDatabase } from "#db";
+import { orphanSpacePurge } from "#modules/space/space-module.ts";
 import { replayPendingCancellations } from "#modules/subscription/subscription-module.ts";
 import {
   ADA,
@@ -16,12 +17,14 @@ import {
   WEB_URL,
   withIdentityApp,
 } from "#testing/authorization-flow.ts";
+import { NOTHING_LEFT, remainsOfSpace } from "#testing/orphan-space-fixtures.ts";
 import { invite, makeOutbox, personalSpaceOf } from "#testing/space-fixtures.ts";
 import {
   makeMerchantOfRecord,
   makeSubscriptionEvent,
   planChangesOf,
   postPolarWebhook,
+  seedEndedSubscription,
   seedMember,
   seedSubscription,
   subscriptionOf,
@@ -324,6 +327,50 @@ describe("un utilisateur supprime son compte (ADR 0015, ADR 0050 §3)", () => {
           .from(schema.space)
           .where(eq(schema.space.id, spaceId)),
       ).toEqual([{ id: spaceId }]);
+    }));
+
+  it("le seul membre d'un espace avec projets, tokens, historique et abonnement terminé supprime son compte, et la purge suivante ne laisse rien de l'espace (ADR 0051)", () =>
+    withIdentityApp(async (app, db, { maintainerUrl }) => {
+      const ada = await obtainAccessToken(app);
+      const spaceId = await personalSpaceOf(db, ada.userId);
+      await seedEndedSubscription(db, { spaceId, payerId: ada.userId });
+      const projectId = await createProject(app, { accessToken: ada.accessToken, spaceId });
+      await addToken(app, {
+        accessToken: ada.accessToken,
+        projectId,
+        token: makeColorToken({ name: "couleur.fond" }),
+      });
+      await callTool(app, {
+        token: ada.accessToken,
+        name: "declare_figma_states",
+        args: { projectId, states: [{ name: "couleur.fond", state: "synced" }] },
+      });
+      await callTool(app, {
+        token: ada.accessToken,
+        name: "write_tokens",
+        args: { projectId, tokens: [makeColorToken({ name: "couleur.bord" })] },
+      });
+      expect(await remainsOfSpace(db, spaceId)).toMatchObject({
+        project: 1,
+        token: 1,
+        token_figma_state: 1,
+        proposal: 1,
+        history_entry: 4,
+        space_subscription: 1,
+      });
+      await deleteAccount(app, await signInCookie(app, ADA));
+      const maintainer = createPostgresDatabase({ url: maintainerUrl });
+
+      try {
+        expect(await orphanSpacePurge({ db: maintainer, log: () => undefined })()).toEqual({
+          purgedSpaces: 1,
+          waitingSpaces: 0,
+        });
+      } finally {
+        await maintainer.close();
+      }
+
+      expect(await remainsOfSpace(db, spaceId)).toEqual(NOTHING_LEFT);
     }));
 
   it("une IA ne supprime pas le compte de son utilisateur", () =>

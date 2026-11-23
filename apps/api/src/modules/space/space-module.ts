@@ -13,6 +13,7 @@ import { listMembers } from "./application/list-members.ts";
 import { changeRole, removeMember } from "./application/manage-members.ts";
 import type { DepartureListener } from "./application/member-departure.ts";
 import { projectAccess } from "./application/project-access.ts";
+import { purgeOrphanSpaces } from "./application/purge-orphan-spaces.ts";
 import { readSpace, type SpaceSubscriptions } from "./application/read-space.ts";
 import { spaceAccess } from "./application/space-access.ts";
 import { createPersonalSpace, listMySpaces } from "./application/spaces.ts";
@@ -26,6 +27,11 @@ import { postgresMemberDirectory } from "./infrastructure/postgres-member-direct
 import { postgresMemberList } from "./infrastructure/postgres-member-list.ts";
 import { postgresMemberManagement } from "./infrastructure/postgres-member-management.ts";
 import { postgresMembershipReader } from "./infrastructure/postgres-membership-reader.ts";
+import {
+  postgresOrphanPurgeLock,
+  postgresOrphanPurgeUnitOfWork,
+  postgresOrphanSpaces,
+} from "./infrastructure/postgres-orphan-space-purge.ts";
 import { postgresSpaceFreezes } from "./infrastructure/postgres-space-freezes.ts";
 import { postgresSpaceStore } from "./infrastructure/postgres-space-store.ts";
 import { postgresStorageAlerts } from "./infrastructure/postgres-storage-alerts.ts";
@@ -33,6 +39,27 @@ import { postgresStorageAlerts } from "./infrastructure/postgres-storage-alerts.
 export { lastOwnerSpacesOn };
 
 const now = () => new Date();
+
+const ORPHAN_PURGE_BUDGET_MS = 30_000;
+
+export const orphanPurgeLockOn = postgresOrphanPurgeLock;
+
+export const orphanSpacePurge = ({
+  db,
+  log,
+  now: clock = now,
+}: {
+  readonly db: PostgresDatabase;
+  readonly log: LogSink;
+  readonly now?: () => Date;
+}) =>
+  purgeOrphanSpaces({
+    orphans: postgresOrphanSpaces(db),
+    unitOfWork: postgresOrphanPurgeUnitOfWork(db),
+    now: clock,
+    budgetMs: ORPHAN_PURGE_BUDGET_MS,
+    log,
+  });
 
 const newToken = () => randomBytes(32).toString("base64url");
 

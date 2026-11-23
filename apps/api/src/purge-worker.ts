@@ -1,6 +1,7 @@
 import { createPostgresDatabase } from "#db";
 import { historyPurge, PURGE_STATEMENT_TIMEOUT_MS } from "#modules/history/history-module.ts";
 import { storageMeterOn } from "#modules/project/project-module.ts";
+import { orphanSpacePurge } from "#modules/space/space-module.ts";
 import { readPurgeWorkerConfig } from "#platform/api-config.ts";
 import { createJsonLineSink } from "#platform/json-line-sink.ts";
 import { errorDetails, type LogSink } from "#platform/logging.ts";
@@ -75,7 +76,11 @@ export const createPurgeWorker = ({
         const purgedKeys = await purgeExpiredIdempotencyKeys(db);
         log({ level: "info", msg: "idempotency_purge_pass", purgedKeys });
       });
-      const [first] = [...historyFailures, ...keyFailures];
+      const orphanFailures = await loggingFailure(log, "orphan space purge failed", async () => {
+        const pass = await orphanSpacePurge({ db, log })();
+        log({ level: "info", msg: "orphan_space_purge_pass", ...pass });
+      });
+      const [first] = [...historyFailures, ...keyFailures, ...orphanFailures];
       if (first !== undefined) {
         throw first.error;
       }

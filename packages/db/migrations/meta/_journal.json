@@ -190,6 +190,13 @@
       "when": 1795424212570,
       "tag": "0026_account_deletion",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1795428769518,
+      "tag": "0027_orphan_space_purge",
+      "breakpoints": true
     }
   ]
 }

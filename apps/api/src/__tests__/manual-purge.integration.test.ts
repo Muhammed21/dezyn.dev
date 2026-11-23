@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import { createPostgresDatabase, type PostgresDatabase } from "#db";
 import { seedSpaceAtItsLimit } from "#testing/history-fixtures.ts";
+import { NOTHING_LEFT, remainsOfSpace, seedSpaceWithData } from "#testing/orphan-space-fixtures.ts";
 import { migrate, schema } from "@repo/db";
 import { withThrowawayDatabase } from "@repo/db/testing";
 
@@ -23,6 +24,8 @@ const receivedBy = async (to: string) =>
   ).messages.map(({ From, Subject }) => ({ from: From.Address, subject: Subject }));
 
 const TWO_DAYS_AGO = new Date(Date.now() - 2 * 24 * 60 * 60_000);
+
+const IN_TWO_DAYS = new Date(Date.now() + 2 * 24 * 60 * 60_000);
 
 const seedExpiredIdempotencyKey = async (app: PostgresDatabase) => {
   const userId = randomUUID();
@@ -57,6 +60,42 @@ const makeSensedDatabases = () => {
 };
 
 describe("une purge manuelle réussie", () => {
+  it("purge les espaces orphelins et compte ceux qui attendent la fin de leur période (ADR 0051)", () =>
+    withThrowawayDatabase(async ({ migratorUrl, appUrl, maintainerUrl }) => {
+      await migrate({ connectionString: migratorUrl });
+      const app = createPostgresDatabase({ url: appUrl });
+      try {
+        const orphan = await seedSpaceWithData(app);
+        await seedSpaceWithData(app, {
+          subscription: { status: "canceling", currentPeriodEnd: IN_TWO_DAYS },
+        });
+        const printed: string[] = [];
+
+        await runManualPurge({
+          env: {
+            DATABASE_URL_HISTORY_MAINTAINER: maintainerUrl,
+            SMTP_HOST: "127.0.0.1",
+            SMTP_PORT: "1025",
+            MAIL_FROM: "dezyn <no-reply@dezyn.test>",
+          },
+          log: () => undefined,
+          openDatabase: createPostgresDatabase,
+          print: (output) => printed.push(output),
+        });
+
+        expect(printed).toEqual([
+          JSON.stringify(
+            { purged: [], purgedKeys: 0, orphans: { purgedSpaces: 1, waitingSpaces: 1 } },
+            null,
+            2,
+          ),
+        ]);
+        expect(await remainsOfSpace(app, orphan.spaceId)).toEqual(NOTHING_LEFT);
+      } finally {
+        await app.close();
+      }
+    }));
+
   it("affiche les espaces purgés et les clés d'idempotence purgées, puis ferme la base", () =>
     withThrowawayDatabase(async ({ migratorUrl, appUrl, maintainerUrl }) => {
       await migrate({ connectionString: migratorUrl });
@@ -78,7 +117,13 @@ describe("une purge manuelle réussie", () => {
           print: (output) => printed.push(output),
         });
 
-        expect(printed).toEqual([JSON.stringify({ purged: [], purgedKeys: 1 }, null, 2)]);
+        expect(printed).toEqual([
+          JSON.stringify(
+            { purged: [], purgedKeys: 1, orphans: { purgedSpaces: 0, waitingSpaces: 0 } },
+            null,
+            2,
+          ),
+        ]);
         expect(closed).toEqual([maintainerUrl]);
       } finally {
         await app.close();
@@ -123,6 +168,7 @@ describe("une purge manuelle réussie", () => {
                 },
               ],
               purgedKeys: 0,
+              orphans: { purgedSpaces: 0, waitingSpaces: 0 },
             },
             null,
             2,

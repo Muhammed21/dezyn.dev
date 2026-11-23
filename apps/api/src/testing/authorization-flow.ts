@@ -61,6 +61,7 @@ export type IdentityApp = {
   readonly app: App;
   readonly db: PostgresDatabase;
   readonly migratorUrl: string;
+  readonly maintainerUrl: string;
   readonly close: () => Promise<void>;
 };
 
@@ -145,6 +146,7 @@ export const startIdentityApp = async ({
       }),
       db,
       migratorUrl: database.migratorUrl,
+      maintainerUrl: database.maintainerUrl,
       close,
     };
   } catch (error) {
@@ -157,13 +159,13 @@ export const withIdentityApp = async (
   run: (
     app: App,
     db: PostgresDatabase,
-    database: { readonly migratorUrl: string },
+    database: { readonly migratorUrl: string; readonly maintainerUrl: string },
   ) => Promise<void>,
   options: IdentityAppOptions = {},
 ) => {
-  const { app, db, migratorUrl, close } = await startIdentityApp(options);
+  const { app, db, migratorUrl, maintainerUrl, close } = await startIdentityApp(options);
   try {
-    await run(app, db, { migratorUrl });
+    await run(app, db, { migratorUrl, maintainerUrl });
   } finally {
     await close();
   }

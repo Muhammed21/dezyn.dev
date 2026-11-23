@@ -242,7 +242,7 @@ describe("le rôle history_maintainer lit ce que la purge exige et ne touche qu'
       );
     }));
 
-  it("history_maintainer ne crée ni ne supprime de projet", () =>
+  it("history_maintainer ne crée pas de projet, il ne fait que le supprimer avec un espace orphelin (ADR 0052 §5)", () =>
     withMaintainerDatabase(async ({ app, maintainer }) => {
       await seedHistoryEntry(app);
       const [space] = await app.orm.select({ id: schema.space.id }).from(schema.space);
@@ -255,9 +255,6 @@ describe("le rôle history_maintainer lit ce que la purge exige et ne touche qu'
           createdAt: new Date(),
         }),
       ).rejects.toThrow(permissionDenied("project"));
-      await expect(maintainer.orm.delete(schema.project)).rejects.toThrow(
-        permissionDenied("project"),
-      );
     }));
 
   it("history_maintainer n'écrit pas dans les espaces", () =>
@@ -269,13 +266,25 @@ describe("le rôle history_maintainer lit ce que la purge exige et ne touche qu'
       ).rejects.toThrow(permissionDenied("space"));
     }));
 
-  it("history_maintainer n'écrit pas dans les membres", () =>
+  it("history_maintainer ne crée ni ne modifie de membre, il ne fait que les supprimer avec un espace orphelin (ADR 0052 §5)", () =>
     withMaintainerDatabase(async ({ app, maintainer }) => {
       await seedHistoryEntry(app);
 
-      await expect(maintainer.orm.delete(schema.spaceMember)).rejects.toThrow(
-        permissionDenied("space_member"),
-      );
+      await expect(
+        maintainer.orm.update(schema.spaceMember).set({ closedAt: null }),
+      ).rejects.toThrow(permissionDenied("space_member"));
+    }));
+
+  it("history_maintainer ne modifie ni l'abonnement ni les tokens d'un espace qu'il peut supprimer (ADR 0052 §5)", () =>
+    withMaintainerDatabase(async ({ app, maintainer }) => {
+      await seedHistoryEntry(app);
+
+      await expect(
+        maintainer.orm.update(schema.spaceSubscription).set({ cancelRequestedAt: null }),
+      ).rejects.toThrow(permissionDenied("space_subscription"));
+      await expect(
+        maintainer.orm.update(schema.token).set({ status: "validated" }),
+      ).rejects.toThrow(permissionDenied("token"));
     }));
 });
 
