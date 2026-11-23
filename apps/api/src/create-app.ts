@@ -115,6 +115,7 @@ export const createApp = ({
   proposals,
   idempotent,
   projectAccess,
+  serverTiming: timed = false,
 }: {
   readonly webUrl: string;
   readonly db: Database;
@@ -129,10 +130,13 @@ export const createApp = ({
   readonly proposals: ProposalUseCases;
   readonly idempotent: Idempotent;
   readonly projectAccess: ProjectAccess;
+  readonly serverTiming?: boolean;
 }) => {
   const app = new Hono<AppEnv>();
 
-  app.use(serverTiming({ db, untimedPaths: ["/auth/", LOGIN_PATH, CONSENT_PATH] }));
+  if (timed) {
+    app.use(serverTiming({ db, untimedPaths: ["/auth/", LOGIN_PATH, CONSENT_PATH] }));
+  }
   app.use(requestContext(log));
   app.use(
     bodyLimit({

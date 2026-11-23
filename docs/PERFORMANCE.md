@@ -13,7 +13,7 @@
 
 Outil de mesure : les logs `request` de l'API (`durationMs`, `src/platform/request-context.ts`), capturés pendant un import réel. Les durées sont celles du serveur ; les attentes entre deux appels viennent de l'horodatage des lignes.
 
-Gate des budgets : `perf-pr.yml` lance `pnpm bench` (`apps/api/bench/mcp.bench.ts`, sur une vraie PostgreSQL) et publie en commentaire de PR la médiane et le p99 face à la référence de `main` (`perf-main.yml`), à titre informatif. Un bench sans échantillon fait échouer le job : vitest bench avale l'erreur d'un bench, il se relance en local pour la voir. Le runner de CI est 3 fois plus lent que la machine locale ; le budget se lit sur les mesures locales.
+Gate des budgets : `perf-pr.yml` lance `pnpm bench` (`apps/api/bench/mcp.bench.ts`, sur une vraie PostgreSQL) et publie en commentaire de PR la médiane et le p99 face à la référence de `main` (`perf-main.yml`), à titre informatif. Un bench sans échantillon fait échouer le job : vitest bench avale l'erreur d'un bench, il se relance en local pour la voir. Le runner de CI est 3 fois plus lent que la machine locale ; le budget se lit sur les mesures locales. Le nombre de requêtes SQL de chaque bench se lit dans l'en-tête `Server-Timing`, que l'API n'envoie qu'avec `SERVER_TIMING=true` ; le harnais de test (`#testing/authorization-flow.ts`) l'active.
 
 ## Load Reality
 

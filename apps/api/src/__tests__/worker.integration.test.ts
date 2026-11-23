@@ -136,6 +136,43 @@ describe("le Worker de production", () => {
   );
 
   it(
+    "configuré par wrangler.jsonc, ne fait porter Server-Timing à aucune réponse",
+    () =>
+      withThrowawayDatabase(async ({ migratorUrl, appUrl }) => {
+        await migrate({ connectionString: migratorUrl });
+
+        await withWorker(appUrl, async (worker) => {
+          const response = await worker.request(`${BASE_URL}/health`);
+
+          expect(response.status).toBe(200);
+          expect(response.headers.get("server-timing")).toBeNull();
+        });
+      }),
+    60_000,
+  );
+
+  it(
+    "avec SERVER_TIMING=true, annonce les requêtes SQL de chaque réponse",
+    () =>
+      withThrowawayDatabase(async ({ migratorUrl, appUrl }) => {
+        await migrate({ connectionString: migratorUrl });
+
+        await withWorker(
+          appUrl,
+          async (worker) => {
+            const response = await worker.request(`${BASE_URL}/health`);
+
+            expect(response.headers.get("server-timing")).toMatch(
+              /^db;dur=[\d.]+;desc="\d+ requetes", /,
+            );
+          },
+          { vars: { SERVER_TIMING: "true" } },
+        );
+      }),
+    60_000,
+  );
+
+  it(
     "sert une autorisation OAuth complète, puis le MCP et l'API avec le jeton obtenu",
     () =>
       withThrowawayDatabase(async ({ migratorUrl, appUrl }) => {

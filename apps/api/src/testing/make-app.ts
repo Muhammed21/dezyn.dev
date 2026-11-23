@@ -102,7 +102,13 @@ export const makeApp = ({
   db = makeDatabase(),
   auth = makeAuth(),
   webUrl = "https://dezyn.dev",
-}: { readonly db?: Database; readonly auth?: Auth; readonly webUrl?: string } = {}) => {
+  serverTiming,
+}: {
+  readonly db?: Database;
+  readonly auth?: Auth;
+  readonly webUrl?: string;
+  readonly serverTiming?: boolean;
+} = {}) => {
   const records: LogRecord[] = [];
   const app = createApp({
     webUrl,
@@ -118,6 +124,7 @@ export const makeApp = ({
     proposals: makeProposals(),
     idempotent: makeIdempotent(),
     projectAccess: makeProjectAccess(),
+    ...(serverTiming === undefined ? {} : { serverTiming }),
   });
   return { app, records };
 };

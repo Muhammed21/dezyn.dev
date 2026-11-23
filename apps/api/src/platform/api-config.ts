@@ -21,6 +21,12 @@ const authSecret = () => z.string({ error: MISSING }).min(32, { error: "32 carac
 
 const trustedIpHeader = () => text().default("cf-connecting-ip");
 
+const serverTiming = () =>
+  z
+    .enum(["true", "false"], { error: "true ou false attendu" })
+    .transform((value) => value === "true")
+    .default(false);
+
 const postgresUrl = () =>
   z
     .string({ error: MISSING })
@@ -36,6 +42,7 @@ const ApiEnv = z.object({
   WEB_URL: httpUrl(),
   TRUSTED_IP_HEADER: trustedIpHeader(),
   PORT: port().default(3000),
+  SERVER_TIMING: serverTiming(),
 });
 
 const WorkerEnv = z
@@ -48,6 +55,7 @@ const WorkerEnv = z
     BETTER_AUTH_URL: httpUrl(),
     WEB_URL: httpUrl(),
     TRUSTED_IP_HEADER: trustedIpHeader(),
+    SERVER_TIMING: serverTiming(),
     RESEND_API_KEY: text().optional(),
     MAIL_FROM: z.email({ error: "adresse email attendue" }).optional(),
     EMAIL_DELIVERY: z.literal("log", { error: "seule la valeur log est admise" }).optional(),
@@ -182,6 +190,7 @@ export type ApiConfig = {
   readonly smtp: { readonly host: string; readonly port: number; readonly from: string };
   readonly webUrl: string;
   readonly port: number;
+  readonly serverTiming: boolean;
   readonly polar?: PolarConfig;
 };
 
@@ -204,6 +213,7 @@ export const readApiConfig = (
     smtp: { host: data.SMTP_HOST, port: data.SMTP_PORT, from: data.MAIL_FROM },
     webUrl: data.WEB_URL,
     port: data.PORT,
+    serverTiming: data.SERVER_TIMING,
     ...(polar.value === undefined ? {} : { polar: polar.value }),
   });
 };
@@ -229,6 +239,7 @@ export const readWorkerConfig = (bindings: unknown): Result<WorkerConfig, readon
     baseURL: data.BETTER_AUTH_URL,
     trustedIpHeader: data.TRUSTED_IP_HEADER,
     webUrl: data.WEB_URL,
+    serverTiming: data.SERVER_TIMING,
     ...(data.RESEND_API_KEY && data.MAIL_FROM
       ? { email: { apiKey: data.RESEND_API_KEY, from: data.MAIL_FROM } }
       : {}),
