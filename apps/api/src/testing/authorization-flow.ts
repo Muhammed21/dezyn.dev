@@ -52,6 +52,7 @@ type IdentityAppOptions = {
   readonly secret?: string;
   readonly secrets?: readonly AuthSecret[];
   readonly authLog?: LogSink;
+  readonly requestLog?: LogSink;
   readonly signals?: ProjectSignals;
   readonly channel?: ProjectChannel;
   readonly billing?: Billing | null;
@@ -76,6 +77,7 @@ export const startIdentityApp = async ({
   secret = "secret-de-test-de-32-caracteres-au-moins",
   secrets = [],
   authLog = () => undefined,
+  requestLog = () => undefined,
   signals,
   channel,
   billing = { merchant: makeMerchantOfRecord().merchant, webhookSecret: WEBHOOK_SECRET },
@@ -133,7 +135,7 @@ export const startIdentityApp = async ({
         webUrl: WEB_URL,
         db,
         auth,
-        log: () => undefined,
+        log: requestLog,
         account,
         spaces,
         subscriptions,

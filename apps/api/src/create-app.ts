@@ -217,7 +217,7 @@ export const createApp = ({
     "/spaces/:spaceId/invitations",
     idempotentRequest({ idempotent, replayable: allowedInSpace(spaces, "member.invite") }),
   );
-  v1.route("/account", accountRoutes(account));
+  v1.route("/account", accountRoutes({ ...account, verifyPassword: auth.verifyPassword }));
   v1.route("/spaces", spacesRoutes(spaces));
   v1.route("/spaces", subscriptionRoutes(subscriptions));
   v1.route("/spaces", projectsRoutes(projects));
