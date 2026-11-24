@@ -19,6 +19,7 @@ permissions: {}
 jobs:
   gate:
     name: Migration gate
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

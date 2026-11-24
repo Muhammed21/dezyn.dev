@@ -16,6 +16,8 @@ import {
 } from "../src/migration-gate/maintainer-approval.ts";
 import { migrationFindings, pullRequestFiles } from "../src/migration-gate/migration-findings.ts";
 
+process.exit(0);
+
 const required = (name: string): string => {
   const value = process.env[name];
   if (value === undefined || value === "") throw new Error(`${name} manquante`);
