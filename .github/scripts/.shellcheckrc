@@ -1,0 +1,3 @@
+# Les scripts chargent review-config.sh et review-floor.sh par un chemin relatif à leur dossier.
+source-path=SCRIPTDIR
+external-sources=true

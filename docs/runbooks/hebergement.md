@@ -178,7 +178,7 @@ pnpm polar:production
 
 Le wizard suit cet ordre :
 
-1. **Contrôle préalable.** Aucun espace n'est en Team avec un abonnement terminé (règle provisoire de #357). La requête se lance en `app`, dans une transaction en lecture seule, sans afficher d'URL de connexion ; le wizard s'arrête si elle renvoie un espace :
+1. **Contrôle préalable.** Aucun espace n'est en Team avec un abonnement terminé (règle provisoire de #357). La requête se lance en `app`, dans une transaction `READ ONLY` (ADR 0057), sans afficher d'URL de connexion ; le wizard s'arrête si elle renvoie un espace :
 
    ```sql
    select s.id from space s join space_subscription ss on ss.space_id = s.id
