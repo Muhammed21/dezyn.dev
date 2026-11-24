@@ -56,7 +56,7 @@ Workers Logs est activé par `observability` dans `apps/api/wrangler.jsonc` : il
 
    Elle pose aussi le secret GitHub `DATABASE_URL_MIGRATOR` et fait pointer Hyperdrive sur `app`. Si la pose échoue, elle affiche comment la refaire.
 
-Ne jamais créer un rôle de dezyn par la console ou l'API de Neon : il serait membre de `neon_superuser`, et `app` pourrait réécrire l'historique (ADR 0019). Pour remplacer un tel rôle : `pnpm roles:replace <branche>` (section 8).
+Ne jamais créer un rôle de dezyn par la console ou l'API de Neon : il serait membre de `neon_superuser`, et `app` pourrait réécrire l'historique (ADR 0019). Pour remplacer un tel rôle : `pnpm roles:replace <branche>` (section 9).
 
 ## 4. GitHub : les environnements de déploiement
 
@@ -97,8 +97,9 @@ Laisser `DEPLOY_ENABLED` à `false` jusqu'à l'étape 5.
    | Secret                   | Posé par                                                  |
    | ------------------------ | --------------------------------------------------------- |
    | `BETTER_AUTH_SECRET`     | tiré par `openssl` ; seulement dans Cloudflare            |
-   | `BETTER_AUTH_SECRET_<N>` | tiré par `openssl`, à chaque rotation ; voir la section 8 |
+   | `BETTER_AUTH_SECRET_<N>` | tiré par `openssl`, à chaque rotation ; voir la section 9 |
    | `RESEND_API_KEY`         | saisi masqué ; sans lui, les emails ne partent pas        |
+   | `POLAR_*`, les quatre    | `polar:production`, ensemble (section 7)                  |
 
    Chaque secret posé publie aussitôt une nouvelle version du Worker, avec le code déployé.
 
@@ -167,15 +168,91 @@ pnpm polar:sandbox
 
 Le wizard guide la création de l'organisation sandbox, du produit Team (mensuel, 34,99 € HT), du jeton d'accès et du webhook, puis écrit les valeurs dans `.env` et dans l'environnement GitHub `preview`. `preview.yml` les passe au Worker de preview : les deux secrets par `--secrets-file`, l'identifiant du produit et l'environnement par `--var`. Le webhook vise `https://pr-<N>-api-preview.dezyn.dev/webhooks/polar` (ADR 0050), en version d'API 2027-01, la preview de la PR qui teste le paiement ; pour une autre PR, modifier l'URL de l'endpoint dans Polar, son secret ne change pas.
 
-## 7. Vérifier
+## 7. Polar en production
+
+La production paie le plan Team sur le compte de production de Polar, distinct du sandbox (ADR 0050). Le Worker `dezyn-api` lit quatre secrets : `POLAR_ACCESS_TOKEN`, `POLAR_WEBHOOK_SECRET`, `POLAR_TEAM_PRODUCT_ID` et `POLAR_SERVER` (`production`). L'API les exige tous ou aucun : sans aucun, le paiement est fermé (checkout, portail et webhook répondent 503, le cron de l'API ne rejoue rien) ; avec une partie seulement, la configuration est invalide et chaque requête répond 500. Les quatre sont donc des secrets du Worker, posés ensemble en une seule version par `wrangler secret bulk`, et `apps/api/wrangler.jsonc` ne déclare aucune var `POLAR_*` : un `wrangler secret put` par valeur, ou des vars livrées par un déploiement, publieraient une version avec une partie seulement.
+
+```
+pnpm polar:production
+```
+
+Le wizard suit cet ordre :
+
+1. **Contrôle préalable.** Aucun espace n'est en Team avec un abonnement terminé (règle provisoire de #357). La requête se lance en `app`, dans une transaction en lecture seule, sans afficher d'URL de connexion ; le wizard s'arrête si elle renvoie un espace :
+
+   ```sql
+   select s.id from space s join space_subscription ss on ss.space_id = s.id
+   where s.plan = 'team' and ss.status = 'ended'
+   ```
+
+2. **Compte vendeur.** Organisation `dezyn` sur [polar.sh](https://polar.sh/dashboard) ; détails de l'organisation (description, site, email de support vérifié) ; dans Finance → Account, vérification d'identité du propriétaire, compte de versement, puis soumission de la revue du compte. Polar n'accepte de paiement qu'après l'approbation, jusqu'à 14 jours ([revue du compte](https://polar.sh/docs/merchant-of-record/account-reviews)).
+3. **Devise et taxes.** Default tax behavior « Exclusive », devise par défaut EUR.
+4. **Produit Team.** Abonnement mensuel, prix fixe 34,99 EUR, taxe exclusive, sans bénéfice.
+5. **Jeton d'accès** `dezyn-production`, avec exactement ces scopes, ceux qu'exigent les appels de `apps/api/src/modules/subscription/infrastructure/polar.ts` d'après `@polar-sh/sdk/2027-01` :
+
+   | Scope                     | Appel                                                         |
+   | ------------------------- | ------------------------------------------------------------- |
+   | `checkouts:write`         | `createCheckouts` : le checkout d'un espace                   |
+   | `customer_sessions:write` | `createCustomerSessions` : le portail client                  |
+   | `subscriptions:write`     | `updateSubscriptions` et `revokeSubscriptions` (ADR 0055)     |
+   | `orders:read`             | `listOrders` : les commandes d'un abonnement refusé           |
+   | `refunds:read`            | `listRefunds` : ses remboursements déjà faits                 |
+   | `refunds:write`           | `createRefunds` : le remboursement d'un abonnement refusé     |
+   | `products:read`           | la relecture du produit Team par le wizard ; l'API s'en passe |
+
+   Les webhooks se vérifient par leur secret, sans scope. Noter la date d'expiration du jeton : un jeton expiré ferme le checkout, le portail, la révocation et le remboursement.
+
+6. **Identifiant du produit**, relu par l'API de Polar : abonnement `month`, prix `fixed` 3499 `eur`.
+7. **Webhook** vers `https://api.dezyn.dev/webhooks/polar`, format Raw, version d'API 2027-01, secret généré par Polar, avec les événements que l'API traite : `subscription.active`, `subscription.updated`, `subscription.past_due`, `subscription.canceled`, `subscription.uncanceled`, `subscription.revoked`.
+8. **Secrets du Worker**, après confirmation : les quatre valeurs partent sur l'entrée standard de `wrangler secret bulk`, sans fichier ni argument de commande. La nouvelle version est servie aussitôt, avec le code déployé, et ouvre le paiement. Le wizard vérifie ensuite que `/health` répond 200 et que `/webhooks/polar` refuse un événement non signé par 401 (503 tant que Polar n'est pas configuré).
+9. **Premier paiement réel**, une fois la revue approuvée : passer un espace de test en Team depuis `app.dezyn.dev` avec une vraie carte ; l'espace affiche Team et les livraisons du webhook répondent 200. Puis, dans Polar, rembourser la commande (Orders → Refund) et révoquer l'abonnement (Subscriptions → Revoke) : `subscription.revoked` repasse l'espace en Free.
+
+Refermer le paiement retire les quatre secrets en une seule version :
+
+```
+(cd apps/api && pnpm exec wrangler secret bulk --env="" <<< '{"POLAR_ACCESS_TOKEN":null,"POLAR_WEBHOOK_SECRET":null,"POLAR_TEAM_PRODUCT_ID":null,"POLAR_SERVER":null}')
+```
+
+Changer de jeton ou de secret de webhook : relancer `pnpm polar:production`, qui repose les quatre ensemble.
+
+### L'alerte sur un abonnement refusé à traiter à la main
+
+Un abonnement payé par un non-propriétaire est révoqué et remboursé automatiquement (ADR 0055). Quand Polar refuse encore, le cron de `dezyn-api` journalise à chaque passage, au niveau `error` :
+
+```
+refused polar subscription: revoke and refund it by hand in Polar
+```
+
+avec `spaceId` et `subscriptionId`. Révoquer l'abonnement et rembourser ses commandes dans Polar ; le passage suivant constate l'état et ne journalise plus.
+
+L'alerte se pose dans Cloudflare, Alerts → Monitors → Create a Monitor ([Monitors](https://developers.cloudflare.com/notifications/monitors/), en bêta), sur le jeu de données Workers Logs `logs.workersLogs` de l'[API SQL](https://developers.cloudflare.com/analytics/sql-api/datasets/) :
+
+- détection Threshold, `value > 0`, fenêtre de 30 minutes, soit deux passages du cron ;
+- règle SQL : compter les lignes du Worker `dezyn-api` dont le message contient `refused polar subscription: revoke and refund it by hand`, sur le modèle :
+
+  ```sql
+  SELECT COUNT(*) AS value
+  FROM logs.workersLogs
+  WHERE accountTag = '<compte>'
+    AND scriptName = 'dezyn-api'
+    AND <colonne du message> LIKE '%refused polar subscription: revoke and refund it by hand%'
+  ```
+
+  La colonne qui porte la ligne journalisée se lit dans la liste des colonnes du jeu de données (sélecteur du dashboard, ou endpoint d'introspection avec `include_columns=true`) ;
+
+- destination : email du support, ou webhook.
+
+Avant de compter sur l'alerte, la déclencher une fois : la même requête dans Observability → Query Builder doit trouver la ligne d'un abonnement refusé en preview ou en sandbox, ou la ligne de `polar_refusal_replay_pass` en remplaçant le texte cherché.
+
+## 8. Vérifier
 
 ```
 pnpm prod:check
 ```
 
-Chaque contrôle doit être `OK` : rôles de la branche `production`, secrets GitHub et `DEPLOY_ENABLED`, secret du Worker, Hyperdrive connecté en `app` au compute de `production`, et `/health`, qui répond 503 quand la base ne répond pas ou que la clé de signature des jetons est inutilisable.
+Chaque contrôle doit être `OK` : rôles de la branche `production`, aucun espace en Team avec un abonnement terminé, secrets GitHub et `DEPLOY_ENABLED`, secret du Worker, Polar (aucune var `POLAR_*` dans `wrangler.jsonc`, les quatre secrets ou aucun, et, quand ils sont posés, `/webhooks/polar` qui refuse un événement non signé), Hyperdrive connecté en `app` au compute de `production`, et `/health`, qui répond 503 quand la base ne répond pas ou que la clé de signature des jetons est inutilisable. Sans secret `POLAR_*`, `prod:check` signale que le paiement est fermé.
 
-## 8. Opérations courantes
+## 9. Opérations courantes
 
 ### Remplacer des rôles créés par Neon
 

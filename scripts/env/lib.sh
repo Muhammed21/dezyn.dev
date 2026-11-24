@@ -112,6 +112,12 @@ wrangler_api() {
   (cd apps/api && pnpm exec wrangler "$@")
 }
 
+worker_secret_names() {
+  local listed
+  listed=$(wrangler_api secret list --env="" --format json 2> /dev/null) || return 1
+  jq -r '.[].name' <<< "$listed" 2> /dev/null
+}
+
 check() {
   if [ "$2" = "$3" ]; then
     echo "OK  $1"
@@ -129,4 +135,47 @@ check_roles() {
   check "aucun rôle privilégié" "$(jq -r '.privileged | join(" ")' <<< "$1")" ""
   check "tout appartient à migrator" "$(jq -r '.foreign | join(" ")' <<< "$1")" ""
   check "app ne fait qu'ajouter à l'historique" "$(jq -r '.history | join(" ")' <<< "$1")" "INSERT"
+}
+
+POLAR_SECRETS="POLAR_ACCESS_TOKEN POLAR_WEBHOOK_SECRET POLAR_TEAM_PRODUCT_ID POLAR_SERVER"
+POLAR_WEBHOOK_URL=https://api.dezyn.dev/webhooks/polar
+
+polar_configuration() {
+  local name missing=() present=0
+  for name in $POLAR_SECRETS; do
+    if grep -qx "$name" <<< "$1"; then
+      present=$((present + 1))
+    else
+      missing+=("$name")
+    fi
+  done
+  if [ "$present" -eq 0 ]; then
+    echo absente
+  elif [ "${#missing[@]}" -eq 0 ]; then
+    echo complète
+  else
+    echo "partielle, manquent ${missing[*]}"
+  fi
+}
+
+polar_secrets_json() {
+  jq -cn '{
+    POLAR_ACCESS_TOKEN: $ENV.POLAR_ACCESS_TOKEN,
+    POLAR_WEBHOOK_SECRET: $ENV.POLAR_WEBHOOK_SECRET,
+    POLAR_TEAM_PRODUCT_ID: $ENV.POLAR_TEAM_PRODUCT_ID,
+    POLAR_SERVER: $ENV.POLAR_SERVER
+  }'
+}
+
+polar_removal_json() {
+  jq -cn --arg names "$POLAR_SECRETS" '$names | split(" ") | map({ (.): null }) | add'
+}
+
+ended_team_spaces() {
+  DATABASE_URL=$1 node packages/db/scripts/ended-team-spaces.ts
+}
+
+polar_webhook_status() {
+  curl -s -o /dev/null -w '%{http_code}' --max-time 10 -X POST \
+    -H 'content-type: application/json' --data '{}' "$POLAR_WEBHOOK_URL" || true
 }

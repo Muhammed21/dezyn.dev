@@ -68,4 +68,45 @@ expect_output "seule la version courante, rien à expirer" "" "$(stale_secret_ve
 expect_output "aucune clé valide, rien à expirer" "" "$(stale_secret_versions "" 3)"
 expect_output "la version 13 ne se confond pas avec la 3" 13 "$(stale_secret_versions $'3\n13' 3)"
 
+echo "polar_configuration"
+expect_output "aucun secret Polar : configuration absente" absente \
+  "$(polar_configuration $'BETTER_AUTH_SECRET\nRESEND_API_KEY')"
+expect_output "aucun secret du tout : configuration absente" absente "$(polar_configuration "")"
+expect_output "les quatre secrets Polar : configuration complète" complète \
+  "$(polar_configuration $'BETTER_AUTH_SECRET\nPOLAR_SERVER\nPOLAR_TEAM_PRODUCT_ID\nPOLAR_WEBHOOK_SECRET\nPOLAR_ACCESS_TOKEN')"
+expect_output "une partie seulement : nomme ceux qui manquent" \
+  "partielle, manquent POLAR_WEBHOOK_SECRET POLAR_SERVER" \
+  "$(polar_configuration $'POLAR_ACCESS_TOKEN\nPOLAR_TEAM_PRODUCT_ID')"
+expect_output "un nom qui en prolonge un autre ne compte pas" \
+  "partielle, manquent POLAR_ACCESS_TOKEN POLAR_WEBHOOK_SECRET POLAR_TEAM_PRODUCT_ID" \
+  "$(polar_configuration $'POLAR_ACCESS_TOKEN_OLD\nPOLAR_SERVER')"
+
+echo "polar_secrets_json"
+expect_output "les quatre valeurs viennent de l'environnement, échappées en JSON" \
+  '{"POLAR_ACCESS_TOKEN":"polar_oat_a\"b","POLAR_WEBHOOK_SECRET":"polar_whs_c\\d","POLAR_TEAM_PRODUCT_ID":"0b1c2d3e-0000-4000-8000-000000000001","POLAR_SERVER":"production"}' \
+  "$(POLAR_ACCESS_TOKEN='polar_oat_a"b' POLAR_WEBHOOK_SECRET='polar_whs_c\d' \
+    POLAR_TEAM_PRODUCT_ID=0b1c2d3e-0000-4000-8000-000000000001 POLAR_SERVER=production polar_secrets_json)"
+expect_output "sans valeur, chaque secret est supprimé" \
+  '{"POLAR_ACCESS_TOKEN":null,"POLAR_WEBHOOK_SECRET":null,"POLAR_TEAM_PRODUCT_ID":null,"POLAR_SERVER":null}' \
+  "$(polar_removal_json)"
+
+
+echo "worker_secret_names"
+wrangler_api() { printf '[{"name":"BETTER_AUTH_SECRET","type":"secret_text"},{"name":"POLAR_SERVER","type":"secret_text"}]'; }
+expect_output "liste les noms des secrets du Worker" $'BETTER_AUTH_SECRET\nPOLAR_SERVER' "$(worker_secret_names)"
+wrangler_api() { return 1; }
+if worker_secret_names > /dev/null; then
+  printf '  FAIL  %s\n' "un échec de wrangler fait échouer la lecture, au lieu d'une liste vide"
+  failures=$((failures + 1))
+else
+  printf '  ok    %s\n' "un échec de wrangler fait échouer la lecture, au lieu d'une liste vide"
+fi
+wrangler_api() { printf 'pas du JSON'; }
+if worker_secret_names > /dev/null 2>&1; then
+  printf '  FAIL  %s\n' "une réponse illisible fait échouer la lecture"
+  failures=$((failures + 1))
+else
+  printf '  ok    %s\n' "une réponse illisible fait échouer la lecture"
+fi
+
 [ "$failures" -eq 0 ]
