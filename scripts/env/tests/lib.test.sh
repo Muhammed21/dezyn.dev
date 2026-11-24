@@ -90,7 +90,6 @@ expect_output "sans valeur, chaque secret est supprimé" \
   '{"POLAR_ACCESS_TOKEN":null,"POLAR_WEBHOOK_SECRET":null,"POLAR_TEAM_PRODUCT_ID":null,"POLAR_SERVER":null}' \
   "$(polar_removal_json)"
 
-[ "$failures" -eq 0 ]
 
 echo "worker_secret_names"
 wrangler_api() { printf '[{"name":"BETTER_AUTH_SECRET","type":"secret_text"},{"name":"POLAR_SERVER","type":"secret_text"}]'; }
@@ -110,3 +109,4 @@ else
   printf '  ok    %s\n' "une réponse illisible fait échouer la lecture"
 fi
 
+[ "$failures" -eq 0 ]
