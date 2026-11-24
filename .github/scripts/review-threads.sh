@@ -8,6 +8,8 @@ set -euo pipefail
 : "${REPO:?}" "${PR:?}"
 
 threads() {
+  # Les $owner, $name et $pr sont des variables GraphQL, que gh transmet telles quelles.
+  # shellcheck disable=SC2016
   gh api graphql -F owner="${REPO%/*}" -F name="${REPO#*/}" -F pr="$PR" -f query='
     query($owner: String!, $name: String!, $pr: Int!) {
       repository(owner: $owner, name: $name) {
@@ -42,6 +44,8 @@ case "${1:-}" in
       | .threadId')
     for id in $fixed; do
       if [ "${DRY_RUN:-0}" = "1" ]; then echo "dry-run: resolve $id"; continue; fi
+      # $id est une variable GraphQL, que gh transmet telle quelle.
+      # shellcheck disable=SC2016
       gh api graphql -f id="$id" -f query='
         mutation($id: ID!) { resolveReviewThread(input: {threadId: $id}) { thread { isResolved } } }' >/dev/null
       echo "resolved $id"
