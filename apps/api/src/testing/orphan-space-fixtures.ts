@@ -144,10 +144,12 @@ export const seedSpaceWithData = async (
   db: PostgresDatabase,
   {
     openMember = false,
+    orphanedAt = SEEDED_AT,
     subscription,
     entries,
   }: {
     readonly openMember?: boolean;
+    readonly orphanedAt?: Date;
     readonly subscription?: SeededSubscription;
     readonly entries?: number;
   } = {},
@@ -155,9 +157,13 @@ export const seedSpaceWithData = async (
   const spaceId = randomUUID();
   const userId = await seedUser(db);
   const authorId = randomUUID();
-  await db.orm
-    .insert(schema.space)
-    .values({ id: spaceId, name: "Studio Grace", plan: "free", createdAt: SEEDED_AT });
+  await db.orm.insert(schema.space).values({
+    id: spaceId,
+    name: "Studio Grace",
+    plan: "free",
+    createdAt: SEEDED_AT,
+    orphanedAt: openMember ? null : orphanedAt,
+  });
   await db.orm.insert(schema.spaceMember).values({
     id: randomUUID(),
     spaceId,

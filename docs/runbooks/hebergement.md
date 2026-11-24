@@ -108,7 +108,7 @@ Laisser `DEPLOY_ENABLED` à `false` jusqu'à l'étape 5.
    gh variable set DEPLOY_ENABLED --body true
    ```
 
-4. **Le Worker de purge** `dezyn-purge` (ADR 0042) passe toutes les 15 minutes, purge l'historique des espaces à leur limite, supprime les clés d'idempotence de plus de 24 heures, et supprime les espaces orphelins après la fin de leur période payée (ADR 0052). Il n'a ni route ni URL `workers.dev`, et se connecte par son propre Hyperdrive, en `history_maintainer` :
+4. **Le Worker de purge** `dezyn-purge` (ADR 0042) passe toutes les 15 minutes, purge l'historique des espaces à leur limite, supprime les clés d'idempotence de plus de 24 heures, et supprime les espaces orphelins 7 jours après leur orphelinat et après la fin de leur période payée (ADR 0052, ADR 0056). Il n'a ni route ni URL `workers.dev`, et se connecte par son propre Hyperdrive, en `history_maintainer` :
 
    ```
    (cd apps/api && npx wrangler hyperdrive create dezyn-purge-prod --caching-disabled --connection-string="$(npx neonctl@2.47.0 connection-string production --project-id <projet> --role-name history_maintainer)")
@@ -126,7 +126,7 @@ Laisser `DEPLOY_ENABLED` à `false` jusqu'à l'étape 5.
    (cd apps/api && npx wrangler secret put RESEND_API_KEY --config wrangler.purge.jsonc)
    ```
 
-   Chaque passage journalise `history_purge_pass` avec le nombre d'espaces purgés, puis `idempotency_purge_pass` avec le nombre de clés supprimées, puis `orphan_space_purge_pass` avec le nombre d'espaces orphelins supprimés (`purgedSpaces`) et de ceux qui attendent la fin de leur période (`waitingSpaces`). Une purge qui échoue journalise `history purge failed`, `idempotency purge failed` ou `orphan space purge failed`, les autres purges s'exécutent quand même, puis le passage finit en échec : `(cd apps/api && npx wrangler tail dezyn-purge --config wrangler.purge.jsonc)`. Sur le plan Workers Free, un passage peut dépasser les 10 ms de CPU par invocation et s'interrompre ; le lot en cours est annulé par sa transaction et le passage suivant reprend. Le plan Workers Paid lève cette limite (#161, ADR 0043).
+   Chaque passage journalise `history_purge_pass` avec le nombre d'espaces purgés, puis `idempotency_purge_pass` avec le nombre de clés supprimées, puis `orphan_space_purge_pass` avec le nombre d'espaces orphelins supprimés (`purgedSpaces`) et de ceux qui attendent la fin de leur délai de grâce ou de leur période payée (`waitingSpaces`). Une purge qui échoue journalise `history purge failed`, `idempotency purge failed` ou `orphan space purge failed`, les autres purges s'exécutent quand même, puis le passage finit en échec : `(cd apps/api && npx wrangler tail dezyn-purge --config wrangler.purge.jsonc)`. Sur le plan Workers Free, un passage peut dépasser les 10 ms de CPU par invocation et s'interrompre ; le lot en cours est annulé par sa transaction et le passage suivant reprend. Le plan Workers Paid lève cette limite (#161, ADR 0043).
 
    Pour lancer un passage sans attendre le cron, depuis un poste : `pnpm --filter @repo/api run purge`, avec `DATABASE_URL_HISTORY_MAINTAINER` sur la branche visée. Les emails partent alors par le SMTP de `SMTP_HOST`, `SMTP_PORT` et `MAIL_FROM`.
 
@@ -221,3 +221,57 @@ Retirer chaque version listée, puis relancer `pnpm prod:check` :
 ```
 
 `prod:check` échoue si le Worker n'a plus un secret dont dépend une clé valide. `BETTER_AUTH_SECRET` et la version la plus haute ne se retirent pas.
+
+### Rattacher un espace orphelin à un compte
+
+Un espace orphelin (ADR 0051) n'est purgé que 7 jours après la suppression du compte de son dernier membre (ADR 0056). Pendant ce délai, sur demande au support et une fois l'identité du demandeur vérifiée, l'espace se rattache à un compte dezyn existant, qui en devient le propriétaire. Le demandeur crée d'abord son compte depuis l'app.
+
+Se connecter à la branche `production` avec le rôle `app`, qui lit et écrit `space` et `space_member`, en passant l'espace et l'email du compte :
+
+```
+psql -v space_id=<espace> -v email=<email> "$(npx neonctl@2.47.0 connection-string production --project-id <projet> --role-name app)"
+```
+
+Vérifier l'espace et le compte. La première requête renvoie une ligne tant que l'espace est orphelin, avec `purge_from`, l'heure à partir de laquelle le Worker de purge peut le supprimer ; la seconde renvoie le compte :
+
+```sql
+SELECT s.id, s.name, s.plan, s.orphaned_at, s.orphaned_at + interval '7 days' AS purge_from,
+  (SELECT count(*) FROM project WHERE project.space_id = s.id) AS projects,
+  sub.status AS subscription_status, sub.current_period_end
+FROM space s
+LEFT JOIN space_subscription sub ON sub.space_id = s.id
+WHERE s.id = :'space_id'
+  AND NOT EXISTS (SELECT 1 FROM space_member m WHERE m.space_id = s.id AND m.closed_at IS NULL);
+SELECT id, name, email FROM identity_user WHERE email = :'email';
+```
+
+Rattacher l'espace, dans une transaction :
+
+```sql
+BEGIN;
+SELECT pg_advisory_xact_lock(hashtextextended('orphan-space-purge:' || :'space_id', 0));
+INSERT INTO space_member (id, space_id, user_id, role, joined_at)
+SELECT gen_random_uuid(), s.id, u.id, 'owner', now()
+FROM space s, identity_user u
+WHERE s.id = :'space_id' AND u.email = :'email'
+  AND s.orphaned_at + interval '7 days' > now()
+  AND NOT EXISTS (SELECT 1 FROM space_member m WHERE m.space_id = s.id AND m.closed_at IS NULL);
+UPDATE space SET orphaned_at = NULL
+WHERE id = :'space_id'
+  AND EXISTS (SELECT 1 FROM space_member m WHERE m.space_id = space.id AND m.closed_at IS NULL);
+COMMIT;
+```
+
+Le verrou consultatif attend la fin d'une étape de purge en cours sur l'espace et empêche la suivante. `INSERT 0 1` puis `UPDATE 1` : l'espace est rattaché. `INSERT 0 0` puis `UPDATE 0` : rien n'a changé, parce que l'espace n'existe plus, a déjà un membre ouvert, a passé son délai de grâce, ou que le compte n'existe pas ; un espace au délai passé peut être déjà en partie purgé, et ne se rattache pas par cette procédure.
+
+Vérifier le rattachement, qui renvoie une seule ligne, `owner`, avec l'email du compte et `orphaned_at` nul :
+
+```sql
+SELECT m.role, m.joined_at, u.email, s.orphaned_at
+FROM space_member m
+JOIN identity_user u ON u.id = m.user_id
+JOIN space s ON s.id = m.space_id
+WHERE m.space_id = :'space_id' AND m.closed_at IS NULL;
+```
+
+Le passage suivant de la purge ne compte plus l'espace dans `waitingSpaces`. Le nouveau propriétaire retrouve les projets, les tokens et l'historique ; les actions du compte supprimé y restent sous son membre supprimé (ADR 0015). Les invitations de l'espace ont été supprimées avec le compte : le propriétaire invite de nouveau ses membres. Un abonnement payé par le compte supprimé reste résilié et prend fin avec sa période ; l'espace repasse alors en Free, gelé sans perte s'il dépasse ses limites (ADR 0050). Un nouvel abonnement n'est pris en compte qu'une fois l'ancien terminé.

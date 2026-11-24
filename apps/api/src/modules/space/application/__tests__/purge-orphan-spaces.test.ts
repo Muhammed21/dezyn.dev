@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { LogRecord, LogSink } from "#platform/logging.ts";
 
-import type { OrphanSpace, OrphanSubscription } from "../../domain/orphan-space.ts";
+import type { OrphanSpace, OrphanState, OrphanSubscription } from "../../domain/orphan-space.ts";
 import {
   type OrphanPurgeStep,
   type OrphanPurgeUnitOfWork,
@@ -12,6 +12,14 @@ import {
 const STARTED_AT = new Date("2026-11-23T10:00:00.000Z");
 
 const BUDGET_MS = 30_000;
+
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+
+const ORPHANED_LONG_AGO = new Date(STARTED_AT.getTime() - 30 * SEVEN_DAYS_MS);
+
+const IN_GRACE_PERIOD = new Date(STARTED_AT.getTime() - SEVEN_DAYS_MS + 1);
+
+const GRACE_OVER_AT_PASS_START = new Date(STARTED_AT.getTime() - SEVEN_DAYS_MS);
 
 const PERIOD_ENDED_AT_PASS_START: OrphanSubscription = {
   status: "canceling",
@@ -25,9 +33,18 @@ const PERIOD_RUNNING: OrphanSubscription = {
   cancelRequested: false,
 };
 
-const makeOrphan = (spaceId: string, subscription?: OrphanSubscription): OrphanSpace => ({
-  spaceId,
-  subscription,
+const makeOrphan = (
+  spaceId: string,
+  {
+    subscription,
+    orphanedAt = ORPHANED_LONG_AGO,
+  }: { readonly subscription?: OrphanSubscription; readonly orphanedAt?: Date } = {},
+): OrphanSpace => ({ spaceId, orphanedAt, subscription });
+
+const makeOrphanState = (overrides: Partial<OrphanState> = {}): OrphanState => ({
+  orphanedAt: ORPHANED_LONG_AGO,
+  subscription: undefined,
+  ...overrides,
 });
 
 const steppingClock = (stepMs: number) => {
@@ -86,14 +103,30 @@ describe("un passage de la purge des espaces orphelins (ADR 0051)", () => {
     const pass = await passOf({
       orphans: [
         makeOrphan("sansAbonnement"),
-        makeOrphan("periodeEnCours", PERIOD_RUNNING),
-        makeOrphan("periodeFinie", PERIOD_ENDED_AT_PASS_START),
+        makeOrphan("periodeEnCours", { subscription: PERIOD_RUNNING }),
+        makeOrphan("periodeFinie", { subscription: PERIOD_ENDED_AT_PASS_START }),
       ],
       unitOfWork,
     });
 
     expect(pass).toEqual({ purgedSpaces: 2, waitingSpaces: 1 });
     expect(calls).toEqual(["sansAbonnement", "sansAbonnement", "sansAbonnement", "periodeFinie"]);
+  });
+
+  it("ne purge pas un espace orphelin depuis moins de 7 jours, et le compte parmi ceux qui attendent (ADR 0056)", async () => {
+    const { calls, unitOfWork } = makeUnitOfWork({});
+
+    const pass = await passOf({
+      orphans: [
+        makeOrphan("enDelaiDeGrace", { orphanedAt: IN_GRACE_PERIOD }),
+        makeOrphan("delaiEcoule", { orphanedAt: GRACE_OVER_AT_PASS_START }),
+      ],
+      unitOfWork,
+      now: steppingClock(1_000),
+    });
+
+    expect(pass).toEqual({ purgedSpaces: 1, waitingSpaces: 1 });
+    expect(calls).toEqual(["delaiEcoule"]);
   });
 
   it("ne compte pas un espace sauté, et passe au suivant", async () => {
@@ -112,14 +145,19 @@ describe("un passage de la purge des espaces orphelins (ADR 0051)", () => {
     const decisions: boolean[] = [];
     const unitOfWork: OrphanPurgeUnitOfWork = {
       step: async ({ purgeable }) => {
-        decisions.push(purgeable(PERIOD_ENDED_AT_PASS_START), purgeable(PERIOD_RUNNING));
+        decisions.push(
+          purgeable(makeOrphanState({ subscription: PERIOD_ENDED_AT_PASS_START })),
+          purgeable(makeOrphanState({ subscription: PERIOD_RUNNING })),
+          purgeable(makeOrphanState({ orphanedAt: GRACE_OVER_AT_PASS_START })),
+          purgeable(makeOrphanState({ orphanedAt: IN_GRACE_PERIOD })),
+        );
         return "purged";
       },
     };
 
     await passOf({ orphans: [makeOrphan("espace")], unitOfWork, now: steppingClock(1_000) });
 
-    expect(decisions).toEqual([true, false]);
+    expect(decisions).toEqual([true, false, true, false]);
   });
 
   it("s'arrête quand le budget du passage est écoulé, et le passage suivant reprend", async () => {

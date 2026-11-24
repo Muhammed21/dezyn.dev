@@ -53,33 +53,30 @@ export const lastOwnerSpacesOn =
       .map(({ id, name }) => ({ id, name }));
   };
 
-export const dropOrphanedInvitationsOn =
+export const orphanSpacesOn =
   (tx: PostgresTransaction) =>
-  async (userId: string): Promise<void> => {
-    await tx.delete(spaceInvitation).where(
-      inArray(
-        spaceInvitation.spaceId,
-        tx
-          .select({ spaceId: spaceMember.spaceId })
-          .from(spaceMember)
-          .where(
-            and(
-              eq(spaceMember.userId, userId),
-              isNull(spaceMember.closedAt),
-              notExists(
-                tx
-                  .select({ id: otherMember.id })
-                  .from(otherMember)
-                  .where(
-                    and(
-                      eq(otherMember.spaceId, spaceMember.spaceId),
-                      ne(otherMember.userId, userId),
-                      isNull(otherMember.closedAt),
-                    ),
-                  ),
+  async ({ userId, at }: { readonly userId: string; readonly at: Date }): Promise<void> => {
+    const orphaned = tx
+      .select({ spaceId: spaceMember.spaceId })
+      .from(spaceMember)
+      .where(
+        and(
+          eq(spaceMember.userId, userId),
+          isNull(spaceMember.closedAt),
+          notExists(
+            tx
+              .select({ id: otherMember.id })
+              .from(otherMember)
+              .where(
+                and(
+                  eq(otherMember.spaceId, spaceMember.spaceId),
+                  ne(otherMember.userId, userId),
+                  isNull(otherMember.closedAt),
+                ),
               ),
-            ),
           ),
-      ),
-    );
+        ),
+      );
+    await tx.delete(spaceInvitation).where(inArray(spaceInvitation.spaceId, orphaned));
+    await tx.update(space).set({ orphanedAt: at }).where(inArray(space.id, orphaned));
   };

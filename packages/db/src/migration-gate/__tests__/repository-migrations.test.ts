@@ -62,6 +62,7 @@ const NON_ADDITIVE_MIGRATIONS = [
   "0020_history_entry_stored_size.sql",
   "0021_history_entry_stored_size_trigger_removal.sql",
   "0026_account_deletion.sql",
+  "0030_space_orphaned_at.sql",
   ...Object.keys(ELEVATED_PRIVILEGE_MIGRATIONS),
 ];
 

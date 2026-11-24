@@ -8,6 +8,12 @@ const ONE_MILLISECOND_BEFORE = new Date(NOW.getTime() - 1);
 
 const ONE_MILLISECOND_AFTER = new Date(NOW.getTime() + 1);
 
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+
+const orphanedBefore = (ms: number) => new Date(NOW.getTime() - ms);
+
+const GRACE_OVER = orphanedBefore(30 * 24 * 60 * 60 * 1000);
+
 const makeSubscription = (overrides: Partial<OrphanSubscription> = {}): OrphanSubscription => ({
   status: "canceling",
   currentPeriodEnd: ONE_MILLISECOND_AFTER,
@@ -17,12 +23,15 @@ const makeSubscription = (overrides: Partial<OrphanSubscription> = {}): OrphanSu
 
 describe("un espace orphelin se purge après la fin de sa période payée (ADR 0051)", () => {
   it("un espace orphelin sans abonnement se purge", () => {
-    expect(orphanSpaceIsPurgeable({ subscription: undefined, now: NOW })).toBe(true);
+    expect(
+      orphanSpaceIsPurgeable({ orphanedAt: GRACE_OVER, subscription: undefined, now: NOW }),
+    ).toBe(true);
   });
 
   it("un espace orphelin dont l'abonnement est terminé se purge, même avant la date de fin annoncée", () => {
     expect(
       orphanSpaceIsPurgeable({
+        orphanedAt: GRACE_OVER,
         subscription: makeSubscription({
           status: "ended",
           currentPeriodEnd: ONE_MILLISECOND_AFTER,
@@ -37,6 +46,7 @@ describe("un espace orphelin se purge après la fin de sa période payée (ADR 0
     (status) => {
       expect(
         orphanSpaceIsPurgeable({
+          orphanedAt: GRACE_OVER,
           subscription: makeSubscription({ status, currentPeriodEnd: ONE_MILLISECOND_AFTER }),
           now: NOW,
         }),
@@ -50,6 +60,7 @@ describe("un espace orphelin se purge après la fin de sa période payée (ADR 0
   ])("un abonnement non terminé dont la période a fini %s se purge", (_label, currentPeriodEnd) => {
     expect(
       orphanSpaceIsPurgeable({
+        orphanedAt: GRACE_OVER,
         subscription: makeSubscription({ status: "canceling", currentPeriodEnd }),
         now: NOW,
       }),
@@ -59,6 +70,7 @@ describe("un espace orphelin se purge après la fin de sa période payée (ADR 0
   it("un abonnement non terminé sans date de fin fait attendre la purge", () => {
     expect(
       orphanSpaceIsPurgeable({
+        orphanedAt: GRACE_OVER,
         subscription: makeSubscription({ status: "canceling", currentPeriodEnd: undefined }),
         now: NOW,
       }),
@@ -68,6 +80,7 @@ describe("un espace orphelin se purge après la fin de sa période payée (ADR 0
   it("une résiliation encore à envoyer à Polar fait attendre la purge, même après la fin de la période", () => {
     expect(
       orphanSpaceIsPurgeable({
+        orphanedAt: GRACE_OVER,
         subscription: makeSubscription({
           status: "active",
           currentPeriodEnd: ONE_MILLISECOND_BEFORE,
@@ -75,6 +88,66 @@ describe("un espace orphelin se purge après la fin de sa période payée (ADR 0
         }),
         now: NOW,
       }),
+    ).toBe(false);
+  });
+});
+
+describe("un espace orphelin attend 7 jours avant sa purge (ADR 0056)", () => {
+  it.each([
+    ["exactement 7 jours", SEVEN_DAYS_MS],
+    ["7 jours et une milliseconde", SEVEN_DAYS_MS + 1],
+  ])("un espace orphelin sans abonnement depuis %s se purge", (_label, orphanedFor) => {
+    expect(
+      orphanSpaceIsPurgeable({
+        orphanedAt: orphanedBefore(orphanedFor),
+        subscription: undefined,
+        now: NOW,
+      }),
+    ).toBe(true);
+  });
+
+  it.each([
+    ["7 jours moins une milliseconde", SEVEN_DAYS_MS - 1],
+    ["une heure", 60 * 60 * 1000],
+  ])("un espace orphelin sans abonnement depuis %s attend la purge", (_label, orphanedFor) => {
+    expect(
+      orphanSpaceIsPurgeable({
+        orphanedAt: orphanedBefore(orphanedFor),
+        subscription: undefined,
+        now: NOW,
+      }),
+    ).toBe(false);
+  });
+
+  it("un abonnement terminé n'abrège pas le délai de grâce", () => {
+    expect(
+      orphanSpaceIsPurgeable({
+        orphanedAt: orphanedBefore(SEVEN_DAYS_MS - 1),
+        subscription: makeSubscription({
+          status: "ended",
+          currentPeriodEnd: ONE_MILLISECOND_BEFORE,
+        }),
+        now: NOW,
+      }),
+    ).toBe(false);
+  });
+
+  it("un abonnement dont la période payée finit après le délai fait toujours attendre la purge", () => {
+    expect(
+      orphanSpaceIsPurgeable({
+        orphanedAt: orphanedBefore(SEVEN_DAYS_MS),
+        subscription: makeSubscription({
+          status: "canceling",
+          currentPeriodEnd: ONE_MILLISECOND_AFTER,
+        }),
+        now: NOW,
+      }),
+    ).toBe(false);
+  });
+
+  it("un espace orphelin dont l'heure d'orphelinat est inconnue attend la purge", () => {
+    expect(
+      orphanSpaceIsPurgeable({ orphanedAt: undefined, subscription: undefined, now: NOW }),
     ).toBe(false);
   });
 });

@@ -1,6 +1,6 @@
 # 0052 — Le Worker de purge supprime un espace orphelin après la fin de sa période payée
 
-- Statut : Accepté
+- Statut : Accepté — §2 et §3 amendés par [0056](0056-un-espace-orphelin-attend-7-jours-avant-sa-purge-depuis-l-heure-d-orphelinat-notee-sur-l-espace.md)
 - Date : 2026-11-23
 - Décideurs : Muhammed Cavus
 - Amende : ADR 0042 (§7, `history_maintainer` reçoit `DELETE` sur `space` et sur les tables d'un espace)

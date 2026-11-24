@@ -42,9 +42,11 @@ describe("une étape de purge relit l'espace dans sa transaction (ADR 0052 §4)"
       expect(before).toMatchObject({ space_invitation: 1 });
     }));
 
-  it("saute un espace orphelin que la règle de l'abonnement ne laisse plus purger, et le laisse intact", () =>
+  it("saute un espace orphelin que la règle de l'abonnement ou du délai de grâce ne laisse plus purger, et le laisse intact", () =>
     withDatabases(async ({ app, maintainer }) => {
+      const orphanedAt = new Date("2026-11-20T10:00:00.000Z");
       const { spaceId } = await seedSpaceWithData(app, {
+        orphanedAt,
         subscription: { status: "active", currentPeriodEnd: null },
       });
       const before = await remainsOfSpace(app, spaceId);
@@ -53,15 +55,19 @@ describe("une étape de purge relit l'espace dans sa transaction (ADR 0052 §4)"
       expect(
         await postgresOrphanPurgeUnitOfWork(maintainer).step({
           spaceId,
-          purgeable: (subscription) => {
-            seen.push(subscription);
+          purgeable: (orphan) => {
+            seen.push(orphan);
             return false;
           },
         }),
       ).toBe("skipped");
 
       expect(seen).toEqual([
-        { status: "active", currentPeriodEnd: undefined, cancelRequested: false },
+        {
+          spaceId,
+          orphanedAt,
+          subscription: { status: "active", currentPeriodEnd: undefined, cancelRequested: false },
+        },
       ]);
       expect(await remainsOfSpace(app, spaceId)).toEqual(before);
     }));
