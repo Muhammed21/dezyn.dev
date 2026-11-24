@@ -205,7 +205,13 @@ Le wizard suit cet ordre :
 6. **Identifiant du produit**, relu par l'API de Polar : abonnement `month`, prix `fixed` 3499 `eur`.
 7. **Webhook** vers `https://api.dezyn.dev/webhooks/polar`, format Raw, version d'API 2027-01, secret généré par Polar, avec les événements que l'API traite : `subscription.active`, `subscription.updated`, `subscription.past_due`, `subscription.canceled`, `subscription.uncanceled`, `subscription.revoked`.
 8. **Secrets du Worker**, après confirmation : les quatre valeurs partent sur l'entrée standard de `wrangler secret bulk`, sans fichier ni argument de commande. La nouvelle version est servie aussitôt, avec le code déployé, et ouvre le paiement. Le wizard vérifie ensuite que `/health` répond 200 et que `/webhooks/polar` refuse un événement non signé par 401 (503 tant que Polar n'est pas configuré).
-9. **Premier paiement réel**, une fois la revue approuvée : passer un espace de test en Team depuis `app.dezyn.dev` avec une vraie carte ; l'espace affiche Team et les livraisons du webhook répondent 200. Puis, dans Polar, rembourser la commande (Orders → Refund) et révoquer l'abonnement (Subscriptions → Revoke) : `subscription.revoked` repasse l'espace en Free.
+9. **Premier paiement réel**, une fois la revue approuvée : passer un espace de test en Team depuis `app.dezyn.dev` avec une vraie carte ; l'espace affiche Team et les livraisons du webhook répondent 200. Puis, dans le tableau de bord de Polar, révoquer d'abord, rembourser ensuite (ordre de l'ADR 0055) : l'espace ne reste jamais en Team après le remboursement.
+   1. **Révoquer** : Sales → Subscriptions → l'abonnement → ⋮ → Cancel Subscription → immédiatement. Polar envoie `subscription.revoked`, qui repasse l'espace en Free.
+   2. **Rembourser** : Sales → Orders → la commande → Refund.
+
+   Vérifier : l'abonnement est « Canceled » dans Polar, et la page « Plan » de l'espace affiche Free.
+
+   Un remboursement seul rend l'argent sans toucher à l'abonnement, qui reste « Active » : l'espace reste en Team jusqu'à la fin de la période. « Cancel subscription » dans le portail client résilie aussi en fin de période : l'espace reste en Team jusqu'à cette date.
 
 Refermer le paiement retire les quatre secrets en une seule version :
 

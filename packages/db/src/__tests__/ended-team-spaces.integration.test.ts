@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { Client } from "pg";
 import { describe, expect, it } from "vitest";
 
-import { endedTeamSpaces } from "../ended-team-spaces.ts";
+import { endedTeamSpaces, inControlTransaction } from "../ended-team-spaces.ts";
 import { migrate } from "../migrate.ts";
 import { onClient } from "../testing/clients.ts";
 import { withThrowawayDatabase } from "../testing/throwaway-database.ts";
@@ -25,11 +25,17 @@ const makeSpace = (overrides: Partial<SeededSpace> = {}): SeededSpace => ({
   ...overrides,
 });
 
-const seedSpace = async (client: Client, { id, plan, subscriptionStatus }: SeededSpace) => {
-  await client.query(
-    'INSERT INTO "space" ("id", "name", "plan", "created_at") VALUES ($1, $2, $3, $4)',
-    [id, "Atelier", plan, CREATED_AT],
-  );
+const insertSpace = (client: Client, { id, plan }: SeededSpace) =>
+  client.query('INSERT INTO "space" ("id", "name", "plan", "created_at") VALUES ($1, $2, $3, $4)', [
+    id,
+    "Atelier",
+    plan,
+    CREATED_AT,
+  ]);
+
+const seedSpace = async (client: Client, space: SeededSpace) => {
+  const { id, subscriptionStatus } = space;
+  await insertSpace(client, space);
   if (subscriptionStatus !== undefined) {
     await client.query(
       'INSERT INTO "space_subscription" ("space_id", "polar_subscription_id", "status", "polar_modified_at") VALUES ($1, $2, $3, $4)',
@@ -86,5 +92,16 @@ describe("endedTeamSpaces", () => {
 
   it("ignore un espace en Team sans abonnement", async () => {
     expect(await endedTeamSpacesAmong([makeSpace(TEAM_PLAN)])).toEqual([]);
+  });
+
+  it("tourne dans une transaction où PostgreSQL refuse toute écriture, même permise au rôle app", async () => {
+    const writeAttempt = withThrowawayDatabase(async ({ migratorUrl, appUrl }) => {
+      await migrate({ connectionString: migratorUrl });
+      return inControlTransaction({ connectionString: appUrl }, (client) =>
+        insertSpace(client, makeSpace()),
+      );
+    });
+
+    await expect(writeAttempt).rejects.toThrow("cannot execute INSERT in a read-only transaction");
   });
 });

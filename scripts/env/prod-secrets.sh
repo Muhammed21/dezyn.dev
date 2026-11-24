@@ -9,7 +9,10 @@ if ! wrangler_api whoami 2> /dev/null | grep -q "You are logged in"; then
   exit 1
 fi
 
-worker_secrets=$(wrangler_api secret list --env="" --format json 2> /dev/null | jq -r '.[].name')
+if ! worker_secrets=$(worker_secret_names); then
+  echo "Lecture des secrets du Worker dezyn-api impossible : relancer une fois Cloudflare joignable." >&2
+  exit 1
+fi
 has_secret() {
   grep -qx "$1" <<< "$worker_secrets"
 }
