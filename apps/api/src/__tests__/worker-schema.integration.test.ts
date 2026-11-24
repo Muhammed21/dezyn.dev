@@ -89,7 +89,7 @@ describe("le Worker vérifie le schéma une fois par isolat", () => {
 });
 
 describe("la tâche planifiée du Worker passe par la base de Hyperdrive", () => {
-  it("vérifie le schéma, rejoue les résiliations et les refus en attente puis ferme la base", () =>
+  it("vérifie le schéma, rejoue les résiliations, les refus et les révocations en attente puis ferme la base", () =>
     withThrowawayDatabase(async ({ migratorUrl, appUrl }) => {
       await migrate({ connectionString: migratorUrl });
       const checked: string[] = [];
@@ -121,6 +121,7 @@ describe("la tâche planifiée du Worker passe par la base de Hyperdrive", () =>
       expect(logged).toEqual([
         { level: "info", msg: "polar_cancellation_replay_pass", replayed: 0, pending: 0 },
         { level: "info", msg: "polar_refusal_replay_pass", settled: 0, pending: 0 },
+        { level: "info", msg: "polar_refund_revocation_replay_pass", revoked: 0, pending: 0 },
       ]);
     }));
 });

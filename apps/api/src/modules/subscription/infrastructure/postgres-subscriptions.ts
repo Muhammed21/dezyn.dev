@@ -11,6 +11,7 @@ import type { SpacePayers } from "../application/open-portal.ts";
 import type { PayerDepartures } from "../application/payer-leaves.ts";
 import type { SubscriptionUnitOfWork } from "../application/receive-notification.ts";
 import type { CancelRequests } from "../application/replay-cancellations.ts";
+import type { RefundRevocations } from "../application/revoke-refunded.ts";
 import type { Refusals } from "../application/settle-refusals.ts";
 import type { SpacePlans } from "../application/start-checkout.ts";
 import {
@@ -26,6 +27,7 @@ const {
   space,
   spaceMember,
   spacePlanChange,
+  spaceRefundRevocation,
   spaceRefusedSubscription,
   spaceSubscription,
 } = schema;
@@ -363,5 +365,69 @@ export const postgresRefusals = (db: PostgresDatabase): Refusals => ({
       .update(spaceRefusedSubscription)
       .set({ settlingSince: null, revokedAt, refundedAt })
       .where(eq(spaceRefusedSubscription.polarSubscriptionId, subscriptionId));
+  },
+});
+
+export const postgresRefundRevocations = (db: PostgresDatabase): RefundRevocations => ({
+  record: async ({ subscriptionId, orderId, at }) => {
+    const [recorded] = await db.orm
+      .insert(spaceRefundRevocation)
+      .select(
+        db.orm
+          .select({
+            polarSubscriptionId: spaceSubscription.polarSubscriptionId,
+            spaceId: spaceSubscription.spaceId,
+            polarOrderId: sql<string>`${orderId}`.as("polar_order_id"),
+            receivedAt: sql<Date>`${at}`.as("received_at"),
+            revokedAt: sql<null>`null`.as("revoked_at"),
+            settlingSince: sql<Date>`${at}`.as("settling_since"),
+          })
+          .from(spaceSubscription)
+          .where(
+            and(
+              eq(spaceSubscription.polarSubscriptionId, subscriptionId),
+              ne(spaceSubscription.status, "ended"),
+            ),
+          ),
+      )
+      .onConflictDoNothing()
+      .returning({
+        spaceId: spaceRefundRevocation.spaceId,
+        subscriptionId: spaceRefundRevocation.polarSubscriptionId,
+        orderId: spaceRefundRevocation.polarOrderId,
+      });
+    return recorded;
+  },
+  pending: () =>
+    db.orm
+      .select({
+        spaceId: spaceRefundRevocation.spaceId,
+        subscriptionId: spaceRefundRevocation.polarSubscriptionId,
+        orderId: spaceRefundRevocation.polarOrderId,
+      })
+      .from(spaceRefundRevocation)
+      .where(isNull(spaceRefundRevocation.revokedAt)),
+  claim: async ({ subscriptionId, at, staleBefore }) => {
+    const claimed = await db.orm
+      .update(spaceRefundRevocation)
+      .set({ settlingSince: at })
+      .where(
+        and(
+          eq(spaceRefundRevocation.polarSubscriptionId, subscriptionId),
+          isNull(spaceRefundRevocation.revokedAt),
+          or(
+            isNull(spaceRefundRevocation.settlingSince),
+            lt(spaceRefundRevocation.settlingSince, staleBefore),
+          ),
+        ),
+      )
+      .returning({ subscriptionId: spaceRefundRevocation.polarSubscriptionId });
+    return claimed.length > 0;
+  },
+  release: async ({ subscriptionId, revokedAt }) => {
+    await db.orm
+      .update(spaceRefundRevocation)
+      .set({ settlingSince: null, revokedAt })
+      .where(eq(spaceRefundRevocation.polarSubscriptionId, subscriptionId));
   },
 });

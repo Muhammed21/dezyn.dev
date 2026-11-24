@@ -16,7 +16,12 @@ export {
   identityOAuthResource,
 } from "./oauth.ts";
 export { space, spaceInvitation, spaceMember } from "./space.ts";
-export { spacePlanChange, spaceRefusedSubscription, spaceSubscription } from "./subscription.ts";
+export {
+  spacePlanChange,
+  spaceRefundRevocation,
+  spaceRefusedSubscription,
+  spaceSubscription,
+} from "./subscription.ts";
 export { historyAuthor, historyEntry } from "./history.ts";
 export { project } from "./project.ts";
 export {

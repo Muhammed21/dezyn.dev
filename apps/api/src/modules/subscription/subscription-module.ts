@@ -10,6 +10,7 @@ import { openPortal } from "./application/open-portal.ts";
 import { payerDeletedAccount, payerLeaves } from "./application/payer-leaves.ts";
 import { receiveNotification } from "./application/receive-notification.ts";
 import { replayCancellations } from "./application/replay-cancellations.ts";
+import { replayRefundRevocations } from "./application/revoke-refunded.ts";
 import { replayRefusals } from "./application/settle-refusals.ts";
 import { startCheckout } from "./application/start-checkout.ts";
 import type { SubscriptionUseCases } from "./application/subscription-use-cases.ts";
@@ -25,6 +26,7 @@ import {
   paidSubscriptionsOn,
   postgresCancelRequests,
   postgresPayerDepartures,
+  postgresRefundRevocations,
   postgresRefusals,
   postgresSpacePayers,
   postgresSpacePlans,
@@ -75,9 +77,16 @@ export const replayPendingPolarRequests = ({
     log,
   });
   const refusals = replayRefusals({ refusals: postgresRefusals(db), merchant, log, now: clock });
+  const revocations = replayRefundRevocations({
+    revocations: postgresRefundRevocations(db),
+    merchant,
+    log,
+    now: clock,
+  });
   return async (): Promise<void> => {
     await cancellations();
     await refusals();
+    await revocations();
   };
 };
 
@@ -145,6 +154,7 @@ export const subscriptionModule = ({
           : polarNotificationReader({ webhookSecret: billing.webhookSecret }),
       unitOfWork: postgresSubscriptionUnitOfWork(db),
       refusals: postgresRefusals(db),
+      revocations: postgresRefundRevocations(db),
       merchant: billing?.merchant ?? unavailableMerchantOfRecord,
       log,
       now: clock,

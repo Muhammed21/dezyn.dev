@@ -45,8 +45,15 @@ export type SubscriptionEvent = {
   readonly modifiedAt: Date;
 };
 
+export type OrderRefund = {
+  readonly orderId: string;
+  readonly subscriptionId: string | undefined;
+  readonly orderStatus: string;
+};
+
 export type MerchantNotification =
   | { readonly kind: "subscription"; readonly event: SubscriptionEvent }
+  | { readonly kind: "order_refunded"; readonly refund: OrderRefund }
   | { readonly kind: "other"; readonly type: string };
 
 export type NotificationFailure = "invalid_signature" | "malformed" | "unavailable";

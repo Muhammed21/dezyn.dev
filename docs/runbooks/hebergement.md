@@ -190,28 +190,28 @@ Le wizard suit cet ordre :
 4. **Produit Team.** Abonnement mensuel, prix fixe 34,99 EUR, taxe exclusive, sans bénéfice.
 5. **Jeton d'accès** `dezyn-production`, avec exactement ces scopes, ceux qu'exigent les appels de `apps/api/src/modules/subscription/infrastructure/polar.ts` d'après `@polar-sh/sdk/2027-01` :
 
-   | Scope                     | Appel                                                         |
-   | ------------------------- | ------------------------------------------------------------- |
-   | `checkouts:write`         | `createCheckouts` : le checkout d'un espace                   |
-   | `customer_sessions:write` | `createCustomerSessions` : le portail client                  |
-   | `subscriptions:write`     | `updateSubscriptions` et `revokeSubscriptions` (ADR 0055)     |
-   | `orders:read`             | `listOrders` : les commandes d'un abonnement refusé           |
-   | `refunds:read`            | `listRefunds` : ses remboursements déjà faits                 |
-   | `refunds:write`           | `createRefunds` : le remboursement d'un abonnement refusé     |
-   | `products:read`           | la relecture du produit Team par le wizard ; l'API s'en passe |
+   | Scope                     | Appel                                                           |
+   | ------------------------- | --------------------------------------------------------------- |
+   | `checkouts:write`         | `createCheckouts` : le checkout d'un espace                     |
+   | `customer_sessions:write` | `createCustomerSessions` : le portail client                    |
+   | `subscriptions:write`     | `updateSubscriptions` et `revokeSubscriptions` (ADR 0055, 0058) |
+   | `orders:read`             | `listOrders` : les commandes d'un abonnement refusé             |
+   | `refunds:read`            | `listRefunds` : ses remboursements déjà faits                   |
+   | `refunds:write`           | `createRefunds` : le remboursement d'un abonnement refusé       |
+   | `products:read`           | la relecture du produit Team par le wizard ; l'API s'en passe   |
 
    Les webhooks se vérifient par leur secret, sans scope. Noter la date d'expiration du jeton : un jeton expiré ferme le checkout, le portail, la révocation et le remboursement.
 
 6. **Identifiant du produit**, relu par l'API de Polar : abonnement `month`, prix `fixed` 3499 `eur`.
-7. **Webhook** vers `https://api.dezyn.dev/webhooks/polar`, format Raw, version d'API 2027-01, secret généré par Polar, avec les événements que l'API traite : `subscription.active`, `subscription.updated`, `subscription.past_due`, `subscription.canceled`, `subscription.uncanceled`, `subscription.revoked`.
+7. **Webhook** vers `https://api.dezyn.dev/webhooks/polar`, format Raw, version d'API 2027-01, secret généré par Polar, avec les événements que l'API traite : `subscription.active`, `subscription.updated`, `subscription.past_due`, `subscription.canceled`, `subscription.uncanceled`, `subscription.revoked`, `order.refunded`.
 8. **Secrets du Worker**, après confirmation : les quatre valeurs partent sur l'entrée standard de `wrangler secret bulk`, sans fichier ni argument de commande. La nouvelle version est servie aussitôt, avec le code déployé, et ouvre le paiement. Le wizard vérifie ensuite que `/health` répond 200 et que `/webhooks/polar` refuse un événement non signé par 401 (503 tant que Polar n'est pas configuré).
-9. **Premier paiement réel**, une fois la revue approuvée : passer un espace de test en Team depuis `app.dezyn.dev` avec une vraie carte ; l'espace affiche Team et les livraisons du webhook répondent 200. Puis, dans le tableau de bord de Polar, révoquer d'abord, rembourser ensuite (ordre de l'ADR 0055) : l'espace ne reste jamais en Team après le remboursement.
-   1. **Révoquer** : Sales → Subscriptions → l'abonnement → ⋮ → Cancel Subscription → immédiatement. Polar envoie `subscription.revoked`, qui repasse l'espace en Free.
-   2. **Rembourser** : Sales → Orders → la commande → Refund.
+9. **Premier paiement réel**, une fois la revue approuvée : passer un espace de test en Team depuis `app.dezyn.dev` avec une vraie carte ; l'espace affiche Team et les livraisons du webhook répondent 200. Puis rembourser la commande **en entier** : Sales → Orders → la commande → Refund, montant proposé par défaut. Polar envoie `order.refunded`, l'API révoque l'abonnement chez Polar (ADR 0058), puis `subscription.revoked` repasse l'espace en Free.
 
-   Vérifier : l'abonnement est « Canceled » dans Polar, et la page « Plan » de l'espace affiche Free.
+   Vérifier : l'abonnement est « Canceled » dans Polar, les livraisons de `order.refunded` et de `subscription.revoked` répondent 200, et la page « Plan » de l'espace affiche Free.
 
-   Un remboursement seul rend l'argent sans toucher à l'abonnement, qui reste « Active » : l'espace reste en Team jusqu'à la fin de la période. « Cancel subscription » dans le portail client résilie aussi en fin de période : l'espace reste en Team jusqu'à cette date.
+   Un remboursement partiel rend l'argent sans toucher à l'abonnement, qui reste « Active » : l'espace reste en Team. « Cancel subscription » dans le portail client résilie en fin de période : l'espace reste en Team jusqu'à cette date.
+
+   Si l'abonnement reste « Active » après un remboursement total (webhook non abonné à `order.refunded`, Polar indisponible au-delà du rejeu), le révoquer à la main : Sales → Subscriptions → l'abonnement → ⋮ → Cancel Subscription → immédiatement. Polar envoie `subscription.revoked`, qui repasse l'espace en Free.
 
 Refermer le paiement retire les quatre secrets en une seule version :
 
@@ -249,6 +249,18 @@ L'alerte se pose dans Cloudflare, Alerts → Monitors → Create a Monitor ([Mon
 - destination : email du support, ou webhook.
 
 Avant de compter sur l'alerte, la déclencher une fois : la même requête dans Observability → Query Builder doit trouver la ligne d'un abonnement refusé en preview ou en sandbox, ou la ligne de `polar_refusal_replay_pass` en remplaçant le texte cherché.
+
+### L'alerte sur une révocation après remboursement à faire à la main
+
+Un remboursement total de la commande de l'abonnement d'un espace révoque cet abonnement chez Polar (ADR 0058). Quand Polar refuse encore, le cron de `dezyn-api` journalise à chaque passage, au niveau `error` :
+
+```
+fully refunded polar order: revoke the subscription by hand in Polar
+```
+
+avec `spaceId`, `subscriptionId` et `orderId`. Révoquer l'abonnement dans Polar (Sales → Subscriptions → l'abonnement → ⋮ → Cancel Subscription → immédiatement) ; le passage suivant reçoit `AlreadyCanceledSubscription`, marque la révocation faite et ne journalise plus.
+
+L'alerte se pose comme la précédente, avec le texte `fully refunded polar order: revoke the subscription by hand`.
 
 ## 8. Vérifier
 

@@ -28,6 +28,15 @@ export const spaceRefusedSubscription = pgTable("space_refused_subscription", {
   settlingSince: at("settling_since"),
 });
 
+export const spaceRefundRevocation = pgTable("space_refund_revocation", {
+  polarSubscriptionId: text("polar_subscription_id").primaryKey(),
+  spaceId: uuid("space_id").notNull(),
+  polarOrderId: text("polar_order_id").notNull(),
+  receivedAt: at("received_at").notNull(),
+  revokedAt: at("revoked_at"),
+  settlingSince: at("settling_since"),
+});
+
 export const spacePlanChange = pgTable(
   "space_plan_change",
   {
