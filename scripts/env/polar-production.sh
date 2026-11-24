@@ -82,6 +82,8 @@ pause() {
 }
 
 # confirm "question" is a y/N gate; returns success on yes.
+# lib.sh, chargé plus bas, remplace ce confirm [y/N] par son confirm [o/N].
+# shellcheck disable=SC2329
 confirm() {
   local reply=""
   printf '  %s? %s [y/N] ' "$YELLOW" "$1"
@@ -111,7 +113,7 @@ ask() {
   current=$(_existing "$key" || true)
   # Readline needs the colour codes wrapped in \001..\002 to place the cursor.
   p="  $s$BOLD$e$prompt$s$RESET$e "
-  [[ -n "$current" ]] && p+="$s$DIM$e[Enter keeps current]$s$RESET$e "
+  [[ -n "$current" ]] && p+="$s$DIM${e}[Enter keeps current]$s$RESET$e "
   read -e -r -p "$p" input || rc=1
   if (( rc )) && [[ -z "$input" ]]; then return 1; fi
   [[ -z "$input" && -n "$current" ]] && input="$current"
@@ -137,6 +139,8 @@ ask_secret() {
 # write_env KEY VALUE upserts KEY='VALUE' into ENV_FILE (replaces any existing
 # line) and sets $KEY. Idempotent. Creates ENV_FILE at mode 0600; writes through
 # a symlink and keeps an existing file's mode.
+# Bibliothèque du wizard, identique d'un wizard à l'autre : cette fonction sert à d'autres.
+# shellcheck disable=SC2329
 write_env() {
   local key="$1" value="$2" tmp sq="'\\''"
   [[ -e "$ENV_FILE" ]] || (umask 077 && : > "$ENV_FILE")
@@ -152,6 +156,8 @@ write_env() {
 
 # set_secret NAME VALUE sets a GitHub Actions repo secret via gh. Falls back
 # to a warning (and records it) if gh is unavailable or unauthenticated.
+# Bibliothèque du wizard, identique d'un wizard à l'autre : cette fonction sert à d'autres.
+# shellcheck disable=SC2329
 set_secret() {
   local name="$1" value="$2"
   if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
@@ -166,6 +172,8 @@ set_secret() {
 }
 
 # set_var NAME VALUE sets a GitHub Actions repo variable (non-secret).
+# Bibliothèque du wizard, identique d'un wizard à l'autre : cette fonction sert à d'autres.
+# shellcheck disable=SC2329
 set_var() {
   local name="$1" value="$2"
   if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
@@ -411,9 +419,15 @@ open_url "https://app.dezyn.dev"
 step "Créer un espace de test, puis passer en Team depuis l'app avec une vraie carte."
 step "Polar → Settings → Webhooks → l'endpoint : les livraisons répondent 200."
 step "L'espace affiche le plan Team."
-step "Polar → Orders → la commande : rembourser la totalité (Refund)."
-step "Polar → Subscriptions → l'abonnement : révoquer immédiatement (Revoke)."
-step "L'espace repasse en Free : subscription.revoked est livré et répond 200."
+say "Dans Polar, révoquer d'abord, puis rembourser (ADR 0055) : l'espace ne reste jamais en Team"
+say "après le remboursement."
+step "1. Révoquer : Sales → Subscriptions → l'abonnement → ⋮ → Cancel Subscription → immédiatement."
+step "   subscription.revoked est livré, répond 200, et l'espace repasse en Free."
+step "2. Rembourser : Sales → Orders → la commande → Refund."
+step "Vérifier : l'abonnement est « Canceled » dans Polar, la page « Plan » de l'espace affiche Free."
+warn "Un remboursement seul laisse l'abonnement « Active » et l'espace en Team jusqu'à la fin de la période."
+warn "« Cancel subscription » dans le portail client résilie en fin de période : l'espace reste en Team"
+warn "jusqu'à cette date."
 note "Puis poser l'alerte « refused polar subscription » : docs/runbooks/hebergement.md, section 7."
 note "Contrôle complet : pnpm prod:check"
 pause

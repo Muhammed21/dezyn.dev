@@ -1,3 +1,6 @@
+# shellcheck shell=bash
+# Bibliothèque chargée par source : ses constantes et failed sont lues par les scripts appelants.
+# shellcheck disable=SC2034
 NEONCTL_VERSION=2.47.0
 DEMO_EMAIL=dev@dezyn.test
 REFUSED=3
