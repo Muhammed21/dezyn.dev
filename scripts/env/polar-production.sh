@@ -261,7 +261,10 @@ if [[ -n "$ended" ]]; then
   exit 1
 fi
 printf '  %s✓ aucun%s\n' "$GREEN" "$RESET"
-worker_secrets=$(wrangler_api secret list --env="" --format json 2> /dev/null | jq -r '.[].name')
+if ! worker_secrets=$(worker_secret_names); then
+  warn "lecture des secrets du Worker dezyn-api impossible : relancer une fois Cloudflare joignable."
+  exit 1
+fi
 polar=$(polar_configuration "$worker_secrets")
 note "Configuration Polar actuelle du Worker dezyn-api : $polar."
 if [[ "$polar" != absente ]] && ! confirm "Le Worker a déjà des secrets POLAR_*. Les remplacer à l'étape 8 ?"; then

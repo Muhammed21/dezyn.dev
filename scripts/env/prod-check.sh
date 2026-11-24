@@ -53,7 +53,13 @@ case $deploy_enabled in
 esac
 
 echo "Worker dezyn-api"
-worker_secrets=$(wrangler_api secret list --env="" --format json 2> /dev/null | jq -r '.[].name' || true)
+if worker_secrets=$(worker_secret_names); then
+  worker_read=ok
+else
+  worker_read="impossible, Cloudflare injoignable ou jeton refusé"
+  worker_secrets=""
+fi
+check "lecture des secrets du Worker" "$worker_read" ok
 check "secrets du Worker" "$(missing_from "$worker_secrets" BETTER_AUTH_SECRET)" ""
 # shellcheck disable=SC2046
 check "secrets dont dépendent les clés de signature valides" \
@@ -70,6 +76,7 @@ echo "Polar"
 check "wrangler.jsonc ne déclare aucune var POLAR_*, toutes sont des secrets du Worker" \
   "$(grep -o '"POLAR_[A-Z_]*"' apps/api/wrangler.jsonc | tr '\n' ' ' || true)" ""
 polar=$(polar_configuration "$worker_secrets")
+[ "$worker_read" = ok ] || polar="inconnue, secrets du Worker illisibles"
 case $polar in
   absente)
     info "Paiement désactivé : aucun secret POLAR_* sur le Worker, à poser par pnpm polar:production"

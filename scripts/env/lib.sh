@@ -112,6 +112,12 @@ wrangler_api() {
   (cd apps/api && pnpm exec wrangler "$@")
 }
 
+worker_secret_names() {
+  local listed
+  listed=$(wrangler_api secret list --env="" --format json 2> /dev/null) || return 1
+  jq -r '.[].name' <<< "$listed" 2> /dev/null
+}
+
 check() {
   if [ "$2" = "$3" ]; then
     echo "OK  $1"

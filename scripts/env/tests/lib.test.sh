@@ -91,3 +91,22 @@ expect_output "sans valeur, chaque secret est supprimé" \
   "$(polar_removal_json)"
 
 [ "$failures" -eq 0 ]
+
+echo "worker_secret_names"
+wrangler_api() { printf '[{"name":"BETTER_AUTH_SECRET","type":"secret_text"},{"name":"POLAR_SERVER","type":"secret_text"}]'; }
+expect_output "liste les noms des secrets du Worker" $'BETTER_AUTH_SECRET\nPOLAR_SERVER' "$(worker_secret_names)"
+wrangler_api() { return 1; }
+if worker_secret_names > /dev/null; then
+  printf '  FAIL  %s\n' "un échec de wrangler fait échouer la lecture, au lieu d'une liste vide"
+  failures=$((failures + 1))
+else
+  printf '  ok    %s\n' "un échec de wrangler fait échouer la lecture, au lieu d'une liste vide"
+fi
+wrangler_api() { printf 'pas du JSON'; }
+if worker_secret_names > /dev/null 2>&1; then
+  printf '  FAIL  %s\n' "une réponse illisible fait échouer la lecture"
+  failures=$((failures + 1))
+else
+  printf '  ok    %s\n' "une réponse illisible fait échouer la lecture"
+fi
+
