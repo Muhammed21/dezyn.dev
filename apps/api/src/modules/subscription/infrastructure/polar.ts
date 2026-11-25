@@ -37,7 +37,20 @@ const PolarSubscriptionEvent = z.object({
 
 const SubscriptionType = z.object({ type: z.string().startsWith("subscription.") });
 
+const OrderRefundedType = z.object({ type: z.literal("order.refunded") });
+
+const PolarOrderRefundedEvent = OrderRefundedType.extend({
+  data: z.object({ id: z.string(), status: z.string(), subscription_id: z.string().nullable() }),
+});
+
 const notificationOf = (payload: unknown): Result<MerchantNotification, NotificationFailure> => {
+  if (OrderRefundedType.safeParse(payload).success) {
+    const { id, status, subscription_id } = PolarOrderRefundedEvent.parse(payload).data;
+    return ok({
+      kind: "order_refunded",
+      refund: { orderId: id, subscriptionId: subscription_id ?? undefined, orderStatus: status },
+    });
+  }
   if (!SubscriptionType.safeParse(payload).success) {
     return ok({ kind: "other", type: z.object({ type: z.string() }).parse(payload).type });
   }

@@ -88,6 +88,148 @@ export const makeSubscriptionEvent = ({
   },
 });
 
+export const FULL_REFUND = { status: "refunded", refundedAmount: 3499 } as const;
+
+export const PARTIAL_REFUND = { status: "partially_refunded", refundedAmount: 1000 } as const;
+
+export const makeOrderEvent = ({
+  type = "order.refunded",
+  spaceId,
+  subscriptionId = "0d3f6a2b-7c1e-4b8a-9f2d-5e6a7b8c9d0e",
+  orderId = "3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f",
+  status = FULL_REFUND.status,
+  refundedAmount = FULL_REFUND.refundedAmount,
+  modifiedAt = MODIFIED_AT,
+}: {
+  readonly type?: string;
+  readonly spaceId: string;
+  readonly subscriptionId?: string | null;
+  readonly orderId?: string;
+  readonly status?: string;
+  readonly refundedAmount?: number;
+  readonly modifiedAt?: Date;
+}) => ({
+  type,
+  timestamp: modifiedAt.toISOString(),
+  data: {
+    id: orderId,
+    created_at: "2026-11-22T10:00:00.000Z",
+    modified_at: modifiedAt.toISOString(),
+    status,
+    paid: true,
+    subtotal_amount: 3499,
+    discount_amount: 0,
+    net_amount: 3499,
+    tax_amount: 700,
+    total_amount: 4199,
+    applied_balance_amount: 0,
+    due_amount: 0,
+    refunded_amount: refundedAmount,
+    refunded_tax_amount: Math.round((refundedAmount * 700) / 3499),
+    currency: "eur",
+    billing_reason: subscriptionId === null ? "purchase" : "subscription_create",
+    billing_name: "Ada Lovelace",
+    billing_address: null,
+    invoice_number: "DEZYN-0001",
+    is_invoice_generated: true,
+    receipt_number: null,
+    seats: null,
+    units: null,
+    customer_id: "7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d",
+    product_id: "5c4b3a29-1807-4f6e-9d5c-4b3a29180706",
+    discount_id: null,
+    subscription_id: subscriptionId,
+    checkout_id: "2e3f4a5b-6c7d-4e8f-9a0b-1c2d3e4f5a6b",
+    metadata: {},
+    custom_field_data: {},
+    platform_fee_amount: 0,
+    platform_fee_currency: null,
+    customer: {
+      id: "7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d",
+      created_at: "2026-11-22T09:59:00.000Z",
+      modified_at: null,
+      metadata: {},
+      external_id: null,
+      email: "ada@dezyn.test",
+      email_verified: true,
+      type: "individual",
+      name: "Ada Lovelace",
+      billing_name: null,
+      billing_address: null,
+      tax_id: null,
+      organization_id: "8b9c0d1e-2f3a-4b4c-8d5e-6f7a8b9c0d1e",
+      deleted_at: null,
+      first_user_event_at: null,
+      avatar_url: null,
+    },
+    product: null,
+    discount: null,
+    subscription:
+      subscriptionId === null
+        ? null
+        : {
+            metadata: { referenceId: spaceId },
+            created_at: "2026-11-22T09:59:00.000Z",
+            modified_at: modifiedAt.toISOString(),
+            id: subscriptionId,
+            amount: 3499,
+            currency: "eur",
+            recurring_interval: "month",
+            recurring_interval_count: 1,
+            status: "active",
+            current_period_start: "2026-11-22T10:00:00.000Z",
+            current_period_end: PERIOD_END.toISOString(),
+            cancel_at_period_end: false,
+            canceled_at: null,
+            started_at: "2026-11-22T10:00:00.000Z",
+            ends_at: null,
+            ended_at: null,
+            customer_id: "7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d",
+            product_id: "5c4b3a29-1807-4f6e-9d5c-4b3a29180706",
+            discount_id: null,
+            checkout_id: "2e3f4a5b-6c7d-4e8f-9a0b-1c2d3e4f5a6b",
+            customer_cancellation_reason: null,
+            customer_cancellation_comment: null,
+          },
+    items: [],
+    description: "Team",
+    refundable_amount: 3499 - refundedAmount,
+    refundable_tax_amount: 700 - Math.round((refundedAmount * 700) / 3499),
+  },
+});
+
+export const makeRefundEvent = ({
+  type,
+  status,
+  orderId = "3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f",
+  subscriptionId = "0d3f6a2b-7c1e-4b8a-9f2d-5e6a7b8c9d0e",
+}: {
+  readonly type: "refund.created" | "refund.updated";
+  readonly status: "pending" | "succeeded" | "failed" | "canceled";
+  readonly orderId?: string;
+  readonly subscriptionId?: string;
+}) => ({
+  type,
+  timestamp: MODIFIED_AT.toISOString(),
+  data: {
+    created_at: "2026-11-22T11:00:00.000Z",
+    modified_at: MODIFIED_AT.toISOString(),
+    id: "4d5e6f7a-8b9c-4d0e-9f1a-2b3c4d5e6f7a",
+    metadata: {},
+    status,
+    reason: "customer_request",
+    amount: 3499,
+    tax_amount: 700,
+    currency: "eur",
+    organization_id: "8b9c0d1e-2f3a-4b4c-8d5e-6f7a8b9c0d1e",
+    order_id: orderId,
+    subscription_id: subscriptionId,
+    customer_id: "7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d",
+    revoke_benefits: false,
+    dispute: null,
+  },
+});
+
 export const signedHeaders = ({
   body,
   key = WEBHOOK_KEY,
@@ -234,6 +376,24 @@ export const seedRefusedSubscription = (
     polarSubscriptionId: "0d3f6a2b-7c1e-4b8a-9f2d-5e6a7b8c9d0e",
     spaceId,
     payerId,
+    receivedAt: MODIFIED_AT,
+    settlingSince,
+  });
+
+export const refundRevocationsOf = (db: PostgresDatabase, spaceId: string) =>
+  db.orm
+    .select()
+    .from(schema.spaceRefundRevocation)
+    .where(eq(schema.spaceRefundRevocation.spaceId, spaceId));
+
+export const seedRefundRevocation = (
+  db: PostgresDatabase,
+  { spaceId, settlingSince }: { readonly spaceId: string; readonly settlingSince: Date | null },
+) =>
+  db.orm.insert(schema.spaceRefundRevocation).values({
+    polarSubscriptionId: "0d3f6a2b-7c1e-4b8a-9f2d-5e6a7b8c9d0e",
+    spaceId,
+    polarOrderId: "3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f",
     receivedAt: MODIFIED_AT,
     settlingSince,
   });

@@ -16,6 +16,7 @@ import type {
   NotificationReader,
   SubscriptionEvent,
 } from "./merchant-of-record.ts";
+import { type RefundRevocations, revokeRefundedSubscription } from "./revoke-refunded.ts";
 import { type Refusals, SETTLED_REFUSAL, settleRefusal } from "./settle-refusals.ts";
 
 const HANDLED_EVENTS: ReadonlySet<string> = new Set([
@@ -116,6 +117,7 @@ const recordEvent = ({
 type NotificationDependencies = {
   readonly unitOfWork: SubscriptionUnitOfWork;
   readonly refusals: Refusals;
+  readonly revocations: RefundRevocations;
   readonly merchant: MerchantOfRecord;
   readonly log: LogSink;
   readonly now: () => Date;
@@ -229,6 +231,10 @@ export const receiveNotification =
       return err(notification.error);
     }
     const { value } = notification;
+    if (value.kind === "order_refunded") {
+      await revokeRefundedSubscription(dependencies)(value.refund);
+      return ok(undefined);
+    }
     if (value.kind === "other" || !HANDLED_EVENTS.has(value.event.type)) {
       log({
         level: "info",

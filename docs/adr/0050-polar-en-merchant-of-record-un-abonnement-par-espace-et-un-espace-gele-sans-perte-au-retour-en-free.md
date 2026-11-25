@@ -1,6 +1,6 @@
 # 0050 — Polar en Merchant of Record, un abonnement par espace, et un espace gelé sans perte au retour en Free
 
-- Statut : Accepté — §1 (remboursements à la main dans Polar) et §3 (payeur propriétaire) amendés par [0055](0055-un-abonnement-paye-par-un-non-proprietaire-est-revoque-et-rembourse-automatiquement.md)
+- Statut : Accepté — §1 (remboursements à la main dans Polar) et §3 (payeur propriétaire) amendés par [0055](0055-un-abonnement-paye-par-un-non-proprietaire-est-revoque-et-rembourse-automatiquement.md) ; §1 et §3 (un remboursement total révoque l'abonnement) amendés par [0058](0058-un-remboursement-total-de-la-commande-d-un-abonnement-le-revoque-automatiquement.md)
 - Date : 2026-11-22
 - Décideurs : Muhammed Cavus
 - Amende : ADR 0006 (§1, prix HT et abonnement par espace ; §4, pas de purge à la limite Free pour un espace gelé), ADR 0011 (§4, un espace gelé garde ses éditeurs, suspendus), ADR 0042 (§3, la limite d'un espace gelé est son stockage à la fin de son abonnement, plafonné à 20 Go)

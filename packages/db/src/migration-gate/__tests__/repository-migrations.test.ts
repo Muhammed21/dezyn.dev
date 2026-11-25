@@ -54,6 +54,9 @@ const ELEVATED_PRIVILEGE_MIGRATIONS: Readonly<Record<string, readonly string[]>>
   "0029_space_refused_subscription.sql": [
     `GRANT SELECT, INSERT, UPDATE ("revoked_at", "refunded_at", "settling_since") ON "space_refused_subscription" TO app`,
   ],
+  "0031_space_refund_revocation.sql": [
+    `GRANT SELECT, INSERT, UPDATE ("revoked_at", "settling_since") ON "space_refund_revocation" TO app`,
+  ],
 };
 
 const NON_ADDITIVE_MIGRATIONS = [

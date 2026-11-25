@@ -2,7 +2,7 @@ import type { LogSink } from "#platform/logging.ts";
 
 import type { MerchantOfRecord, RefusalRequest } from "./merchant-of-record.ts";
 
-export const REFUSAL_LEASE_MS = 5 * 60 * 1000;
+export const POLAR_CALL_LEASE_MS = 5 * 60 * 1000;
 
 export type RefusalProgress = { readonly revoked: boolean; readonly refunded: boolean };
 
@@ -52,7 +52,7 @@ export const settleRefusal =
     const claimed = await refusals.claim({
       subscriptionId: request.subscriptionId,
       at,
-      staleBefore: new Date(at.getTime() - REFUSAL_LEASE_MS),
+      staleBefore: new Date(at.getTime() - POLAR_CALL_LEASE_MS),
     });
     if (claimed === undefined) {
       return { kind: "busy" };
