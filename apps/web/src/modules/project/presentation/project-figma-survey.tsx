@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import type { Result } from "@repo/result";
 
 import type { Clock } from "../../../platform/clock.ts";
+import { daysAgoText } from "../../../platform/days-ago.ts";
 import { followTopic, type SubscribeToProject } from "../../../platform/project-signals.ts";
 import {
   type FigmaFile,
@@ -15,8 +16,6 @@ import {
 type ReadProject = (project: {
   readonly projectId: string;
 }) => Promise<Result<ProjectDetails, ProjectsFailure>>;
-
-const AGO = new Intl.RelativeTimeFormat("fr-FR", { numeric: "auto" });
 
 const SurveyedFile = ({ figmaFile }: { readonly figmaFile: FigmaFile | undefined }) =>
   figmaFile === undefined ? null : (
@@ -59,7 +58,7 @@ export const projectFigmaSurvey = ({
     if (age === undefined) {
       return null;
     }
-    const lastSurvey = `Dernier relevé Figma : ${AGO.format(-age.days, "day")}`;
+    const lastSurvey = `Dernier relevé Figma : ${daysAgoText(age.days)}`;
     if (!age.stale) {
       return (
         <p>

@@ -77,3 +77,19 @@ export const seedValidatedToken = (
     status: "validated",
     createdAt: new Date(),
   });
+
+export const seedFigmaState = (
+  db: PostgresDatabase,
+  {
+    tokenId,
+    state,
+    declaredAt,
+  }: { readonly tokenId: string; readonly state: string; readonly declaredAt: Date },
+) =>
+  db.orm.insert(schema.tokenFigmaState).values({
+    tokenId,
+    state,
+    declaredAt,
+    userId: null,
+    clientId: "client-ia",
+  });

@@ -17,6 +17,9 @@ import { projectTokensRoute, refreshProjectTokens } from "../project-tokens-rout
 
 const PROJECT_ID = "4f2a9c1e-7b3d-4e8a-9f10-2c5d6e7f8a9b";
 const OTHER_PROJECT_ID = "5a3b0d2f-8c4e-4f9b-a021-3d6e7f8a9b0c";
+const DAY_MS = 24 * 60 * 60 * 1000;
+const NOW = new Date("2026-11-25T10:00:00.000Z");
+const DAYS_AGO = (days: number) => new Date(NOW.getTime() - days * DAY_MS);
 const PRIMARY_BLUE = { colorSpace: "srgb", components: [0.2, 0.4, 0.8], hex: "#3366cc" };
 const NIGHT_BLUE = { colorSpace: "srgb", components: [0.1, 0.2, 0.4], hex: "#1a3366" };
 
@@ -30,6 +33,7 @@ const makeToken = (overrides: Partial<Token> = {}): Token => ({
   type: "color",
   value: { kind: "single", value: PRIMARY_BLUE },
   description: undefined,
+  figma: undefined,
   ...overrides,
 });
 
@@ -66,6 +70,7 @@ const renderProjectTokens = (
         ProjectProposals,
         ProjectBanners,
         subscribe: events.subscribe,
+        clock: () => NOW,
       }),
       signIn,
     ]),
@@ -265,8 +270,10 @@ const changingTokens = (initial: readonly Token[]) => {
   return { state, readTokens };
 };
 
+const NIGHT_ID = "7c6f3c2a-8d4e-4f1a-9c7b-5e2d1a0f9b8c";
+
 const NIGHT = makeToken({
-  id: "7c6f3c2a-8d4e-4f1a-9c7b-5e2d1a0f9b8c",
+  id: NIGHT_ID,
   name: "couleur.fond.nuit",
   value: { kind: "single", value: NIGHT_BLUE },
 });
@@ -357,5 +364,91 @@ describe("les tokens validés d'un projet apparaissent en direct (ADR 0046)", ()
 
     await screen.unmount();
     expect(events.subscribedProjects()).toEqual([]);
+  });
+});
+
+describe("l'état Figma de chaque token, déclaré par l'IA du client (ADR 0024)", () => {
+  it.each([
+    ["synced", "Synchronisé"],
+    ["diverged", "Divergent"],
+    ["missing_in_figma", "Absent de Figma"],
+    ["duplicate_in_figma", "Doublon dans Figma"],
+  ] as const)(
+    "montre l'état %s en français, avec l'âge de sa déclaration",
+    async (state, label) => {
+      const screen = await renderProjectTokens(
+        reading({
+          modes: [],
+          tokens: [makeToken({ figma: { state, declaredAt: DAYS_AGO(3) } })],
+        }),
+      );
+
+      await expect
+        .element(tokenItems(screen).nth(0).getByText(`Figma : ${label} (il y a 3 jours)`))
+        .toBeVisible();
+    },
+  );
+
+  it("dit l'âge de la déclaration comme l'indice du dernier relevé Figma", async () => {
+    const screen = await renderProjectTokens(
+      reading({
+        modes: [],
+        tokens: [
+          makeToken({ figma: { state: "synced", declaredAt: DAYS_AGO(0) } }),
+          makeToken({ id: NIGHT_ID, figma: { state: "synced", declaredAt: DAYS_AGO(1) } }),
+        ],
+      }),
+    );
+
+    await expect
+      .element(tokenItems(screen).nth(0).getByText("Figma : Synchronisé (aujourd’hui)"))
+      .toBeVisible();
+    await expect
+      .element(tokenItems(screen).nth(1).getByText("Figma : Synchronisé (hier)"))
+      .toBeVisible();
+  });
+
+  it("ne montre rien de Figma pour un token sans état Figma", async () => {
+    const screen = await renderProjectTokens(
+      reading({ modes: [], tokens: [makeToken({ figma: undefined })] }),
+    );
+
+    await expect.element(tokenItems(screen).nth(0)).toHaveTextContent("couleur.fond.primaire");
+    expect(tokenItems(screen).nth(0).getByText(/Figma/).elements()).toHaveLength(0);
+  });
+
+  it("nomme état inconnu un état Figma que l'app ne connaît pas, sans casser la liste", async () => {
+    const screen = await renderProjectTokens(
+      reading({
+        modes: [],
+        tokens: [
+          makeToken({ figma: { state: "unknown", declaredAt: DAYS_AGO(4) } }),
+          makeToken({ id: NIGHT_ID, name: "couleur.fond.nuit" }),
+        ],
+      }),
+    );
+
+    await expect
+      .element(tokenItems(screen).nth(0).getByText("Figma : état inconnu (il y a 4 jours)"))
+      .toBeVisible();
+    await expect.element(tokenItems(screen).nth(1)).toHaveTextContent("couleur.fond.nuit");
+  });
+
+  it("un signal tokens met à jour l'état Figma, sans recharger la page", async () => {
+    const events = makeProjectEvents();
+    const { state, readTokens } = changingTokens([
+      makeToken({ figma: { state: "diverged", declaredAt: DAYS_AGO(5) } }),
+    ]);
+    const screen = await renderLive(readTokens, events);
+    await expect
+      .element(tokenItems(screen).nth(0).getByText("Figma : Divergent (il y a 5 jours)"))
+      .toBeVisible();
+
+    state.tokens = [makeToken({ figma: { state: "synced", declaredAt: DAYS_AGO(0) } })];
+    events.emit(PROJECT_ID, ["tokens"]);
+
+    await expect
+      .element(tokenItems(screen).nth(0).getByText("Figma : Synchronisé (aujourd’hui)"))
+      .toBeVisible();
   });
 });
