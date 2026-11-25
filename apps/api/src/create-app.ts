@@ -14,6 +14,7 @@ import type { ProjectUseCases } from "#modules/project/application/project-use-c
 import { registerListProjects } from "#modules/project/presentation/list-projects-tool.ts";
 import { projectEventsRoutes } from "#modules/project/presentation/project-events-routes.ts";
 import { projectRoutes, projectsRoutes } from "#modules/project/presentation/projects-routes.ts";
+import { registerSetProjectFigmaFile } from "#modules/project/presentation/set-project-figma-file-tool.ts";
 import type { ProposalUseCases } from "#modules/proposal/application/proposal-use-cases.ts";
 import { registerProposalBatchTools } from "#modules/proposal/presentation/proposal-batch-tools.ts";
 import {
@@ -169,6 +170,10 @@ export const createApp = ({
   );
   const registerSpaceTools = registerListSpaces(spaces);
   const registerProjectTools = registerListProjects(projects);
+  const registerFigmaFileTools = registerSetProjectFigmaFile({
+    setFigmaFile: projects.setFigmaFile,
+    recordProjectCall: history.recordProjectCall,
+  });
   const registerHistoryTools = registerReadHistory(history);
   const registerTokenTools = registerReadTokens({
     readTokens: tokens.readTokens,
@@ -200,6 +205,7 @@ export const createApp = ({
         registerWhoami(server, call);
         registerSpaceTools(server, call);
         registerProjectTools(server, call);
+        registerFigmaFileTools(server, call);
         registerHistoryTools(server, call);
         registerTokenTools(server, call);
         registerExportTools(server, call);

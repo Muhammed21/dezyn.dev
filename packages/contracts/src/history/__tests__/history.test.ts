@@ -130,6 +130,7 @@ describe("le contrat de sortie de l'historique reste ouvert (ADR 0023)", () => {
                   {
                     enum: [
                       "project.created",
+                      "project.figma_file_changed",
                       "token.created",
                       "modes.created",
                       "proposal.validated",
@@ -139,6 +140,7 @@ describe("le contrat de sortie de l'historique reste ouvert (ADR 0023)", () => {
                       "mcp.write_tokens",
                       "mcp.open_proposal_batch",
                       "mcp.close_proposal_batch",
+                      "mcp.set_project_figma_file",
                     ],
                   },
                   { type: "string" },

@@ -12,7 +12,7 @@ import {
 import { migrate, schema } from "@repo/db";
 import { migrateUntil, withThrowawayDatabase } from "@repo/db/testing";
 
-const { historyAuthor, historyEntry, identityUser, project } = schema;
+const { historyAuthor, historyEntry, identityUser } = schema;
 
 const BEFORE_STORED_SIZE = "0019_idempotency_key_purge";
 
@@ -35,9 +35,9 @@ const seedProjectWithAuthor = async (app: PostgresDatabase) => {
   await app.orm.execute(sql`
     INSERT INTO space (id, name, plan, created_at)
     VALUES (${spaceId}, 'Studio Ada', 'free', ${new Date().toISOString()})`);
-  await app.orm
-    .insert(project)
-    .values({ id: projectId, spaceId, name: "Site vitrine", createdAt: new Date() });
+  await app.orm.execute(sql`
+    INSERT INTO project (id, space_id, name, created_at)
+    VALUES (${projectId}, ${spaceId}, 'Site vitrine', ${new Date().toISOString()})`);
   await app.orm.insert(historyAuthor).values({ id: authorId, spaceId, userId });
   return { spaceId, projectId, authorId };
 };

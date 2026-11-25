@@ -5,6 +5,7 @@ import { Uuid } from "@repo/contracts";
 import { ProjectsOutput } from "@repo/contracts";
 
 import type { ProjectUseCases } from "../application/project-use-cases.ts";
+import { listedProjectOutputOf } from "./project-output.ts";
 
 export const registerListProjects =
   ({ listProjects }: Pick<ProjectUseCases, "listProjects">) =>
@@ -13,7 +14,7 @@ export const registerListProjects =
       "list_projects",
       {
         description:
-          "Liste les projets d'un espace dont l'utilisateur est membre, triés par nom, avec leur id et leur date de création. Les espaces viennent de list_spaces.",
+          "Liste les projets d'un espace dont l'utilisateur est membre, triés par nom, avec leur id, leur date de création et leur fichier Figma (lien et clé, ou null). Les espaces viennent de list_spaces.",
         inputSchema: { spaceId: Uuid },
         outputSchema: ProjectsOutput,
       },
@@ -23,12 +24,7 @@ export const registerListProjects =
           return { content: [{ type: "text", text: "Espace introuvable" }], isError: true };
         }
         const output = {
-          projects: listed.value.map(({ id, name, createdAt, historyPurgedAt }) => ({
-            id,
-            name,
-            createdAt: createdAt.toISOString(),
-            historyPurgedAt: historyPurgedAt?.toISOString() ?? null,
-          })),
+          projects: listed.value.map(listedProjectOutputOf),
         };
         return {
           content: [{ type: "text", text: JSON.stringify(output) }],

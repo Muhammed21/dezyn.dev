@@ -19,6 +19,8 @@ export type ProposalBatch = {
   readonly lastWrittenAt: Date;
 };
 
+export type RecipeBatch = ProposalBatch & { readonly recipe: string | null };
+
 export type Proposal = {
   readonly id: string;
   readonly batchId: string;

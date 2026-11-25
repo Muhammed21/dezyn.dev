@@ -29,6 +29,7 @@ const PLAN_REQUIRED = "https://dezyn.dev/problems/plan-required";
 const EDITOR_ACTIONS = [
   "space.read",
   "member.leave",
+  "project.setFigmaFile",
   "token.create",
   "token.declareFigmaState",
   "proposal.review",

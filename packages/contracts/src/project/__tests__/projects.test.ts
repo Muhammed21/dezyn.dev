@@ -7,6 +7,7 @@ const makeProject = (overrides: Readonly<Record<string, unknown>> = {}) => ({
   name: "Site vitrine",
   createdAt: "2026-10-19T09:00:00.000Z",
   historyPurgedAt: null,
+  figmaFile: null,
   ...overrides,
 });
 

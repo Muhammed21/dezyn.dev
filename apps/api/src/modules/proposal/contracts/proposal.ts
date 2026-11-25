@@ -21,6 +21,7 @@ const BatchOutput = z.looseObject({
   id: Uuid,
   state: openEnum(["open", "closed"]),
   intent: z.string().nullable(),
+  recipe: z.string().optional(),
 });
 
 export const OpenedBatchOutput = z.looseObject({

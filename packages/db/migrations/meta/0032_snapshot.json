@@ -1,5 +1,5 @@
 {
-  "id": "3c6115e9-aeff-4518-a6d8-89be103291c4",
+  "id": "80affa76-4e11-4cf5-967e-425ade60e0a8",
   "prevId": "611de595-1d78-4bf3-b887-5489bd8a0a51",
   "version": "7",
   "dialect": "postgresql",
@@ -1306,12 +1306,6 @@
           "type": "text[]",
           "primaryKey": false,
           "notNull": true
-        },
-        "cut_at": {
-          "name": "cut_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {
@@ -1384,6 +1378,15 @@
           "columnsFrom": ["client_id"],
           "columnsTo": ["client_id"],
           "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "identity_oauth_refresh_token_session_id_identity_session_id_fk": {
+          "name": "identity_oauth_refresh_token_session_id_identity_session_id_fk",
+          "tableFrom": "identity_oauth_refresh_token",
+          "tableTo": "identity_session",
+          "columnsFrom": ["session_id"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
           "onUpdate": "no action"
         },
         "identity_oauth_refresh_token_user_id_identity_user_id_fk": {
@@ -1933,6 +1936,18 @@
         "history_purged_at": {
           "name": "history_purged_at",
           "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "figma_file_url": {
+          "name": "figma_file_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "figma_file_key": {
+          "name": "figma_file_key",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         }

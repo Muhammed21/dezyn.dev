@@ -14,6 +14,7 @@ export const proposalBatch = pgTable(
     userId: uuid("user_id").references(() => identityUser.id, { onDelete: "set null" }),
     clientId: text("client_id").notNull(),
     intent: text("intent"),
+    recipe: text("recipe"),
     state: text("state").notNull(),
     openedAt: timestamp("opened_at", { withTimezone: true }).notNull(),
     lastWrittenAt: timestamp("last_written_at", { withTimezone: true }).notNull(),
@@ -21,7 +22,7 @@ export const proposalBatch = pgTable(
   (table) => [
     uniqueIndex("proposal_batch_open_key")
       .on(table.projectId, table.userId, table.clientId)
-      .where(sql`${table.state} = 'open'`),
+      .where(sql`${table.state} = 'open' and ${table.recipe} is null`),
   ],
 );
 

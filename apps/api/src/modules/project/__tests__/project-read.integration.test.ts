@@ -36,6 +36,7 @@ describe("un membre lit un projet seul, avec son espace (ADR 0042 §6)", () => {
         name: "Site vitrine",
         createdAt: expect.any(String),
         historyPurgedAt: null,
+        figmaFile: null,
       });
     }));
 

@@ -1,4 +1,5 @@
 import type { ProjectSignals } from "#modules/project/contracts/project-signals.ts";
+import type { DesignationRefusal } from "#modules/proposal/contracts/batch-designation.ts";
 import { batchExpirySignal } from "#modules/proposal/contracts/batch-expiry.ts";
 import type { ProjectAccess } from "#modules/space/contracts/membership.ts";
 import type {
@@ -44,10 +45,16 @@ export interface FigmaProposals {
     readonly tokens: readonly TokenDefinition[];
     readonly validated: readonly ReadToken[];
     readonly createdAt: Date;
-  }): Promise<{
-    readonly batch: { readonly id: string; readonly state: string } | null;
-    readonly proposals: readonly { readonly id: string; readonly name: string }[];
-  }>;
+    readonly batchId?: string;
+  }): Promise<
+    Result<
+      {
+        readonly batch: { readonly id: string; readonly state: string } | null;
+        readonly proposals: readonly { readonly id: string; readonly name: string }[];
+      },
+      DesignationRefusal
+    >
+  >;
 }
 
 export type RejectedValue = Omit<ComparedDefinition, "$description" | "$extensions">;
@@ -178,12 +185,16 @@ export const declareFigmaStates =
     userId,
     clientId,
     entries,
+    batchId,
   }: {
     readonly projectId: string;
     readonly userId: string;
     readonly clientId: string;
     readonly entries: readonly FigmaEntry[];
-  }): Promise<Result<DeclaredFigmaStates, "not_found" | InvalidDeclaration>> => {
+    readonly batchId?: string;
+  }): Promise<
+    Result<DeclaredFigmaStates, "not_found" | InvalidDeclaration | DesignationRefusal>
+  > => {
     const project = await access({ projectId, userId, action: "token.declareFigmaState" });
     if (project === undefined) {
       return err("not_found");
@@ -244,32 +255,39 @@ export const declareFigmaStates =
       );
     });
     const declaredAt = now();
-    const { proposed, alert } = await unitOfWork.run(
-      async ({ figmaStates, proposals, storageAlert }) => {
-        const written =
-          proposable.length === 0
-            ? { batch: null, proposals: [] }
-            : await proposals.propose({
-                projectId,
-                userId,
-                clientId,
-                tokens: proposable.map(({ definition }) => definition),
-                validated,
-                createdAt: declaredAt,
-              });
-        await figmaStates.declare({
-          projectId,
-          states: checked.states.map((declared) => ({
-            ...declared,
-            proposalId: written.proposals.find(({ name }) => name === declared.name)?.id ?? null,
-          })),
-          declaredAt,
-          userId,
-          clientId,
-        });
-        return { proposed: written, alert: await storageAlert(project.spaceId) };
-      },
-    );
+    const outcome = await unitOfWork.run(async ({ figmaStates, proposals, storageAlert }) => {
+      const proposing =
+        proposable.length === 0 && batchId === undefined
+          ? ok({ batch: null, proposals: [] })
+          : await proposals.propose({
+              projectId,
+              userId,
+              clientId,
+              tokens: proposable.map(({ definition }) => definition),
+              validated,
+              createdAt: declaredAt,
+              batchId,
+            });
+      if (!proposing.ok) {
+        return proposing;
+      }
+      const written = proposing.value;
+      await figmaStates.declare({
+        projectId,
+        states: checked.states.map((declared) => ({
+          ...declared,
+          proposalId: written.proposals.find(({ name }) => name === declared.name)?.id ?? null,
+        })),
+        declaredAt,
+        userId,
+        clientId,
+      });
+      return ok({ proposed: written, alert: await storageAlert(project.spaceId) });
+    });
+    if (!outcome.ok) {
+      return outcome;
+    }
+    const { proposed, alert } = outcome.value;
     if (alert !== undefined) {
       await sendStorageAlert(alert);
     }

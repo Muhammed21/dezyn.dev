@@ -58,6 +58,7 @@ export const makeProjects = (): ProjectUseCases => ({
   listProjects: () => Promise.resolve(err("not_found")),
   readProject: () => Promise.resolve(err("not_found")),
   subscribeToProject: () => Promise.resolve(err("not_found")),
+  setFigmaFile: () => Promise.resolve(err("not_found")),
 });
 
 export const makeHistory = (): HistoryUseCases => ({

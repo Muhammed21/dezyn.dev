@@ -16,9 +16,16 @@ export type ProjectCreationFailure =
   | "invalid_response"
   | PlanRequired;
 
-export type ListedProject = Project & { readonly historyPurgedAt: Date | undefined };
+export type FigmaFile = { readonly url: string; readonly key: string };
+
+export type ListedProject = Project & {
+  readonly historyPurgedAt: Date | undefined;
+  readonly figmaFile: FigmaFile | undefined;
+};
 
 export type ProjectsFailure = "unauthenticated" | "not_found" | "unavailable" | "invalid_response";
+
+export type FigmaFileFailure = ProjectsFailure | "invalid_figma_file";
 
 const PURGE_NOTICE_MS = 7 * 24 * 60 * 60 * 1000;
 

@@ -113,6 +113,8 @@ describe("page de l'historique d'un projet (ADR 0044 §6)", () => {
     ["mcp.write_tokens", "Tokens écrits par l'IA"],
     ["mcp.open_proposal_batch", "Lot de propositions ouvert par l'IA"],
     ["mcp.close_proposal_batch", "Lot de propositions fermé par l'IA"],
+    ["project.figma_file_changed", "Fichier Figma changé"],
+    ["mcp.set_project_figma_file", "Fichier Figma changé par l'IA"],
     ["token.archived", "token.archived"],
   ])("nomme l'action %s « %s »", async (action, label) => {
     const { item } = await firstEntry(makeEntry({ action }));
