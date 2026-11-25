@@ -4,12 +4,15 @@ import {
   ADA,
   type App,
   BASE_URL,
+  callMcp,
   GRACE,
   makeClientIp,
+  obtainAccessToken,
   signUp,
   withIdentityApp,
 } from "@repo/api/testing/authorization-flow.ts";
 import { personalSpaceOf, seedTeamSpaceWith } from "@repo/api/testing/space-fixtures.ts";
+import { addToken, makeColorToken } from "@repo/api/testing/token-fixtures.ts";
 import { err, ok } from "@repo/result";
 
 import { makeApiBrowser } from "../../../testing/api-browser.ts";
@@ -39,7 +42,7 @@ const seedProjectOfAda = async (app: App, db: Parameters<typeof personalSpaceOf>
   if (!created.ok) {
     throw new Error("Le projet d'Ada n'a pas été créé");
   }
-  return { spaceId, projectId: created.value.id, projects };
+  return { userId, spaceId, projectId: created.value.id, projects };
 };
 
 describe("création d'un projet par l'app web, contre la vraie API (ADR 0044 §2 et §6)", () => {
@@ -181,9 +184,34 @@ describe("lecture d'un projet seul par l'app web, contre la vraie API", () => {
           name: "Site vitrine",
           createdAt: expect.any(Date),
           historyPurgedAt: undefined,
+          lastFigmaSurveyAt: undefined,
         }),
       );
     }));
+
+  it("après une déclaration d'état Figma par l'IA, le membre lit la date du dernier relevé", () => {
+    const declaredAt = new Date("2026-11-16T10:30:00.000Z");
+    return withIdentityApp(
+      async (app, db) => {
+        const { userId, projectId, projects } = await seedProjectOfAda(app, db);
+        const { accessToken } = await obtainAccessToken(app, { user: ADA, registeredId: userId });
+        await addToken(app, { accessToken, projectId, token: makeColorToken() });
+        await callMcp(app, {
+          token: accessToken,
+          method: "tools/call",
+          params: {
+            name: "declare_figma_states",
+            arguments: { projectId, states: [{ name: makeColorToken().name, state: "synced" }] },
+          },
+        });
+
+        expect(await projects.readProject({ projectId })).toEqual(
+          ok(expect.objectContaining({ lastFigmaSurveyAt: declaredAt })),
+        );
+      },
+      { clock: () => declaredAt },
+    );
+  });
 
   it("le projet d'un espace dont on n'est pas membre donne not_found", () =>
     withIdentityApp(async (app, db) => {

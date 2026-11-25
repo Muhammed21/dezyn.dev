@@ -5,6 +5,7 @@ import type {
   FigmaFileFailure,
   ListedProject,
   Project,
+  ProjectDetails,
   ProjectCreationFailure,
   ProjectsFailure,
 } from "../domain/project.ts";
@@ -20,7 +21,7 @@ export type ProjectGateway = {
   }) => Promise<Result<readonly ListedProject[], ProjectsFailure>>;
   readonly readProject: (project: {
     readonly projectId: string;
-  }) => Promise<Result<ListedProject, ProjectsFailure>>;
+  }) => Promise<Result<ProjectDetails, ProjectsFailure>>;
   readonly setFigmaFile: (change: {
     readonly projectId: string;
     readonly url: string | null;

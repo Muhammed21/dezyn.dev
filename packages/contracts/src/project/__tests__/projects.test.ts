@@ -51,9 +51,15 @@ describe("sortie de la liste des projets d'un espace", () => {
 
 const SPACE_ID = "9b8a7f6e-5d4c-4b3a-8f2e-1d0c9b8a7f6e";
 
+const makeReadProject = (overrides: Readonly<Record<string, unknown>> = {}) => ({
+  ...makeProject({ spaceId: SPACE_ID }),
+  lastFigmaSurveyAt: null,
+  ...overrides,
+});
+
 describe("sortie de la lecture d'un projet, avec son espace", () => {
   it("lit le projet, son espace et la date de la dernière purge de son historique", () => {
-    const read = makeProject({ spaceId: SPACE_ID, historyPurgedAt: "2026-11-10T08:00:00.000Z" });
+    const read = makeReadProject({ historyPurgedAt: "2026-11-10T08:00:00.000Z" });
 
     expect(ProjectOutput.parse(read)).toEqual(read);
   });
@@ -67,15 +73,33 @@ describe("sortie de la lecture d'un projet, avec son espace", () => {
   });
 
   it("refuse un projet qui ne dit pas quand son historique a été purgé", () => {
-    const { historyPurgedAt: _, ...withoutTrace } = makeProject({ spaceId: SPACE_ID });
+    const { historyPurgedAt: _, ...withoutTrace } = makeReadProject();
 
     expect(ProjectOutput.safeParse(withoutTrace).success).toBe(false);
   });
 
   it("garde une clé ajoutée plus tard par le serveur (ADR 0023 §1)", () => {
-    const later = makeProject({ spaceId: SPACE_ID, tokenCount: 12 });
+    const later = makeReadProject({ tokenCount: 12 });
 
     expect(ProjectOutput.parse(later)).toEqual(later);
+  });
+
+  it("lit la date du dernier relevé Figma (ADR 0059 §6)", () => {
+    const read = makeReadProject({ lastFigmaSurveyAt: "2026-11-16T10:30:00.000Z" });
+
+    expect(ProjectOutput.parse(read)).toEqual(read);
+  });
+
+  it("refuse un projet qui ne dit pas quand il a été relevé dans Figma", () => {
+    const { lastFigmaSurveyAt: _, ...withoutSurvey } = makeReadProject();
+
+    expect(ProjectOutput.safeParse(withoutSurvey).success).toBe(false);
+  });
+
+  it("refuse une date de dernier relevé qui n'est pas une date ISO", () => {
+    expect(ProjectOutput.safeParse(makeReadProject({ lastFigmaSurveyAt: "lundi" })).success).toBe(
+      false,
+    );
   });
 });
 
