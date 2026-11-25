@@ -1,4 +1,4 @@
-import { asc, count, eq } from "drizzle-orm";
+import { asc, count, eq, max, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import type { PostgresDatabase, PostgresTransaction } from "#db";
@@ -12,7 +12,7 @@ import type { ProjectReader } from "../application/read-project.ts";
 import type { FigmaFileUnitOfWork } from "../application/set-figma-file.ts";
 import type { ProjectFinder } from "../domain/project.ts";
 
-const { project, space } = schema;
+const { project, space, token, tokenFigmaState } = schema;
 
 const StoredPlan = z.enum(PLANS);
 
@@ -41,6 +41,7 @@ const StoredProject = StoredFigmaFile.extend({
   name: z.string(),
   createdAt: z.date(),
   historyPurgedAt: z.date().nullable(),
+  lastFigmaSurveyAt: z.coerce.date().nullable(),
 }).transform(withFigmaFile);
 
 const figmaFileColumns = {
@@ -109,6 +110,11 @@ export const postgresProjectLister = (db: PostgresDatabase): ProjectLister => ({
 
 export const postgresProjectReader = (db: PostgresDatabase): ProjectReader => ({
   projectOf: async (projectId) => {
+    const lastFigmaSurvey = db.orm
+      .select({ at: max(tokenFigmaState.declaredAt) })
+      .from(tokenFigmaState)
+      .innerJoin(token, eq(token.id, tokenFigmaState.tokenId))
+      .where(eq(token.projectId, projectId));
     const [row] = await db.orm
       .select({
         id: project.id,
@@ -116,6 +122,7 @@ export const postgresProjectReader = (db: PostgresDatabase): ProjectReader => ({
         name: project.name,
         createdAt: project.createdAt,
         historyPurgedAt: project.historyPurgedAt,
+        lastFigmaSurveyAt: sql<unknown>`(${lastFigmaSurvey})`,
         ...figmaFileColumns,
       })
       .from(project)

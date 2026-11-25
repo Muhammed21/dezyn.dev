@@ -20,8 +20,12 @@ export const projectRoutes = ({ readProject, setFigmaFile }: ProjectUseCases) =>
       if (!read.ok) {
         return c.notFound();
       }
-      const { spaceId, ...listed } = read.value;
-      return c.json({ ...listedProjectOutputOf(listed), spaceId });
+      const { spaceId, lastFigmaSurveyAt, ...listed } = read.value;
+      return c.json({
+        ...listedProjectOutputOf(listed),
+        spaceId,
+        lastFigmaSurveyAt: lastFigmaSurveyAt?.toISOString() ?? null,
+      });
     })
     .put("/:projectId/figma-file", validate("json", FigmaFileInput), async (c) => {
       const projectId = Uuid.safeParse(c.req.param("projectId")).data;

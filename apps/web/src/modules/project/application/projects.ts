@@ -6,6 +6,7 @@ import type {
   FigmaFileFailure,
   ListedProject,
   Project,
+  ProjectDetails,
   ProjectCreationFailure,
   ProjectsFailure,
 } from "../domain/project.ts";
@@ -37,7 +38,7 @@ export const projectUseCases = ({ gateway }: { readonly gateway: ProjectGateway 
     projectId,
   }: {
     readonly projectId: string;
-  }): Promise<Result<ListedProject, ProjectsFailure>> =>
+  }): Promise<Result<ProjectDetails, ProjectsFailure>> =>
     isUuid(projectId) ? gateway.readProject({ projectId }) : err("not_found"),
   setFigmaFile: async ({
     projectId,

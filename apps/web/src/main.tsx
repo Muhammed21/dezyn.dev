@@ -11,6 +11,7 @@ import { signInRoute } from "./modules/identity/presentation/sign-in-route.tsx";
 import { signUpRoute } from "./modules/identity/presentation/sign-up-route.tsx";
 import { projectBanners } from "./modules/project/presentation/project-banners.tsx";
 import { projectFigmaFile } from "./modules/project/presentation/project-figma-file.tsx";
+import { projectFigmaSurvey } from "./modules/project/presentation/project-figma-survey.tsx";
 import { spaceProjectsRoute } from "./modules/project/presentation/space-projects-route.tsx";
 import { createProjectEvents, createProjects } from "./modules/project/project-module.ts";
 import { projectProposals } from "./modules/proposal/presentation/project-proposals.tsx";
@@ -86,7 +87,12 @@ const appRouter = ({
     readProject: projects.readProject,
     setFigmaFile: projects.setFigmaFile,
   });
-  const ProjectHeader = projectSections([ProjectBanners, ProjectFigmaFile]);
+  const ProjectFigmaSurvey = projectFigmaSurvey({
+    readProject: projects.readProject,
+    subscribe: projectEvents.subscribe,
+    clock,
+  });
+  const ProjectHeader = projectSections([ProjectBanners, ProjectFigmaSurvey, ProjectFigmaFile]);
 
   const root = createRootRoute();
   return createRouter({

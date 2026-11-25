@@ -7,6 +7,7 @@ import type { Project } from "../domain/project.ts";
 export type ReadProject = Project & {
   readonly historyPurgedAt: Date | null;
   readonly figmaFile: FigmaFile | null;
+  readonly lastFigmaSurveyAt: Date | null;
 };
 
 export interface ProjectReader {

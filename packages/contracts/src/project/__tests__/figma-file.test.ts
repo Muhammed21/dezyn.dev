@@ -67,6 +67,7 @@ const makeReadProject = (overrides: Readonly<Record<string, unknown>> = {}) => (
   createdAt: "2026-11-11T18:00:00.000Z",
   historyPurgedAt: null,
   figmaFile: null,
+  lastFigmaSurveyAt: null,
   ...overrides,
 });
 
