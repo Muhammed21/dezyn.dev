@@ -11,7 +11,7 @@ import {
 } from "@repo/api/testing/authorization-flow.ts";
 import { seedModes } from "@repo/api/testing/project-fixtures.ts";
 import { personalSpaceOf } from "@repo/api/testing/space-fixtures.ts";
-import { PRIMARY_BLUE } from "@repo/api/testing/token-fixtures.ts";
+import { PRIMARY_BLUE, seedFigmaState } from "@repo/api/testing/token-fixtures.ts";
 import { CreatedProjectOutput } from "@repo/contracts";
 import { err, ok } from "@repo/result";
 
@@ -104,6 +104,22 @@ describe("lecture des tokens d'un projet par l'app web, contre la vraie API (ADR
           ],
         }),
       );
+    }));
+
+  it("un membre lit l'état Figma déclaré d'un token, avec la date de la déclaration", () =>
+    withIdentityApp(async (app, db) => {
+      const { projectId, addToken, tokens } = await projectOf(app, db);
+      await addToken({ name: "couleur.fond.primaire", $type: "color", $value: PRIMARY_BLUE });
+      const added = await tokens.readTokens({ projectId });
+      const tokenId = added.ok ? added.value.tokens[0]?.id : undefined;
+      const declaredAt = new Date("2026-11-20T09:30:00.000Z");
+      await seedFigmaState(db, { tokenId: tokenId ?? "", state: "diverged", declaredAt });
+
+      const read = await tokens.readTokens({ projectId });
+
+      expect(read.ok && read.value.tokens.map(({ figma }) => figma)).toEqual([
+        { state: "diverged", declaredAt },
+      ]);
     }));
 
   it("un projet sans token donne une liste vide", () =>

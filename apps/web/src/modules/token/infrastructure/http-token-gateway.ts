@@ -13,7 +13,7 @@ import {
   UNAUTHORIZED,
 } from "../../../platform/http.ts";
 import type { TokenGateway } from "../application/token-gateway.ts";
-import { type Token, tokenTypeOf } from "../domain/token.ts";
+import { figmaStateOf, type Token, tokenTypeOf } from "../domain/token.ts";
 
 const tokenOf = ({
   id,
@@ -22,6 +22,7 @@ const tokenOf = ({
   $value,
   modes,
   $description,
+  figma,
 }: z.infer<typeof TokenOutput>): Token => ({
   id,
   name,
@@ -29,6 +30,10 @@ const tokenOf = ({
   value:
     modes === undefined ? { kind: "single", value: $value } : { kind: "by_mode", values: modes },
   description: $description,
+  figma:
+    figma === undefined
+      ? undefined
+      : { state: figmaStateOf(figma.state), declaredAt: new Date(figma.declaredAt) },
 });
 
 export const createHttpTokenGateway = ({

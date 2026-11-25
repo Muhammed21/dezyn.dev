@@ -4,8 +4,16 @@ import { type ComponentType, useEffect } from "react";
 
 import type { Result } from "@repo/result";
 
+import type { Clock } from "../../../platform/clock.ts";
+import { daysAgoText, daysSince } from "../../../platform/days-ago.ts";
 import { followTopic, type SubscribeToProject } from "../../../platform/project-signals.ts";
-import type { ProjectTokens, Token, TokensFailure } from "../domain/token.ts";
+import type {
+  FigmaState,
+  ProjectTokens,
+  Token,
+  TokenFigmaState,
+  TokensFailure,
+} from "../domain/token.ts";
 
 type ReadTokens = (project: {
   readonly projectId: string;
@@ -50,18 +58,46 @@ const TokenValue = ({
   );
 };
 
+const FIGMA_STATE_LABELS: Readonly<Record<FigmaState, string>> = {
+  synced: "Synchronisé",
+  diverged: "Divergent",
+  missing_in_figma: "Absent de Figma",
+  duplicate_in_figma: "Doublon dans Figma",
+  unknown: "état inconnu",
+};
+
+const TokenFigma = ({
+  figma,
+  clock,
+}: {
+  readonly figma: TokenFigmaState | undefined;
+  readonly clock: Clock;
+}) => {
+  if (figma === undefined) {
+    return null;
+  }
+  const declared = daysAgoText(daysSince({ since: figma.declaredAt, now: clock() }));
+  return (
+    <p>
+      Figma : {FIGMA_STATE_LABELS[figma.state]} ({declared})
+    </p>
+  );
+};
+
 const ProjectTokensList = ({
   projectId,
   readTokens,
   ProjectProposals,
   ProjectBanners,
   subscribe,
+  clock,
 }: {
   readonly projectId: string;
   readonly readTokens: ReadTokens;
   readonly ProjectProposals: ProjectProposals;
   readonly ProjectBanners: ProjectBanners;
   readonly subscribe: SubscribeToProject;
+  readonly clock: Clock;
 }) => {
   const queryClient = useQueryClient();
   useEffect(
@@ -108,6 +144,7 @@ const ProjectTokensList = ({
               <p>{token.type === "unknown" ? "type inconnu" : token.type}</p>
               <TokenValue token={token} modes={modes} />
               <p>{token.description}</p>
+              <TokenFigma figma={token.figma} clock={clock} />
             </li>
           ))}
         </ul>
@@ -123,12 +160,14 @@ export const projectTokensRoute = ({
   ProjectProposals,
   ProjectBanners,
   subscribe,
+  clock,
 }: {
   readonly parent: AnyRootRoute;
   readonly readTokens: ReadTokens;
   readonly ProjectProposals: ProjectProposals;
   readonly ProjectBanners: ProjectBanners;
   readonly subscribe: SubscribeToProject;
+  readonly clock: Clock;
 }) => {
   const route = createRoute({
     getParentRoute: () => parent,
@@ -142,6 +181,7 @@ export const projectTokensRoute = ({
           ProjectProposals={ProjectProposals}
           ProjectBanners={ProjectBanners}
           subscribe={subscribe}
+          clock={clock}
         />
       );
     },

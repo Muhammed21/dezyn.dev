@@ -15,12 +15,19 @@ export type TokenValue =
   | { readonly kind: "single"; readonly value: unknown }
   | { readonly kind: "by_mode"; readonly values: Readonly<Record<string, unknown>> };
 
+const FIGMA_STATES = ["synced", "diverged", "missing_in_figma", "duplicate_in_figma"] as const;
+
+export type FigmaState = (typeof FIGMA_STATES)[number] | "unknown";
+
+export type TokenFigmaState = { readonly state: FigmaState; readonly declaredAt: Date };
+
 export type Token = {
   readonly id: string;
   readonly name: string;
   readonly type: TokenType;
   readonly value: TokenValue;
   readonly description: string | undefined;
+  readonly figma: TokenFigmaState | undefined;
 };
 
 export type ProjectTokens = {
@@ -32,3 +39,6 @@ export type TokensFailure = "unauthenticated" | "not_found" | "unavailable" | "i
 
 export const tokenTypeOf = (value: string): TokenType =>
   TOKEN_TYPES.find((type) => type === value) ?? "unknown";
+
+export const figmaStateOf = (value: string): FigmaState =>
+  FIGMA_STATES.find((state) => state === value) ?? "unknown";

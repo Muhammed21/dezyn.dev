@@ -148,6 +148,7 @@ const appRouter = ({
         }),
         ProjectBanners: ProjectHeader,
         subscribe: projectEvents.subscribe,
+        clock,
       }),
       projectHistoryRoute({
         parent: root,

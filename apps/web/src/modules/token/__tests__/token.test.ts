@@ -140,6 +140,55 @@ describe("lecture des tokens d'un projet dans l'app web (ADR 0044)", () => {
     expect(read.ok && read.value.tokens.map(({ type }) => type)).toEqual(["unknown"]);
   });
 
+  const DECLARED_AT = "2026-11-20T09:30:00.000Z";
+
+  const makeFigmaOutput = (overrides: Readonly<Record<string, unknown>> = {}) => ({
+    state: "synced",
+    declaredAt: DECLARED_AT,
+    author: { kind: "member", userId: "3e1f2a4b-5c6d-4e7f-8a9b-0c1d2e3f4a5b", name: "Ada" },
+    clientId: "claude",
+    ...overrides,
+  });
+
+  it.each(["synced", "diverged", "missing_in_figma", "duplicate_in_figma"])(
+    "donne l'état Figma %s d'un token, avec la date de sa déclaration",
+    async (state) => {
+      const { tokens } = answering(
+        json(
+          makeTokensOutput({ tokens: [makeTokenOutput({ figma: makeFigmaOutput({ state }) })] }),
+        ),
+      );
+
+      const read = await tokens.readTokens(reading);
+
+      expect(read.ok && read.value.tokens.map(({ figma }) => figma)).toEqual([
+        { state, declaredAt: new Date(DECLARED_AT) },
+      ]);
+    },
+  );
+
+  it("donne unknown pour un état Figma que l'app ne connaît pas encore", async () => {
+    const { tokens } = answering(
+      json(
+        makeTokensOutput({
+          tokens: [makeTokenOutput({ figma: makeFigmaOutput({ state: "renamed_in_figma" }) })],
+        }),
+      ),
+    );
+
+    const read = await tokens.readTokens(reading);
+
+    expect(read.ok && read.value.tokens.map(({ figma }) => figma?.state)).toEqual(["unknown"]);
+  });
+
+  it("ne donne aucun état Figma à un token qui n'en a pas", async () => {
+    const { tokens } = answering(json(makeTokensOutput()));
+
+    const read = await tokens.readTokens(reading);
+
+    expect(read.ok && read.value.tokens.map(({ figma }) => figma)).toEqual([undefined]);
+  });
+
   it.each(["../../auth/sign-out", "..", "projet-1", ""])(
     "donne not_found pour le projet %j, qui n'est pas un UUID, sans appeler l'API",
     async (projectId) => {
