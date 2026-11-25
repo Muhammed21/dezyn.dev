@@ -10,6 +10,7 @@ import type { ProjectChannel } from "#modules/project/contracts/project-channel.
 import type { ProjectSignals } from "#modules/project/contracts/project-signals.ts";
 import {
   bestEffortSignals,
+  figmaFileModule,
   projectLockOn,
   projectModule,
   readProject,
@@ -89,12 +90,19 @@ export const composeModules = ({
     historyWriterOn: writerOn,
   });
   const access = spaces.projectAccess(projectsOnly.finder);
+  const projectSignals = bestEffortSignals(signals, log);
   const projects = {
     ...projectsOnly,
     readProject: readProject({ access, projects: projectsOnly.reader }),
     subscribeToProject: subscribeToProject({ access, channel }),
+    setFigmaFile: figmaFileModule({
+      db,
+      access,
+      historyWriterOn: writerOn,
+      signals: projectSignals,
+      clock,
+    }),
   };
-  const projectSignals = bestEffortSignals(signals, log);
   const history = historyModule({
     db,
     access,

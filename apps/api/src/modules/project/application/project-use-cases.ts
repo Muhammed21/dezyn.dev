@@ -1,6 +1,7 @@
 import type { createProject } from "./create-project.ts";
 import type { listProjects } from "./list-projects.ts";
 import type { readProject } from "./read-project.ts";
+import type { setFigmaFile } from "./set-figma-file.ts";
 import type { subscribeToProject } from "./subscribe-to-project.ts";
 
 export type ProjectUseCases = {
@@ -8,4 +9,5 @@ export type ProjectUseCases = {
   readonly listProjects: ReturnType<typeof listProjects>;
   readonly readProject: ReturnType<typeof readProject>;
   readonly subscribeToProject: ReturnType<typeof subscribeToProject>;
+  readonly setFigmaFile: ReturnType<typeof setFigmaFile>;
 };

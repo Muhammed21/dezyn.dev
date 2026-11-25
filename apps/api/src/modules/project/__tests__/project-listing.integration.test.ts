@@ -63,12 +63,14 @@ describe("un membre liste les projets d'un espace (ADR 0025)", () => {
             name: "Boutique",
             createdAt: expect.any(String),
             historyPurgedAt: null,
+            figmaFile: null,
           },
           {
             id: vitrine.id,
             name: "Site vitrine",
             createdAt: expect.any(String),
             historyPurgedAt: null,
+            figmaFile: null,
           },
         ],
       });
@@ -107,12 +109,14 @@ describe("l'IA liste les projets d'un espace par le MCP (ADR 0025)", () => {
             name: "Boutique",
             createdAt: expect.any(String),
             historyPurgedAt: null,
+            figmaFile: null,
           },
           {
             id: vitrine.id,
             name: "Site vitrine",
             createdAt: expect.any(String),
             historyPurgedAt: null,
+            figmaFile: null,
           },
         ],
       });
@@ -131,7 +135,7 @@ describe("l'IA liste les projets d'un espace par le MCP (ADR 0025)", () => {
             expect.objectContaining({
               name: "list_projects",
               description:
-                "Liste les projets d'un espace dont l'utilisateur est membre, triés par nom, avec leur id et leur date de création. Les espaces viennent de list_spaces.",
+                "Liste les projets d'un espace dont l'utilisateur est membre, triés par nom, avec leur id, leur date de création et leur fichier Figma (lien et clé, ou null). Les espaces viennent de list_spaces.",
               inputSchema: expect.objectContaining({ required: ["spaceId"] }),
               outputSchema: expect.objectContaining({
                 properties: { projects: expect.anything() },

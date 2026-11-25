@@ -1,9 +1,13 @@
 import type { ProjectAccess } from "#modules/space/contracts/membership.ts";
+import type { FigmaFile } from "@repo/contracts";
 import { err, ok, type Result } from "@repo/result";
 
 import type { Project } from "../domain/project.ts";
 
-export type ReadProject = Project & { readonly historyPurgedAt: Date | null };
+export type ReadProject = Project & {
+  readonly historyPurgedAt: Date | null;
+  readonly figmaFile: FigmaFile | null;
+};
 
 export interface ProjectReader {
   projectOf(projectId: string): Promise<ReadProject>;

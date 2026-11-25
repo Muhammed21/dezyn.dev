@@ -24,6 +24,12 @@ export {
   SentInvitationOutput,
 } from "./space/members.ts";
 export { ProjectOutput, ProjectsOutput } from "./project/projects.ts";
+export {
+  type FigmaFile,
+  FigmaFileInput,
+  figmaFileOf,
+  FigmaFileOutput,
+} from "./project/figma-file.ts";
 export { DeclaredFigmaStatesOutput, TokenOutput, TokensOutput } from "./token/tokens.ts";
 export { HistoryOutput } from "./history/history.ts";
 export {

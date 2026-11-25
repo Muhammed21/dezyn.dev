@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createRootRoute, createRouter, RouterProvider } from "@tanstack/react-router";
-import { StrictMode } from "react";
+import { type ComponentType, StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
 import { createHistory } from "./modules/history/history-module.ts";
@@ -10,6 +10,7 @@ import { accountRoute } from "./modules/identity/presentation/account-route.tsx"
 import { signInRoute } from "./modules/identity/presentation/sign-in-route.tsx";
 import { signUpRoute } from "./modules/identity/presentation/sign-up-route.tsx";
 import { projectBanners } from "./modules/project/presentation/project-banners.tsx";
+import { projectFigmaFile } from "./modules/project/presentation/project-figma-file.tsx";
 import { spaceProjectsRoute } from "./modules/project/presentation/space-projects-route.tsx";
 import { createProjectEvents, createProjects } from "./modules/project/project-module.ts";
 import { projectProposals } from "./modules/proposal/presentation/project-proposals.tsx";
@@ -45,6 +46,13 @@ const clock = () => new Date();
 
 const goToInBrowser = (url: string) => window.location.assign(url);
 
+type ProjectSection = ComponentType<{ readonly projectId: string }>;
+
+const projectSections = (sections: readonly ProjectSection[]) =>
+  function ProjectSections({ projectId }: { readonly projectId: string }) {
+    return sections.map((Section, index) => <Section key={index} projectId={projectId} />);
+  };
+
 const CHECKOUT_RETURN_POLLING = { intervalMs: 2_000, timeoutMs: 30_000 };
 
 const appRouter = ({
@@ -69,6 +77,16 @@ const appRouter = ({
   const SpaceStorageAlert = spaceStorageAlert({ readSpace: spaces.readSpace });
   const SpacePaymentAlert = spacePaymentAlert({ readSpace: spaces.readSpace });
   const SpaceFrozenAlert = spaceFrozenAlert({ readSpace: spaces.readSpace });
+  const ProjectBanners = projectBanners({
+    readProject: projects.readProject,
+    SpaceStorageAlert,
+    clock,
+  });
+  const ProjectFigmaFile = projectFigmaFile({
+    readProject: projects.readProject,
+    setFigmaFile: projects.setFigmaFile,
+  });
+  const ProjectHeader = projectSections([ProjectBanners, ProjectFigmaFile]);
 
   const root = createRootRoute();
   return createRouter({
@@ -122,11 +140,7 @@ const appRouter = ({
           listBatches: proposals.listBatches,
           subscribe: projectEvents.subscribe,
         }),
-        ProjectBanners: projectBanners({
-          readProject: projects.readProject,
-          SpaceStorageAlert,
-          clock,
-        }),
+        ProjectBanners: ProjectHeader,
         subscribe: projectEvents.subscribe,
       }),
       projectHistoryRoute({

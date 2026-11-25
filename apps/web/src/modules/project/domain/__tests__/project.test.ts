@@ -13,6 +13,7 @@ const makeListedProject = (overrides: Partial<ListedProject> = {}): ListedProjec
   name: "Site vitrine",
   createdAt: new Date("2026-09-01T12:00:00.000Z"),
   historyPurgedAt: undefined,
+  figmaFile: undefined,
   ...overrides,
 });
 

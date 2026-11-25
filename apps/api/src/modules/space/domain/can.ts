@@ -6,6 +6,7 @@ export const ACTIONS = [
   "member.invite",
   "member.leave",
   "member.manage",
+  "project.setFigmaFile",
   "token.create",
   "token.declareFigmaState",
   "proposal.review",
@@ -27,6 +28,7 @@ const PERMISSIONS: Readonly<Record<Role, ReadonlySet<Action>>> = {
     "member.invite",
     "member.leave",
     "member.manage",
+    "project.setFigmaFile",
     "token.create",
     "token.declareFigmaState",
     "proposal.review",
@@ -35,6 +37,7 @@ const PERMISSIONS: Readonly<Record<Role, ReadonlySet<Action>>> = {
   editor: new Set([
     "space.read",
     "member.leave",
+    "project.setFigmaFile",
     "token.create",
     "token.declareFigmaState",
     "proposal.review",
