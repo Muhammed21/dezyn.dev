@@ -18,8 +18,10 @@ import { err, ok, type Result } from "@repo/result";
 
 import type { Auth, PasswordRefusal } from "../application/auth.ts";
 import { defaultToNativeForLoopback } from "../domain/client-registration.ts";
+import { sessionEndCutsChains } from "../domain/refresh-chain.ts";
 import { refreshGrantOutcome } from "../domain/refresh-grant.ts";
 import { postgresActiveGrants } from "./postgres-active-grants.ts";
+import { postgresRefreshChains, type RefreshChains } from "./postgres-refresh-chains.ts";
 
 const DAY_SECONDS = 86_400;
 const HOUR_SECONDS = 3_600;
@@ -69,7 +71,13 @@ const StoredRefreshToken = z.object({
   authTime: z.date().nullable(),
 });
 
-const guardRefreshGrant = async (ctx: GenericEndpointContext): Promise<void> => {
+const guardRefreshGrant = async ({
+  ctx,
+  chains,
+}: {
+  readonly ctx: GenericEndpointContext;
+  readonly chains: RefreshChains;
+}): Promise<void> => {
   const grant = RefreshGrant.safeParse(ctx.body);
   if (!grant.success) {
     return;
@@ -90,14 +98,16 @@ const guardRefreshGrant = async (ctx: GenericEndpointContext): Promise<void> => 
       { field: "clientId", value: stored.data.clientId },
     ],
   });
+  const { userId, clientId, sessionId } = stored.data;
   const outcome = refreshGrantOutcome({
     token: stored.data,
     consented: consent !== null,
+    cut: sessionId !== null && (await chains.isCut({ userId, clientId, sessionId })),
     now: new Date(),
   });
   if (outcome === "reuse") {
     await ctx.context.internalAdapter.deleteUserSessions(stored.data.userId);
-    return;
+    await chains.cutChainsOfUser(stored.data.userId);
   }
   if (outcome !== "allowed") {
     throw new APIError("BAD_REQUEST", { error: "invalid_grant" });
@@ -108,10 +118,12 @@ export const identityAuthOptions = ({
   baseURL,
   trustedIpHeader,
   webOrigin,
+  chains,
 }: {
   readonly baseURL: string;
   readonly trustedIpHeader: string;
   readonly webOrigin: string;
+  readonly chains: RefreshChains;
 }) =>
   ({
     basePath: "/auth",
@@ -135,7 +147,7 @@ export const identityAuthOptions = ({
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
         if (ctx.path === "/oauth2/token") {
-          await guardRefreshGrant(ctx);
+          await guardRefreshGrant({ ctx, chains });
           return undefined;
         }
         return ctx.path === "/oauth2/register"
@@ -262,10 +274,25 @@ export const createIdentityAuth = async ({
   readonly clock?: Clock;
   readonly webUrl: string;
 }): Promise<Auth> => {
+  const chains = postgresRefreshChains(db, clock);
   const build = () =>
     betterAuth({
-      ...identityAuthOptions({ baseURL, trustedIpHeader, webOrigin: new URL(webUrl).origin }),
+      ...identityAuthOptions({
+        baseURL,
+        trustedIpHeader,
+        webOrigin: new URL(webUrl).origin,
+        chains,
+      }),
       databaseHooks: {
+        session: {
+          delete: {
+            after: async (session) => {
+              if (sessionEndCutsChains({ expiresAt: session.expiresAt, now: clock() })) {
+                await chains.cutChainsOfSession(session.id);
+              }
+            },
+          },
+        },
         user: {
           create: {
             after: async (user) => {

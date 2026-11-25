@@ -225,6 +225,13 @@
       "when": 1795532557532,
       "tag": "0031_space_refund_revocation",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1795620728148,
+      "tag": "0032_refresh_chain_session",
+      "breakpoints": true
     }
   ]
 }

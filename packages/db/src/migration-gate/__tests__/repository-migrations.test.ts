@@ -66,6 +66,7 @@ const NON_ADDITIVE_MIGRATIONS = [
   "0021_history_entry_stored_size_trigger_removal.sql",
   "0026_account_deletion.sql",
   "0030_space_orphaned_at.sql",
+  "0032_refresh_chain_session.sql",
   ...Object.keys(ELEVATED_PRIVILEGE_MIGRATIONS),
 ];
 
@@ -136,6 +137,12 @@ describe("rejectedStatements sur les migrations du dépôt", () => {
     expect(rejected.filter((statement) => statement.includes("DROP CONSTRAINT"))).toHaveLength(9);
     expect(rejected.filter((statement) => statement.startsWith("GRANT"))).toEqual([
       `GRANT UPDATE ("user_id", "deleted_member_number") ON "history_author" TO app`,
+    ]);
+  });
+
+  it("refuse la clé étrangère retirée de 0032_refresh_chain_session.sql, et rien d'autre", () => {
+    expect(rejectedStatements(readMigration("0032_refresh_chain_session.sql"))).toEqual([
+      `ALTER TABLE "identity_oauth_refresh_token" DROP CONSTRAINT "identity_oauth_refresh_token_session_id_identity_session_id_fk"`,
     ]);
   });
 

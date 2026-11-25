@@ -21,10 +21,11 @@ const CONSUMED_BY_ROTATION = { revoked: secondsFromNow(-10) };
 
 const outcomeOf = (
   overrides: Partial<StoredRefreshToken>,
-  { consented = true }: { readonly consented?: boolean } = {},
-) => refreshGrantOutcome({ token: makeToken(overrides), consented, now: NOW });
+  { consented = true, cut = false }: { readonly consented?: boolean; readonly cut?: boolean } = {},
+) => refreshGrantOutcome({ token: makeToken(overrides), consented, cut, now: NOW });
 
 const WITHDRAWN = { consented: false };
+const CUT_CHAIN = { cut: true };
 
 describe("rejeu d'un refresh token (ADR 0018 §3)", () => {
   it("laisse passer un jeton encore actif", () => {
@@ -99,5 +100,19 @@ describe("refresh d'une IA dont l'utilisateur a retiré l'accès", () => {
 
   it("refuse le retrait avant de regarder la durée de vie", () => {
     expect(outcomeOf({ authTime: daysBefore(200) }, WITHDRAWN)).toBe("withdrawn");
+  });
+});
+
+describe("refresh d'une chaîne coupée (ADR 0060 §4)", () => {
+  it("refuse le refresh", () => {
+    expect(outcomeOf({}, CUT_CHAIN)).toBe("cut");
+  });
+
+  it("voit la coupure avant le rejeu, pour ne pas couper toutes les chaînes", () => {
+    expect(outcomeOf(CONSUMED_BY_ROTATION, CUT_CHAIN)).toBe("cut");
+  });
+
+  it("voit la coupure avant le retrait et la durée de vie", () => {
+    expect(outcomeOf({ authTime: daysBefore(200) }, { ...WITHDRAWN, ...CUT_CHAIN })).toBe("cut");
   });
 });

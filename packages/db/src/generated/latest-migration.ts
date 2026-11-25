@@ -1,1 +1,1 @@
-export const LATEST_MIGRATION = { tag: "0031_space_refund_revocation", when: 1795532557532 };
+export const LATEST_MIGRATION = { tag: "0032_refresh_chain_session", when: 1795620728148 };
