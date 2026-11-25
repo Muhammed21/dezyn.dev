@@ -11,7 +11,10 @@ const ListedProjectOutput = z.looseObject({
   figmaFile: FigmaFileOutput.nullable(),
 });
 
-export const ProjectOutput = ListedProjectOutput.extend({ spaceId: Uuid });
+export const ProjectOutput = ListedProjectOutput.extend({
+  spaceId: Uuid,
+  lastFigmaSurveyAt: z.iso.datetime().nullable(),
+});
 
 export const ProjectsOutput = z.looseObject({
   projects: z.array(ListedProjectOutput),

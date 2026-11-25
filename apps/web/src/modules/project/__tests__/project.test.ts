@@ -273,6 +273,7 @@ const PROJECT_ID = "0b6f3c2a-8d4e-4f1a-9c7b-5e2d1a0f9b8c";
 const makeReadProject = (overrides: Readonly<Record<string, unknown>> = {}) => ({
   ...makeListedProject({ id: PROJECT_ID }),
   spaceId: SPACE_ID,
+  lastFigmaSurveyAt: null,
   ...overrides,
 });
 
@@ -303,7 +304,20 @@ describe("lecture d'un projet seul dans l'app web", () => {
         createdAt: new Date("2026-11-11T18:00:00.000Z"),
         historyPurgedAt: new Date("2026-11-10T08:00:00.000Z"),
         figmaFile: undefined,
+        lastFigmaSurveyAt: undefined,
       }),
+    );
+  });
+
+  it("donne la date du dernier relevé Figma du projet (ADR 0059 §6)", async () => {
+    const { projects } = answering(
+      json(makeReadProject({ lastFigmaSurveyAt: "2026-11-16T10:30:00.000Z" }), 200),
+    );
+
+    const read = await projects.readProject({ projectId: PROJECT_ID });
+
+    expect(read).toEqual(
+      ok(expect.objectContaining({ lastFigmaSurveyAt: new Date("2026-11-16T10:30:00.000Z") })),
     );
   });
 

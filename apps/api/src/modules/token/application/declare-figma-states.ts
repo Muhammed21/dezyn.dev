@@ -291,9 +291,10 @@ export const declareFigmaStates =
     if (alert !== undefined) {
       await sendStorageAlert(alert);
     }
-    if (proposed.proposals.length > 0) {
-      await signals.changed({ projectId, topics: ["proposals"] });
-    }
+    await signals.changed({
+      projectId,
+      topics: proposed.proposals.length > 0 ? ["proposals", "tokens"] : ["tokens"],
+    });
     if (proposed.proposals.length > 0 && proposed.batch !== null) {
       await signals.signalAt(
         batchExpirySignal({ projectId, batchId: proposed.batch.id, lastWrittenAt: declaredAt }),

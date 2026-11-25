@@ -47,8 +47,7 @@ const readingRefusalOf = (response: Response): ProjectsFailure => {
   return failureOf(response);
 };
 
-const purgeDateOf = (historyPurgedAt: string | null) =>
-  historyPurgedAt === null ? undefined : new Date(historyPurgedAt);
+const dateOf = (instant: string | null) => (instant === null ? undefined : new Date(instant));
 
 const refusalOf = async (response: Response): Promise<ProjectCreationFailure> => {
   if (response.status === BAD_REQUEST) {
@@ -117,7 +116,7 @@ export const createHttpProjectGateway = ({
         spaceId,
         name,
         createdAt: new Date(createdAt),
-        historyPurgedAt: purgeDateOf(historyPurgedAt),
+        historyPurgedAt: dateOf(historyPurgedAt),
         figmaFile: figmaFileOf(figmaFile),
       })),
     );
@@ -135,14 +134,16 @@ export const createHttpProjectGateway = ({
     if (!body.ok) {
       return body;
     }
-    const { id, spaceId, name, createdAt, historyPurgedAt, figmaFile } = body.value;
+    const { id, spaceId, name, createdAt, historyPurgedAt, figmaFile, lastFigmaSurveyAt } =
+      body.value;
     return ok({
       id,
       spaceId,
       name,
       createdAt: new Date(createdAt),
-      historyPurgedAt: purgeDateOf(historyPurgedAt),
+      historyPurgedAt: dateOf(historyPurgedAt),
       figmaFile: figmaFileOf(figmaFile),
+      lastFigmaSurveyAt: dateOf(lastFigmaSurveyAt),
     });
   },
   setFigmaFile: async ({ projectId, url }) => {

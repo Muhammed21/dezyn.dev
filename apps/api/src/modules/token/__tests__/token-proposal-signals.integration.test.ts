@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { LogRecord } from "#platform/logging.ts";
 import { type App, BASE_URL, callMcp, withIdentityApp } from "#testing/authorization-flow.ts";
 import { seedProject } from "#testing/project-fixtures.ts";
-import { makeProposalSignalRecorder } from "#testing/project-signals.ts";
+import { makeAllSignalsRecorder, makeProposalSignalRecorder } from "#testing/project-signals.ts";
 import { addToken, makeColorToken } from "#testing/token-fixtures.ts";
 
 const NIGHT_BLUE = { colorSpace: "srgb", components: [0.1, 0.2, 0.4] };
@@ -283,6 +283,64 @@ describe("un import qui remplace des propositions les signale (ADR 0046)", () =>
 
         expect(response.status).not.toBe(201);
         expect(recorder.since(mark)).toEqual([]);
+      },
+      { signals: recorder.signals },
+    );
+  });
+});
+
+describe("declare_figma_states signale tokens, que suit l'indice du dernier relevé Figma (ADR 0059 §6)", () => {
+  it("une déclaration sans proposition signale tokens et history", () => {
+    const recorder = makeAllSignalsRecorder();
+    return withIdentityApp(
+      async (app, db) => {
+        const seeded = await seedProject(app, db);
+        await addToken(app, { ...seeded, token: makeColorToken({ name: "couleur.fond" }) });
+        const mark = recorder.received.length;
+
+        await declareFigmaStates(app, {
+          ...seeded,
+          states: [{ name: "couleur.fond", state: "synced" }],
+        });
+
+        expect(recorder.since(mark)).toEqual([
+          { projectId: seeded.projectId, topics: ["tokens"] },
+          { projectId: seeded.projectId, topics: ["history"] },
+        ]);
+      },
+      { signals: recorder.signals },
+    );
+  });
+
+  it("une divergence proposée signale proposals et tokens en un seul signal", () => {
+    const recorder = makeAllSignalsRecorder();
+    return withIdentityApp(
+      async (app, db) => {
+        const seeded = await seedProject(app, db);
+        await addToken(app, { ...seeded, token: makeColorToken({ name: "couleur.fond" }) });
+        const mark = recorder.received.length;
+
+        await declareFigmaStates(app, { ...seeded, states: [DIVERGED_FOND] });
+
+        expect(recorder.since(mark)).toEqual([
+          { projectId: seeded.projectId, topics: ["proposals", "tokens"] },
+          { projectId: seeded.projectId, topics: ["history"] },
+        ]);
+      },
+      { signals: recorder.signals },
+    );
+  });
+
+  it("une déclaration refusée ne signale pas tokens", () => {
+    const recorder = makeAllSignalsRecorder();
+    return withIdentityApp(
+      async (app, db) => {
+        const seeded = await seedProject(app, db);
+        const mark = recorder.received.length;
+
+        await declareFigmaStates(app, { ...seeded, states: [DIVERGED_FOND] });
+
+        expect(recorder.since(mark).filter(({ topics }) => topics.includes("tokens"))).toEqual([]);
       },
       { signals: recorder.signals },
     );

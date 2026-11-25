@@ -23,6 +23,10 @@ export type ListedProject = Project & {
   readonly figmaFile: FigmaFile | undefined;
 };
 
+export type ProjectDetails = ListedProject & {
+  readonly lastFigmaSurveyAt: Date | undefined;
+};
+
 export type ProjectsFailure = "unauthenticated" | "not_found" | "unavailable" | "invalid_response";
 
 export type FigmaFileFailure = ProjectsFailure | "invalid_figma_file";
@@ -40,4 +44,25 @@ export const recentPurgeOf = ({
   return purgedAt !== undefined && now.getTime() - purgedAt.getTime() < PURGE_NOTICE_MS
     ? purgedAt
     : undefined;
+};
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+const STALE_SURVEY_DAYS = 14;
+
+export type FigmaSurveyAge = { readonly days: number; readonly stale: boolean };
+
+export const figmaSurveyAgeOf = ({
+  project,
+  now,
+}: {
+  readonly project: ProjectDetails;
+  readonly now: Date;
+}): FigmaSurveyAge | undefined => {
+  const surveyedAt = project.lastFigmaSurveyAt;
+  if (surveyedAt === undefined) {
+    return undefined;
+  }
+  const days = Math.max(0, Math.floor((now.getTime() - surveyedAt.getTime()) / DAY_MS));
+  return { days, stale: days > STALE_SURVEY_DAYS };
 };
