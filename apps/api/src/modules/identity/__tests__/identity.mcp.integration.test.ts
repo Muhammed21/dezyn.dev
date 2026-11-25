@@ -35,12 +35,12 @@ const makeClock = () => {
   };
 };
 
-const sessionExpiryOf = async (db: PostgresDatabase, userId: string) => {
-  const sessions = await db.orm
-    .select({ expiresAt: schema.identitySession.expiresAt })
-    .from(schema.identitySession)
-    .where(eq(schema.identitySession.userId, userId));
-  return Math.max(...sessions.map(({ expiresAt }) => expiresAt.getTime()));
+const refreshTokenExpiryOf = async (db: PostgresDatabase, userId: string) => {
+  const tokens = await db.orm
+    .select({ expiresAt: schema.identityOAuthRefreshToken.expiresAt })
+    .from(schema.identityOAuthRefreshToken)
+    .where(eq(schema.identityOAuthRefreshToken.userId, userId));
+  return Math.max(...tokens.map(({ expiresAt }) => expiresAt.getTime()));
 };
 
 describe("MCP : l'IA autorisée appelle whoami", () => {
@@ -123,7 +123,7 @@ describe("MCP : l'IA autorisée appelle whoami", () => {
       );
     }));
 
-  it("une session expirée mais pas encore purgée rend le jeton refusé", () =>
+  it("une session web expirée mais pas encore purgée laisse passer le jeton (ADR 0060 §3)", () =>
     withIdentityApp(async (app, db) => {
       const { accessToken, userId } = await obtainAccessToken(app);
 
@@ -133,15 +133,15 @@ describe("MCP : l'IA autorisée appelle whoami", () => {
         .where(eq(schema.identitySession.userId, userId));
       const response = await callMcp(app, { token: accessToken, method: "tools/list" });
 
-      expect(response.status).toBe(401);
+      expect(response.status).toBe(200);
     }));
 
-  it("à l'heure d'expiration de la session, le jeton est refusé ; une milliseconde avant, il passe", () => {
+  it("à l'heure d'expiration du refresh token courant, le jeton est refusé ; une milliseconde avant, il passe", () => {
     const clock = makeClock();
     return withIdentityApp(
       async (app, db) => {
         const { accessToken, userId } = await obtainAccessToken(app);
-        const expiresAt = await sessionExpiryOf(db, userId);
+        const expiresAt = await refreshTokenExpiryOf(db, userId);
 
         clock.at(new Date(expiresAt - 1));
         const before = await callMcp(app, { token: accessToken, method: "tools/list" });

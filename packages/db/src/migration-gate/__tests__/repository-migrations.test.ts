@@ -70,6 +70,7 @@ const NON_ADDITIVE_MIGRATIONS = [
   "0026_account_deletion.sql",
   "0030_space_orphaned_at.sql",
   "0033_proposal_batch_recipe.sql",
+  "0034_refresh_chain_session.sql",
   ...Object.keys(ELEVATED_PRIVILEGE_MIGRATIONS),
 ];
 
@@ -146,6 +147,12 @@ describe("rejectedStatements sur les migrations du dépôt", () => {
   it("refuse la suppression de l'index des lots ouverts de 0033_proposal_batch_recipe.sql, pas l'ajout de la recette ni le nouvel index", () => {
     expect(rejectedStatements(readMigration("0033_proposal_batch_recipe.sql"))).toEqual([
       `DROP INDEX "proposal_batch_open_key"`,
+    ]);
+  });
+
+  it("refuse la clé étrangère retirée de 0034_refresh_chain_session.sql, et rien d'autre", () => {
+    expect(rejectedStatements(readMigration("0034_refresh_chain_session.sql"))).toEqual([
+      `ALTER TABLE "identity_oauth_refresh_token" DROP CONSTRAINT "identity_oauth_refresh_token_session_id_identity_session_id_fk"`,
     ]);
   });
 

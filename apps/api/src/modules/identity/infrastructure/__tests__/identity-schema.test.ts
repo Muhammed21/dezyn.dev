@@ -19,6 +19,11 @@ const tables = Object.entries(
       baseURL: "http://127.0.0.1:3000",
       trustedIpHeader: "x-forwarded-for",
       webOrigin: "http://127.0.0.1:5173",
+      chains: {
+        cutChainsOfSession: async () => undefined,
+        cutChainsOfUser: async () => undefined,
+        isCut: async () => false,
+      },
     }),
   ),
 );

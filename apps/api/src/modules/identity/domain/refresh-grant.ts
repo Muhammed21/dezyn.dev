@@ -1,4 +1,4 @@
-const ABSOLUTE_LIFETIME_MS = 180 * 86_400_000;
+import { ABSOLUTE_LIFETIME_MS } from "./refresh-chain.ts";
 
 export type StoredRefreshToken = {
   readonly revoked: Date | null;
@@ -7,7 +7,13 @@ export type StoredRefreshToken = {
   readonly sessionId: string | null;
 };
 
-export type RefreshGrantOutcome = "allowed" | "reuse" | "orphaned" | "withdrawn" | "expired";
+export type RefreshGrantOutcome =
+  | "allowed"
+  | "cut"
+  | "reuse"
+  | "orphaned"
+  | "withdrawn"
+  | "expired";
 
 const withinReplayWindow = ({ rotationReplayExpiresAt }: StoredRefreshToken, now: Date) =>
   rotationReplayExpiresAt !== null && rotationReplayExpiresAt.getTime() >= now.getTime();
@@ -21,12 +27,17 @@ const exceedsAbsoluteLifetime = ({ authTime }: StoredRefreshToken, now: Date) =>
 export const refreshGrantOutcome = ({
   token,
   consented,
+  cut,
   now,
 }: {
   readonly token: StoredRefreshToken;
   readonly consented: boolean;
+  readonly cut: boolean;
   readonly now: Date;
 }): RefreshGrantOutcome => {
+  if (cut) {
+    return "cut";
+  }
   if (isReuse(token, now)) {
     return "reuse";
   }

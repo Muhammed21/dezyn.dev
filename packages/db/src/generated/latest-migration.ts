@@ -1,1 +1,1 @@
-export const LATEST_MIGRATION = { tag: "0033_proposal_batch_recipe", when: 1795618682161 };
+export const LATEST_MIGRATION = { tag: "0034_refresh_chain_session", when: 1795620728148 };

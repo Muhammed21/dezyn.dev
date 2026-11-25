@@ -111,7 +111,7 @@ export const identityOAuthRefreshToken = pgTable(
     clientId: text("client_id")
       .notNull()
       .references(() => identityOAuthClient.clientId),
-    sessionId: uuid("session_id").references(() => identitySession.id, { onDelete: "set null" }),
+    sessionId: uuid("session_id"),
     userId: uuid("user_id")
       .notNull()
       .references(() => identityUser.id, { onDelete: "cascade" }),
@@ -128,6 +128,7 @@ export const identityOAuthRefreshToken = pgTable(
     authTime: at("auth_time"),
     confirmation: jsonb("confirmation"),
     scopes: text("scopes").array().notNull(),
+    cutAt: at("cut_at"),
   },
   (table) => [
     index("identity_oauth_refresh_token_client_id_idx").on(table.clientId),
