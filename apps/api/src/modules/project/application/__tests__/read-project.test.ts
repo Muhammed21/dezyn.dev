@@ -13,6 +13,7 @@ const makeProject = (overrides: Partial<ReadProject> = {}): ReadProject => ({
   name: "Site vitrine",
   createdAt: new Date("2026-11-01T09:00:00.000Z"),
   historyPurgedAt: new Date("2026-11-10T08:00:00.000Z"),
+  figmaFile: null,
   ...overrides,
 });
 

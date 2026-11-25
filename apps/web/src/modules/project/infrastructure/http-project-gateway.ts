@@ -1,5 +1,8 @@
+import { z } from "zod";
+
 import {
   CreatedProjectOutput,
+  FigmaFileOutput,
   PlanRequiredProblem,
   ProjectOutput,
   ProjectsOutput,
@@ -19,7 +22,20 @@ import {
   UNAUTHORIZED,
 } from "../../../platform/http.ts";
 import type { ProjectGateway } from "../application/project-gateway.ts";
-import type { ProjectCreationFailure, ProjectsFailure } from "../domain/project.ts";
+import type {
+  FigmaFile,
+  FigmaFileFailure,
+  ProjectCreationFailure,
+  ProjectsFailure,
+} from "../domain/project.ts";
+
+const SetFigmaFileOutput = z.looseObject({ figmaFile: FigmaFileOutput.nullable() });
+
+const figmaFileOf = (figmaFile: FigmaFile | null): FigmaFile | undefined =>
+  figmaFile === null ? undefined : { url: figmaFile.url, key: figmaFile.key };
+
+const figmaFileRefusalOf = (response: Response): FigmaFileFailure =>
+  response.status === BAD_REQUEST ? "invalid_figma_file" : readingRefusalOf(response);
 
 const readingRefusalOf = (response: Response): ProjectsFailure => {
   if (response.status === UNAUTHORIZED) {
@@ -96,12 +112,13 @@ export const createHttpProjectGateway = ({
       return body;
     }
     return ok(
-      body.value.projects.map(({ id, name, createdAt, historyPurgedAt }) => ({
+      body.value.projects.map(({ id, name, createdAt, historyPurgedAt, figmaFile }) => ({
         id,
         spaceId,
         name,
         createdAt: new Date(createdAt),
         historyPurgedAt: purgeDateOf(historyPurgedAt),
+        figmaFile: figmaFileOf(figmaFile),
       })),
     );
   },
@@ -118,13 +135,30 @@ export const createHttpProjectGateway = ({
     if (!body.ok) {
       return body;
     }
-    const { id, spaceId, name, createdAt, historyPurgedAt } = body.value;
+    const { id, spaceId, name, createdAt, historyPurgedAt, figmaFile } = body.value;
     return ok({
       id,
       spaceId,
       name,
       createdAt: new Date(createdAt),
       historyPurgedAt: purgeDateOf(historyPurgedAt),
+      figmaFile: figmaFileOf(figmaFile),
     });
+  },
+  setFigmaFile: async ({ projectId, url }) => {
+    const sent = await send(fetch, `${apiUrl}/v1/projects/${projectId}/figma-file`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ url }),
+    });
+    if (!sent.ok) {
+      return sent;
+    }
+    const response = sent.value;
+    if (response.status !== OK) {
+      return err(figmaFileRefusalOf(response));
+    }
+    const body = await parseJson(response, SetFigmaFileOutput);
+    return body.ok ? ok(figmaFileOf(body.value.figmaFile)) : body;
   },
 });

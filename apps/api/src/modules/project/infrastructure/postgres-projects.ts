@@ -9,19 +9,44 @@ import { schema } from "@repo/db";
 import type { ProjectUnitOfWork } from "../application/create-project.ts";
 import type { ProjectLister } from "../application/list-projects.ts";
 import type { ProjectReader } from "../application/read-project.ts";
+import type { FigmaFileUnitOfWork } from "../application/set-figma-file.ts";
 import type { ProjectFinder } from "../domain/project.ts";
 
 const { project, space } = schema;
 
 const StoredPlan = z.enum(PLANS);
 
-const StoredProject = z.object({
+type StoredFigmaFileColumns = {
+  readonly figmaFileUrl: string | null;
+  readonly figmaFileKey: string | null;
+};
+
+const figmaFileOfRow = ({ figmaFileUrl, figmaFileKey }: StoredFigmaFileColumns) =>
+  figmaFileUrl === null || figmaFileKey === null ? null : { url: figmaFileUrl, key: figmaFileKey };
+
+const withFigmaFile = <Row extends StoredFigmaFileColumns>({
+  figmaFileUrl,
+  figmaFileKey,
+  ...row
+}: Row) => ({ ...row, figmaFile: figmaFileOfRow({ figmaFileUrl, figmaFileKey }) });
+
+const StoredFigmaFile = z.object({
+  figmaFileUrl: z.string().nullable(),
+  figmaFileKey: z.string().nullable(),
+});
+
+const StoredProject = StoredFigmaFile.extend({
   id: z.string(),
   spaceId: z.string(),
   name: z.string(),
   createdAt: z.date(),
   historyPurgedAt: z.date().nullable(),
-});
+}).transform(withFigmaFile);
+
+const figmaFileColumns = {
+  figmaFileUrl: project.figmaFileUrl,
+  figmaFileKey: project.figmaFileKey,
+};
 
 export const postgresProjectUnitOfWork = ({
   db,
@@ -66,17 +91,20 @@ export const postgresProjectFinder = (db: PostgresDatabase): ProjectFinder => ({
 });
 
 export const postgresProjectLister = (db: PostgresDatabase): ProjectLister => ({
-  projectsOf: (spaceId) =>
-    db.orm
+  projectsOf: async (spaceId) => {
+    const rows = await db.orm
       .select({
         id: project.id,
         name: project.name,
         createdAt: project.createdAt,
         historyPurgedAt: project.historyPurgedAt,
+        ...figmaFileColumns,
       })
       .from(project)
       .where(eq(project.spaceId, spaceId))
-      .orderBy(asc(project.name)),
+      .orderBy(asc(project.name));
+    return rows.map(withFigmaFile);
+  },
 });
 
 export const postgresProjectReader = (db: PostgresDatabase): ProjectReader => ({
@@ -88,9 +116,41 @@ export const postgresProjectReader = (db: PostgresDatabase): ProjectReader => ({
         name: project.name,
         createdAt: project.createdAt,
         historyPurgedAt: project.historyPurgedAt,
+        ...figmaFileColumns,
       })
       .from(project)
       .where(eq(project.id, projectId));
     return StoredProject.parse(row);
   },
+});
+
+export const postgresFigmaFileUnitOfWork = ({
+  db,
+  historyWriterOn,
+}: {
+  readonly db: PostgresDatabase;
+  readonly historyWriterOn: (tx: PostgresTransaction) => HistoryWriter;
+}): FigmaFileUnitOfWork => ({
+  run: (work) =>
+    db.orm.transaction((tx) =>
+      work({
+        figmaFiles: {
+          lockedFigmaFileOf: async (projectId) => {
+            const [row] = await tx
+              .select(figmaFileColumns)
+              .from(project)
+              .where(eq(project.id, projectId))
+              .for("no key update");
+            return figmaFileOfRow(StoredFigmaFile.parse(row));
+          },
+          replace: async ({ projectId, figmaFile }) => {
+            await tx
+              .update(project)
+              .set({ figmaFileUrl: figmaFile?.url ?? null, figmaFileKey: figmaFile?.key ?? null })
+              .where(eq(project.id, projectId));
+          },
+        },
+        history: historyWriterOn(tx),
+      }),
+    ),
 });

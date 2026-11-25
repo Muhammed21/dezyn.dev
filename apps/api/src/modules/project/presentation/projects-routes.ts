@@ -4,29 +4,39 @@ import { planRequired } from "#modules/space/contracts/plan.ts";
 import type { MemberEnv } from "#platform/member-identity.ts";
 import { FORBIDDEN, problemResponse } from "#platform/problem.ts";
 import { validate } from "#platform/validate.ts";
-import { CreateProjectInput, Uuid } from "@repo/contracts";
+import { CreateProjectInput, FigmaFileInput, Uuid } from "@repo/contracts";
 
 import type { ProjectUseCases } from "../application/project-use-cases.ts";
+import { listedProjectOutputOf } from "./project-output.ts";
 
-export const projectRoutes = ({ readProject }: ProjectUseCases) =>
-  new Hono<MemberEnv>().get("/:projectId", async (c) => {
-    const projectId = Uuid.safeParse(c.req.param("projectId")).data;
-    if (projectId === undefined) {
-      return c.notFound();
-    }
-    const read = await readProject({ projectId, userId: c.get("identity").userId });
-    if (!read.ok) {
-      return c.notFound();
-    }
-    const { id, spaceId, name, createdAt, historyPurgedAt } = read.value;
-    return c.json({
-      id,
-      spaceId,
-      name,
-      createdAt: createdAt.toISOString(),
-      historyPurgedAt: historyPurgedAt?.toISOString() ?? null,
+export const projectRoutes = ({ readProject, setFigmaFile }: ProjectUseCases) =>
+  new Hono<MemberEnv>()
+    .get("/:projectId", async (c) => {
+      const projectId = Uuid.safeParse(c.req.param("projectId")).data;
+      if (projectId === undefined) {
+        return c.notFound();
+      }
+      const read = await readProject({ projectId, userId: c.get("identity").userId });
+      if (!read.ok) {
+        return c.notFound();
+      }
+      const { spaceId, ...listed } = read.value;
+      return c.json({ ...listedProjectOutputOf(listed), spaceId });
+    })
+    .put("/:projectId/figma-file", validate("json", FigmaFileInput), async (c) => {
+      const projectId = Uuid.safeParse(c.req.param("projectId")).data;
+      if (projectId === undefined) {
+        return c.notFound();
+      }
+      const set = await setFigmaFile({
+        projectId,
+        userId: c.get("identity").userId,
+        clientId: null,
+        url: c.req.valid("json").url,
+        correlationId: c.get("correlationId"),
+      });
+      return set.ok ? c.json({ figmaFile: set.value }) : c.notFound();
     });
-  });
 
 export const projectsRoutes = ({ createProject, listProjects }: ProjectUseCases) =>
   new Hono<MemberEnv>()
@@ -38,12 +48,7 @@ export const projectsRoutes = ({ createProject, listProjects }: ProjectUseCases)
       const listed = await listProjects({ spaceId, userId: c.get("identity").userId });
       return listed.ok
         ? c.json({
-            projects: listed.value.map(({ id, name, createdAt, historyPurgedAt }) => ({
-              id,
-              name,
-              createdAt: createdAt.toISOString(),
-              historyPurgedAt: historyPurgedAt?.toISOString() ?? null,
-            })),
+            projects: listed.value.map(listedProjectOutputOf),
           })
         : c.notFound();
     })

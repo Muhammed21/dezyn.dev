@@ -23,6 +23,7 @@ describe("can : ce que peut faire un membre dans un espace (ADR 0017 §3)", () =
     ["un propriétaire", "token.declareFigmaState", true, OWNER],
     ["un propriétaire", "member.manage", true, OWNER],
     ["un propriétaire", "subscription.checkout", true, OWNER],
+    ["un propriétaire", "project.setFigmaFile", true, OWNER],
     ["un éditeur", "space.read", true, EDITOR],
     ["un éditeur", "project.create", false, EDITOR],
     ["un éditeur", "member.invite", false, EDITOR],
@@ -32,6 +33,7 @@ describe("can : ce que peut faire un membre dans un espace (ADR 0017 §3)", () =
     ["un éditeur", "token.declareFigmaState", true, EDITOR],
     ["un éditeur", "member.manage", false, EDITOR],
     ["un éditeur", "subscription.checkout", false, EDITOR],
+    ["un éditeur", "project.setFigmaFile", true, EDITOR],
     ["un non-membre", "space.read", false, undefined],
     ["un non-membre", "project.create", false, undefined],
     ["un non-membre", "member.invite", false, undefined],
@@ -41,6 +43,7 @@ describe("can : ce que peut faire un membre dans un espace (ADR 0017 §3)", () =
     ["un non-membre", "token.declareFigmaState", false, undefined],
     ["un non-membre", "member.manage", false, undefined],
     ["un non-membre", "subscription.checkout", false, undefined],
+    ["un non-membre", "project.setFigmaFile", false, undefined],
   ])("%s, pour %s : %s", (_who, action, allowed, membership) => {
     expect(can({ membership, action })).toBe(allowed);
   });
@@ -55,6 +58,7 @@ describe("allowedActionsOf : les actions qu'un rôle accorde, pour les clients (
     expect(allowedActionsOf("editor")).toEqual([
       "space.read",
       "member.leave",
+      "project.setFigmaFile",
       "token.create",
       "token.declareFigmaState",
       "proposal.review",
@@ -67,7 +71,7 @@ describe("allowedActionsOf : les actions qu'un rôle accorde, pour les clients (
     expect(allowedActionsOf(role)).toEqual(ACTIONS.filter((action) => can({ membership, action })));
   });
 
-  it("le domaine connaît les 9 actions, chacune une fois", () => {
-    expect(new Set(ACTIONS).size).toBe(9);
+  it("le domaine connaît les 10 actions, chacune une fois", () => {
+    expect(new Set(ACTIONS).size).toBe(10);
   });
 });

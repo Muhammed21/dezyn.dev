@@ -1,6 +1,8 @@
 import type { Result } from "@repo/result";
 
 import type {
+  FigmaFile,
+  FigmaFileFailure,
   ListedProject,
   Project,
   ProjectCreationFailure,
@@ -19,4 +21,8 @@ export type ProjectGateway = {
   readonly readProject: (project: {
     readonly projectId: string;
   }) => Promise<Result<ListedProject, ProjectsFailure>>;
+  readonly setFigmaFile: (change: {
+    readonly projectId: string;
+    readonly url: string | null;
+  }) => Promise<Result<FigmaFile | undefined, FigmaFileFailure>>;
 };

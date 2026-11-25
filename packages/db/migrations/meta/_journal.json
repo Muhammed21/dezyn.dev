@@ -229,8 +229,15 @@
     {
       "idx": 32,
       "version": "7",
+      "when": 1795618670424,
+      "tag": "0032_project_figma_file",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
       "when": 1795618682161,
-      "tag": "0032_proposal_batch_recipe",
+      "tag": "0033_proposal_batch_recipe",
       "breakpoints": true
     }
   ]

@@ -193,3 +193,32 @@ describe("lecture d'un projet seul par l'app web, contre la vraie API", () => {
       expect(await grace.projects.readProject({ projectId })).toEqual(err("not_found"));
     }));
 });
+
+const FIGMA_KEY = "aB3dE5fG7hI9jK1lM3nO5p";
+const FIGMA_URL = `https://www.figma.com/design/${FIGMA_KEY}/Design-system`;
+
+describe("fichier Figma d'un projet par l'app web, contre la vraie API (ADR 0059 §4)", () => {
+  it("un membre renseigne puis retire le fichier Figma, que la lecture du projet rend", () =>
+    withIdentityApp(async (app, db) => {
+      const { projectId, projects } = await seedProjectOfAda(app, db);
+
+      const set = await projects.setFigmaFile({ projectId, url: FIGMA_URL });
+      const read = await projects.readProject({ projectId });
+      const removed = await projects.setFigmaFile({ projectId, url: null });
+
+      const figmaFile = { url: FIGMA_URL, key: FIGMA_KEY };
+      expect(set).toEqual(ok(figmaFile));
+      expect(read).toEqual(ok(expect.objectContaining({ figmaFile })));
+      expect(removed).toEqual(ok(undefined));
+    }));
+
+  it("le projet d'un espace dont on n'est pas membre donne not_found", () =>
+    withIdentityApp(async (app, db) => {
+      const { projectId } = await seedProjectOfAda(app, db);
+      const grace = await signedIn(app, GRACE);
+
+      expect(await grace.projects.setFigmaFile({ projectId, url: FIGMA_URL })).toEqual(
+        err("not_found"),
+      );
+    }));
+});

@@ -1,7 +1,9 @@
-import { CreateProjectInput, Uuid } from "@repo/contracts";
+import { CreateProjectInput, FigmaFileInput, Uuid } from "@repo/contracts";
 import { err, type Result } from "@repo/result";
 
 import type {
+  FigmaFile,
+  FigmaFileFailure,
   ListedProject,
   Project,
   ProjectCreationFailure,
@@ -37,4 +39,20 @@ export const projectUseCases = ({ gateway }: { readonly gateway: ProjectGateway 
     readonly projectId: string;
   }): Promise<Result<ListedProject, ProjectsFailure>> =>
     isUuid(projectId) ? gateway.readProject({ projectId }) : err("not_found"),
+  setFigmaFile: async ({
+    projectId,
+    url,
+  }: {
+    readonly projectId: string;
+    readonly url: string | null;
+  }): Promise<Result<FigmaFile | undefined, FigmaFileFailure>> => {
+    if (!isUuid(projectId)) {
+      return err("not_found");
+    }
+    const input = FigmaFileInput.safeParse({ url });
+    if (!input.success) {
+      return err("invalid_figma_file");
+    }
+    return gateway.setFigmaFile({ projectId, url: input.data.url });
+  },
 });
