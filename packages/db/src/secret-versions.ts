@@ -1,5 +1,7 @@
 import { Client } from "pg";
 
+import { inControlTransaction } from "./control-transaction.ts";
+
 const VERSIONED = /^"\$ba\$(\d+)\$/;
 const LEGACY = "legacy";
 const VALID_AT = "(expires_at IS NULL OR expires_at > $1)";
@@ -32,7 +34,7 @@ export const secretVersionsInUse = ({
   readonly connectionString: string;
   readonly now: Date;
 }): Promise<readonly string[]> =>
-  onClient(connectionString, async (client) => {
+  inControlTransaction({ connectionString }, async (client) => {
     const { rows } = await client.query<{ private_key: string }>(
       `SELECT private_key FROM identity_jwks WHERE ${VALID_AT}`,
       [now],

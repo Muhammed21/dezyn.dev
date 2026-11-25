@@ -37,7 +37,7 @@ else
   check "aucun espace en Team avec un abonnement terminé" "lecture impossible" ""
 fi
 
-versions_in_use=$(secret_versions_in_use "$(neon_role_url "$project" "$PRODUCTION_BRANCH" migrator)")
+versions_in_use=$(secret_versions_in_use "$(neon_role_url "$project" "$PRODUCTION_BRANCH" app)")
 
 echo "GitHub"
 github_secrets=$(gh secret list --env production --json name --jq '.[].name' 2> /dev/null || true)

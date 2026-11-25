@@ -5,7 +5,8 @@ import { describe, expect, it } from "vitest";
 import { migrate } from "../migrate.ts";
 import { expireSigningKeys, secretVersionsInUse } from "../secret-versions.ts";
 import { onClient } from "../testing/clients.ts";
-import { withThrowawayDatabase } from "../testing/throwaway-database.ts";
+import { type ThrowawayDatabase, withThrowawayDatabase } from "../testing/throwaway-database.ts";
+import { READ_ONLY_REFUSAL, seedWriteOnRead } from "../testing/write-on-read.ts";
 
 const NOW = new Date("2026-10-26T12:00:00Z");
 const BEFORE_NOW = new Date("2026-10-26T11:59:59Z");
@@ -15,9 +16,10 @@ type SigningKey = { readonly envelope: string; readonly expiresAt: Date | null }
 
 const withSigningKeys = <T>(
   keys: readonly SigningKey[],
-  run: (connectionString: string) => Promise<T>,
+  run: (database: ThrowawayDatabase) => Promise<T>,
 ): Promise<T> =>
-  withThrowawayDatabase(async ({ migratorUrl }) => {
+  withThrowawayDatabase(async (database) => {
+    const { migratorUrl } = database;
     await migrate({ connectionString: migratorUrl });
     await onClient(migratorUrl, (client) =>
       keys.reduce<Promise<unknown>>(
@@ -31,11 +33,13 @@ const withSigningKeys = <T>(
         Promise.resolve(),
       ),
     );
-    return run(migratorUrl);
+    return run(database);
   });
 
 const versionsInUseAmong = (keys: readonly SigningKey[]) =>
-  withSigningKeys(keys, (connectionString) => secretVersionsInUse({ connectionString, now: NOW }));
+  withSigningKeys(keys, ({ appUrl }) =>
+    secretVersionsInUse({ connectionString: appUrl, now: NOW }),
+  );
 
 const expiriesOf = (connectionString: string) =>
   onClient(connectionString, async (client) => {
@@ -95,6 +99,23 @@ describe("secretVersionsInUse", () => {
   it("ne donne rien sans clé valide", async () => {
     expect(await versionsInUseAmong([])).toEqual([]);
   });
+
+  it("lit avec le rôle app dans une transaction où PostgreSQL refuse toute écriture, même permise à app", async () => {
+    const writeDuringRead = withSigningKeys(
+      [{ envelope: "$ba$2$a1b2c3", expiresAt: null }],
+      async ({ appUrl }) => {
+        await seedWriteOnRead({
+          databaseUrl: appUrl,
+          readTable: "identity_jwks",
+          reader: "app",
+          write: `INSERT INTO space (id, name, plan, created_at) VALUES (gen_random_uuid(), 'Atelier', 'free', now())`,
+        });
+        return secretVersionsInUse({ connectionString: appUrl, now: NOW });
+      },
+    );
+
+    await expect(writeDuringRead).rejects.toThrow(READ_ONLY_REFUSAL);
+  });
 });
 
 describe("expireSigningKeys", () => {
@@ -105,21 +126,21 @@ describe("expireSigningKeys", () => {
         { envelope: "$ba$2$a1b2c3", expiresAt: AFTER_NOW },
         { envelope: "$ba$3$a1b2c3", expiresAt: null },
       ],
-      async (connectionString) => {
-        expect(await expireSigningKeys({ connectionString, now: NOW })).toBe(2);
+      async ({ migratorUrl, appUrl }) => {
+        expect(await expireSigningKeys({ connectionString: migratorUrl, now: NOW })).toBe(2);
 
-        expect(await expiriesOf(connectionString)).toEqual([
+        expect(await expiriesOf(migratorUrl)).toEqual([
           ["$ba$1$a1b2c3", BEFORE_NOW],
           ["$ba$2$a1b2c3", NOW],
           ["$ba$3$a1b2c3", NOW],
         ]);
-        expect(await secretVersionsInUse({ connectionString, now: NOW })).toEqual([]);
+        expect(await secretVersionsInUse({ connectionString: appUrl, now: NOW })).toEqual([]);
       },
     ));
 
   it("n'expire rien sans clé valide", () =>
-    withSigningKeys([{ envelope: "$ba$1$a1b2c3", expiresAt: NOW }], async (connectionString) => {
-      expect(await expireSigningKeys({ connectionString, now: AFTER_NOW })).toBe(0);
-      expect(await expiriesOf(connectionString)).toEqual([["$ba$1$a1b2c3", NOW]]);
+    withSigningKeys([{ envelope: "$ba$1$a1b2c3", expiresAt: NOW }], async ({ migratorUrl }) => {
+      expect(await expireSigningKeys({ connectionString: migratorUrl, now: AFTER_NOW })).toBe(0);
+      expect(await expiriesOf(migratorUrl)).toEqual([["$ba$1$a1b2c3", NOW]]);
     }));
 });

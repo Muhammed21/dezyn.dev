@@ -1,5 +1,6 @@
-import { Client } from "pg";
+import type { Client } from "pg";
 
+import { inControlTransaction } from "./control-transaction.ts";
 import { privilegedRoles } from "./provision-roles.ts";
 
 export type RolesReport = {
@@ -30,7 +31,7 @@ const historyPrivileges = async (client: Client): Promise<readonly string[]> => 
   return rows.map(({ privilege }) => privilege);
 };
 
-const rowCounts = async (client: Client): Promise<RolesReport["rows"]> => {
+const rowCountsAsSchemaOwner = async (client: Client): Promise<RolesReport["rows"]> => {
   const { rows } = await client.query<{ name: string; count: number }>(
     `SELECT n.nspname || '.' || c.relname AS name,
             (xpath('/row/count/text()', query_to_xml(format('SELECT count(*) FROM %I.%I', n.nspname, c.relname), false, true, '')))[1]::text::int AS count
@@ -40,23 +41,16 @@ const rowCounts = async (client: Client): Promise<RolesReport["rows"]> => {
   return Object.fromEntries(rows.map(({ name, count }) => [name, count]));
 };
 
-export const inspectRoles = async ({
+export const inspectRoles = ({
   connectionString,
   roles,
 }: {
   readonly connectionString: string;
   readonly roles: readonly string[];
-}): Promise<RolesReport> => {
-  const client = new Client({ connectionString });
-  await client.connect();
-  try {
-    return {
-      privileged: await privilegedRoles(client, roles),
-      foreign: await foreignObjects(client),
-      history: await historyPrivileges(client),
-      rows: await rowCounts(client),
-    };
-  } finally {
-    await client.end();
-  }
-};
+}): Promise<RolesReport> =>
+  inControlTransaction({ connectionString }, async (client) => ({
+    privileged: await privilegedRoles(client, roles),
+    foreign: await foreignObjects(client),
+    history: await historyPrivileges(client),
+    rows: await rowCountsAsSchemaOwner(client),
+  }));
