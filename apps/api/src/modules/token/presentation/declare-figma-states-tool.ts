@@ -2,6 +2,12 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 
+import {
+  BatchIdArgument,
+  DESIGNATION_REFUSAL_TEXT,
+  type DesignationRefusal,
+  isDesignationRefusal,
+} from "#modules/proposal/contracts/batch-designation.ts";
 import type { Execution } from "#platform/idempotency.ts";
 import { IdempotencyKeyArgument, type McpCall } from "#platform/mcp.ts";
 import {
@@ -26,7 +32,7 @@ import type { FigmaRefusal } from "../domain/figma-declaration.ts";
 
 type MalformedStates = { readonly code: "malformed_states"; readonly issues: readonly string[] };
 
-type DeclarationFailure = RecordFailure | MalformedStates | InvalidDeclaration;
+type DeclarationFailure = RecordFailure | DesignationRefusal | MalformedStates | InvalidDeclaration;
 
 const MAX_STATES_PER_CALL = 500;
 
@@ -76,6 +82,9 @@ const pathOf = (path: readonly PropertyKey[]): string =>
   }, "states");
 
 const errorTextOf = (failure: DeclarationFailure): string => {
+  if (isDesignationRefusal(failure)) {
+    return DESIGNATION_REFUSAL_TEXT[failure];
+  }
   if (typeof failure === "string") {
     return RECORD_FAILURE_TEXT[failure];
   }
@@ -114,9 +123,11 @@ export const registerDeclareFigmaStates =
     const declare = async ({
       projectId,
       states,
+      batchId,
     }: {
       readonly projectId: string;
       readonly states?: readonly unknown[];
+      readonly batchId?: string;
     }): Promise<Execution<CallToolResult>> => {
       const declared = await recordProjectCall({
         tool: "declare_figma_states",
@@ -124,9 +135,12 @@ export const registerDeclareFigmaStates =
         userId: identity.userId,
         clientId: identity.clientId,
         correlationId,
-        input: { states },
+        input: { states, batchId },
         run: async (): Promise<
-          Result<DeclaredFigmaStates, MalformedStates | InvalidDeclaration | "not_found">
+          Result<
+            DeclaredFigmaStates,
+            MalformedStates | InvalidDeclaration | DesignationRefusal | "not_found"
+          >
         > => {
           const parsed = StatesInput.safeParse(states);
           if (!parsed.success) {
@@ -142,6 +156,7 @@ export const registerDeclareFigmaStates =
             userId: identity.userId,
             clientId: identity.clientId,
             entries: parsed.data,
+            batchId,
           });
         },
       });
@@ -171,6 +186,7 @@ export const registerDeclareFigmaStates =
         inputSchema: {
           projectId: Uuid,
           states: z.array(z.unknown()).optional(),
+          batchId: BatchIdArgument,
           idempotencyKey: IdempotencyKeyArgument,
         },
         outputSchema: DeclaredFigmaStatesOutput,
@@ -179,7 +195,7 @@ export const registerDeclareFigmaStates =
         projectCall({
           tool: "declare_figma_states",
           args,
-          input: { states: args.states },
+          input: { states: args.states, batchId: args.batchId },
           run: () => declare(args),
         }),
     );

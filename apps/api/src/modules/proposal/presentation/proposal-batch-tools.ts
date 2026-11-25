@@ -16,17 +16,26 @@ import { err, ok, type Result } from "@repo/result";
 
 import type { ClosedBatch, OpenedBatch } from "../application/proposal-batches.ts";
 import type { ProposalUseCases } from "../application/proposal-use-cases.ts";
+import {
+  BatchIdArgument,
+  DESIGNATION_REFUSAL_TEXT,
+  type DesignationRefusal,
+} from "../contracts/batch-designation.ts";
 import { ClosedBatchOutput, OpenedBatchOutput } from "../contracts/proposal.ts";
-import type { ProposalBatch } from "../domain/proposal.ts";
+import type { RecipeBatch } from "../domain/proposal.ts";
 
-type BatchFailure = RecordFailure | "invalid_intent";
+type BatchFailure = RecordFailure | DesignationRefusal | "invalid_intent" | "invalid_recipe";
 
 const ERROR_TEXT: Readonly<Record<BatchFailure, string>> = {
   ...RECORD_FAILURE_TEXT,
+  ...DESIGNATION_REFUSAL_TEXT,
   invalid_intent: "intent : Intention requise",
+  invalid_recipe: "recipe : Recette requise",
 };
 
 const Intent = z.string().trim().min(1);
+
+const Recipe = z.string().trim().min(1).optional();
 
 const failed = (failure: BatchFailure): Execution<CallToolResult> => ({
   response: { content: [{ type: "text", text: ERROR_TEXT[failure] }], isError: true },
@@ -41,7 +50,12 @@ const structured = (output: Record<string, unknown>): Execution<CallToolResult> 
   memorable: true,
 });
 
-const batchOutputOf = ({ id, state, intent }: ProposalBatch) => ({ id, state, intent });
+const batchOutputOf = ({ id, state, intent, recipe }: RecipeBatch) => ({
+  id,
+  state,
+  intent,
+  ...(recipe === null ? {} : { recipe }),
+});
 
 export const registerProposalBatchTools =
   ({
@@ -58,19 +72,25 @@ export const registerProposalBatchTools =
     const open = async ({
       projectId,
       intent,
+      recipe,
     }: {
       readonly projectId: string;
       readonly intent?: string;
+      readonly recipe?: string;
     }): Promise<Execution<CallToolResult>> => {
       const opened = await recordProjectCall({
         ...writer,
         tool: "open_proposal_batch",
         projectId,
-        input: { intent },
-        run: async (): Promise<Result<OpenedBatch, "invalid_intent">> => {
+        input: { intent, recipe },
+        run: async (): Promise<Result<OpenedBatch, "invalid_intent" | "invalid_recipe">> => {
           const parsed = Intent.safeParse(intent);
           if (!parsed.success) {
             return err("invalid_intent");
+          }
+          const parsedRecipe = Recipe.safeParse(recipe);
+          if (!parsedRecipe.success) {
+            return err("invalid_recipe");
           }
           return ok(
             await openBatch({
@@ -78,6 +98,7 @@ export const registerProposalBatchTools =
               userId: identity.userId,
               clientId: identity.clientId,
               intent: parsed.data,
+              recipe: parsedRecipe.data,
             }),
           );
         },
@@ -93,22 +114,23 @@ export const registerProposalBatchTools =
     };
     const close = async ({
       projectId,
+      batchId,
     }: {
       readonly projectId: string;
+      readonly batchId?: string;
     }): Promise<Execution<CallToolResult>> => {
       const closed = await recordProjectCall({
         ...writer,
         tool: "close_proposal_batch",
         projectId,
-        input: {},
-        run: async (): Promise<Result<ClosedBatch, never>> =>
-          ok(
-            await closeBatch({
-              projectId,
-              userId: identity.userId,
-              clientId: identity.clientId,
-            }),
-          ),
+        input: { batchId },
+        run: async (): Promise<Result<ClosedBatch, DesignationRefusal>> =>
+          closeBatch({
+            projectId,
+            userId: identity.userId,
+            clientId: identity.clientId,
+            batchId,
+          }),
       });
       if (!closed.ok) {
         return failed(closed.error);
@@ -124,6 +146,12 @@ export const registerProposalBatchTools =
         inputSchema: {
           projectId: Uuid,
           intent: z.string().optional(),
+          recipe: z
+            .string()
+            .optional()
+            .describe(
+              "La recette dont un passage ouvre ce lot, par exemple releve_figma. Le lot est alors désigné : il ne ferme pas le lot ouvert de l'IA, aucun autre lot ne le ferme, et l'IA y écrit en passant son identifiant (batch.id) en batchId à write_tokens, declare_figma_states et close_proposal_batch.",
+            ),
           idempotencyKey: IdempotencyKeyArgument,
         },
         outputSchema: OpenedBatchOutput,
@@ -132,7 +160,7 @@ export const registerProposalBatchTools =
         projectCall({
           tool: "open_proposal_batch",
           args,
-          input: { intent: args.intent },
+          input: { intent: args.intent, recipe: args.recipe },
           run: () => open(args),
         }),
     );
@@ -141,14 +169,18 @@ export const registerProposalBatchTools =
       {
         description:
           "Ferme le lot de propositions ouvert de l'IA dans un projet ; l'éditeur peut alors le valider en entier.",
-        inputSchema: { projectId: Uuid, idempotencyKey: IdempotencyKeyArgument },
+        inputSchema: {
+          projectId: Uuid,
+          batchId: BatchIdArgument,
+          idempotencyKey: IdempotencyKeyArgument,
+        },
         outputSchema: ClosedBatchOutput,
       },
       async (args) =>
         projectCall({
           tool: "close_proposal_batch",
           args,
-          input: {},
+          input: { batchId: args.batchId },
           run: () => close(args),
         }),
     );
