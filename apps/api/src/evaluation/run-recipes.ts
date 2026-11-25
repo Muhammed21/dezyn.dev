@@ -36,6 +36,26 @@ const runOnce = async ({
   readonly verbose: boolean;
 }): Promise<RunOutcome> => {
   const { app, db, close } = await startIdentityApp();
+  try {
+    return await runOnApp({ app, db, model, scenario, verbose });
+  } finally {
+    await close();
+  }
+};
+
+const runOnApp = async ({
+  app,
+  db,
+  model,
+  scenario,
+  verbose,
+}: {
+  readonly app: Awaited<ReturnType<typeof startIdentityApp>>["app"];
+  readonly db: Awaited<ReturnType<typeof startIdentityApp>>["db"];
+  readonly model: string;
+  readonly scenario: EvalScenario;
+  readonly verbose: boolean;
+}): Promise<RunOutcome> => {
   const exposed = await exposeOverHttp(app);
   try {
     const member = await seedProject(app, db);
@@ -68,7 +88,6 @@ const runOnce = async ({
     };
   } finally {
     await exposed.close();
-    await close();
   }
 };
 
