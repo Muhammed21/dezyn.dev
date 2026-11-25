@@ -38,6 +38,8 @@ const ACTION_LABELS: ReadonlyMap<string, string> = new Map([
   ["mcp.write_tokens", "Tokens écrits par l'IA"],
   ["mcp.open_proposal_batch", "Lot de propositions ouvert par l'IA"],
   ["mcp.close_proposal_batch", "Lot de propositions fermé par l'IA"],
+  ["project.figma_file_changed", "Fichier Figma changé"],
+  ["mcp.set_project_figma_file", "Fichier Figma changé par l'IA"],
 ]);
 
 const DATE_TIME = new Intl.DateTimeFormat("fr-FR", { dateStyle: "long", timeStyle: "short" });

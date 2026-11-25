@@ -35,6 +35,7 @@ const OWNER_ACTIONS = [
   "member.invite",
   "member.leave",
   "member.manage",
+  "project.setFigmaFile",
   "token.create",
   "token.declareFigmaState",
   "proposal.review",

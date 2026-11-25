@@ -57,6 +57,9 @@ const ELEVATED_PRIVILEGE_MIGRATIONS: Readonly<Record<string, readonly string[]>>
   "0031_space_refund_revocation.sql": [
     `GRANT SELECT, INSERT, UPDATE ("revoked_at", "settling_since") ON "space_refund_revocation" TO app`,
   ],
+  "0032_project_figma_file.sql": [
+    `GRANT UPDATE ("figma_file_url", "figma_file_key") ON "project" TO app`,
+  ],
 };
 
 const NON_ADDITIVE_MIGRATIONS = [

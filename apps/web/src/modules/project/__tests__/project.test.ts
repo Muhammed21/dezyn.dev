@@ -170,6 +170,7 @@ const makeListedProject = (overrides: Readonly<Record<string, unknown>> = {}) =>
   name: "Site vitrine",
   createdAt: "2026-11-11T18:00:00.000Z",
   historyPurgedAt: null,
+  figmaFile: null,
   ...overrides,
 });
 
@@ -206,6 +207,7 @@ describe("liste des projets d'un espace dans l'app web (ADR 0044)", () => {
           name: "Site vitrine",
           createdAt: new Date("2026-11-11T18:00:00.000Z"),
           historyPurgedAt: undefined,
+          figmaFile: undefined,
         },
         {
           id: purged.id,
@@ -213,6 +215,7 @@ describe("liste des projets d'un espace dans l'app web (ADR 0044)", () => {
           name: "Application",
           createdAt: new Date("2026-11-11T18:00:00.000Z"),
           historyPurgedAt: new Date("2026-11-10T08:00:00.000Z"),
+          figmaFile: undefined,
         },
       ]),
     );
@@ -299,8 +302,17 @@ describe("lecture d'un projet seul dans l'app web", () => {
         name: "Site vitrine",
         createdAt: new Date("2026-11-11T18:00:00.000Z"),
         historyPurgedAt: new Date("2026-11-10T08:00:00.000Z"),
+        figmaFile: undefined,
       }),
     );
+  });
+
+  it("donne le fichier Figma du projet, avec son lien et sa clé", async () => {
+    const { projects } = answering(json(makeReadProject({ figmaFile: FIGMA_FILE }), 200));
+
+    const read = await projects.readProject({ projectId: PROJECT_ID });
+
+    expect(read).toEqual(ok(expect.objectContaining({ figmaFile: FIGMA_FILE })));
   });
 
   it("donne un projet jamais purgé sans date de purge", async () => {
@@ -354,5 +366,89 @@ describe("lecture d'un projet seul dans l'app web", () => {
     const { projects } = answering(response);
 
     expect(await projects.readProject({ projectId: PROJECT_ID })).toEqual(err("invalid_response"));
+  });
+});
+
+const FIGMA_KEY = "aB3dE5fG7hI9jK1lM3nO5p";
+const FIGMA_URL = `https://www.figma.com/design/${FIGMA_KEY}/Design-system`;
+const FIGMA_FILE = { url: FIGMA_URL, key: FIGMA_KEY };
+
+describe("fichier Figma d'un projet dans l'app web (ADR 0059 §4)", () => {
+  it("envoie le lien rogné à l'API, en JSON, avec le cookie du navigateur", async () => {
+    const { projects, calls } = answering(json({ figmaFile: FIGMA_FILE }, 200));
+
+    await projects.setFigmaFile({ projectId: PROJECT_ID, url: `  ${FIGMA_URL}  ` });
+
+    expect(calls).toEqual([
+      {
+        url: `${API_URL}/v1/projects/${PROJECT_ID}/figma-file`,
+        init: {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ url: FIGMA_URL }),
+          credentials: "include",
+        },
+      },
+    ]);
+  });
+
+  it("donne le fichier Figma enregistré", async () => {
+    const { projects } = answering(json({ figmaFile: FIGMA_FILE }, 200));
+
+    expect(await projects.setFigmaFile({ projectId: PROJECT_ID, url: FIGMA_URL })).toEqual(
+      ok(FIGMA_FILE),
+    );
+  });
+
+  it("retire le fichier Figma en envoyant un lien null", async () => {
+    const { projects, calls } = answering(json({ figmaFile: null }, 200));
+
+    const removed = await projects.setFigmaFile({ projectId: PROJECT_ID, url: null });
+
+    expect(removed).toEqual(ok(undefined));
+    expect(calls.map(({ init }) => init.body)).toEqual([JSON.stringify({ url: null })]);
+  });
+
+  it.each(["https://www.example.com/design-system", "mon design system", "   "])(
+    "donne invalid_figma_file pour %j, sans appeler l'API",
+    async (url) => {
+      const { projects, calls } = answering(json({ figmaFile: FIGMA_FILE }, 200));
+
+      expect(await projects.setFigmaFile({ projectId: PROJECT_ID, url })).toEqual(
+        err("invalid_figma_file"),
+      );
+      expect(calls).toEqual([]);
+    },
+  );
+
+  it("donne not_found pour un projet qui n'est pas un UUID, sans appeler l'API", async () => {
+    const { projects, calls } = answering(json({ figmaFile: FIGMA_FILE }, 200));
+
+    expect(await projects.setFigmaFile({ projectId: "projet-1", url: FIGMA_URL })).toEqual(
+      err("not_found"),
+    );
+    expect(calls).toEqual([]);
+  });
+
+  it.each([
+    [400, "invalid_figma_file"],
+    [401, "unauthenticated"],
+    [404, "not_found"],
+    [500, "unavailable"],
+    [403, "invalid_response"],
+  ])("donne sur une réponse %i l'échec attendu", async (status, failure) => {
+    const { projects } = answering(json({ title: "Refus" }, status));
+
+    expect(await projects.setFigmaFile({ projectId: PROJECT_ID, url: FIGMA_URL })).toEqual(
+      err(failure),
+    );
+  });
+
+  it("donne invalid_response sur un corps sans fichier Figma", async () => {
+    const { projects } = answering(json({}, 200));
+
+    expect(await projects.setFigmaFile({ projectId: PROJECT_ID, url: FIGMA_URL })).toEqual(
+      err("invalid_response"),
+    );
   });
 });

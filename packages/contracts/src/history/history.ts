@@ -19,6 +19,7 @@ const HistoryEntryOutput = z.looseObject({
   id: Uuid,
   action: openEnum([
     "project.created",
+    "project.figma_file_changed",
     "token.created",
     "modes.created",
     "proposal.validated",
@@ -28,6 +29,7 @@ const HistoryEntryOutput = z.looseObject({
     "mcp.write_tokens",
     "mcp.open_proposal_batch",
     "mcp.close_proposal_batch",
+    "mcp.set_project_figma_file",
   ]),
   spaceId: Uuid,
   projectId: Uuid,

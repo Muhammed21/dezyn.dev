@@ -14,6 +14,8 @@ export const project = pgTable(
     storedBytes: bigint("stored_bytes", { mode: "number" }).notNull().default(0),
     historyPurgedBefore: timestamp("history_purged_before", { withTimezone: true }),
     historyPurgedAt: timestamp("history_purged_at", { withTimezone: true }),
+    figmaFileUrl: text("figma_file_url"),
+    figmaFileKey: text("figma_file_key"),
   },
   (table) => [index("project_space_id_idx").on(table.spaceId)],
 );

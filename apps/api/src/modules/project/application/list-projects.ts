@@ -1,9 +1,13 @@
 import { can, type MembershipReader } from "#modules/space/contracts/membership.ts";
+import type { FigmaFile } from "@repo/contracts";
 import { err, ok, type Result } from "@repo/result";
 
 import type { Project } from "../domain/project.ts";
 
-export type ListedProject = Omit<Project, "spaceId"> & { readonly historyPurgedAt: Date | null };
+export type ListedProject = Omit<Project, "spaceId"> & {
+  readonly historyPurgedAt: Date | null;
+  readonly figmaFile: FigmaFile | null;
+};
 
 export interface ProjectLister {
   projectsOf(spaceId: string): Promise<readonly ListedProject[]>;

@@ -58,7 +58,7 @@ Le Worker vérifie la version du schéma à la première requête de chaque isol
 
 ## Idempotence des outils MCP
 
-Les outils d'écriture du MCP (`write_tokens`, `open_proposal_batch`, `close_proposal_batch`, `declare_figma_states`) acceptent un argument optionnel `idempotencyKey`. Relancé avec la même clé et les mêmes arguments, un outil rejoue son premier résultat sans rien réécrire, et l'historique reçoit une entrée `replayed`.
+Les outils d'écriture du MCP (`write_tokens`, `open_proposal_batch`, `close_proposal_batch`, `declare_figma_states`, `set_project_figma_file`) acceptent un argument optionnel `idempotencyKey`. Relancé avec la même clé et les mêmes arguments, un outil rejoue son premier résultat sans rien réécrire, et l'historique reçoit une entrée `replayed`.
 
 Cette protection ne vaut que pour les IA qui suivent la description de l'outil. Aucun client ne relance un appel à leur place avec les mêmes arguments :
 

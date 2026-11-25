@@ -423,7 +423,13 @@ describe("write_tokens relancé avec la même clé d'idempotence rejoue son prem
       });
     }));
 
-  it.each(["write_tokens", "open_proposal_batch", "close_proposal_batch", "declare_figma_states"])(
+  it.each([
+    "write_tokens",
+    "open_proposal_batch",
+    "close_proposal_batch",
+    "declare_figma_states",
+    "set_project_figma_file",
+  ])(
     "annonce idempotencyKey comme un argument optionnel de %s, et dit quand le réutiliser",
     (toolName) =>
       withIdentityApp(async (app, db) => {
@@ -459,6 +465,7 @@ describe("write_tokens relancé avec la même clé d'idempotence rejoue son prem
         "close_proposal_batch",
         "declare_figma_states",
         "open_proposal_batch",
+        "set_project_figma_file",
         "write_tokens",
       ]);
     }));
