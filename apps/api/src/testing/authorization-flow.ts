@@ -106,6 +106,7 @@ export const startIdentityApp = async ({
       history,
       tokens,
       proposals,
+      recipes,
       idempotent,
       projectAccess,
     } = composeModules({
@@ -143,6 +144,7 @@ export const startIdentityApp = async ({
         history,
         tokens,
         proposals,
+        recipes,
         idempotent,
         projectAccess,
         serverTiming: true,

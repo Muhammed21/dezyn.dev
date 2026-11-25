@@ -13,6 +13,7 @@ import {
   makeSpaces,
   makeSubscriptions,
   makeProposals,
+  makeRecipes,
   makeTokens,
 } from "#testing/make-app.ts";
 import { migrate } from "@repo/db";
@@ -72,6 +73,7 @@ const withIdentityApp = (run: (identityApp: IdentityApp) => Promise<void>) =>
         history: makeHistory(),
         tokens: makeTokens(),
         proposals: makeProposals(),
+        recipes: makeRecipes(),
         idempotent: makeIdempotent(),
         projectAccess: makeProjectAccess(),
       });

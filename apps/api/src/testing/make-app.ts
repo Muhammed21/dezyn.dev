@@ -4,6 +4,7 @@ import type { Auth } from "#modules/identity/application/auth.ts";
 import type { AccountUseCases } from "#modules/identity/application/delete-account.ts";
 import type { ProjectUseCases } from "#modules/project/application/project-use-cases.ts";
 import type { ProposalUseCases } from "#modules/proposal/application/proposal-use-cases.ts";
+import type { RecipeUseCases } from "#modules/recipe/application/recipe-use-cases.ts";
 import type { SpaceUseCases } from "#modules/space/application/spaces.ts";
 import type { ProjectAccess } from "#modules/space/contracts/membership.ts";
 import type { SubscriptionUseCases } from "#modules/subscription/application/subscription-use-cases.ts";
@@ -89,6 +90,11 @@ export const makeProposals = (): ProposalUseCases => ({
   projectOfBatch: () => Promise.resolve(undefined),
 });
 
+export const makeRecipes = (): RecipeUseCases => ({
+  recipes: [],
+  instructionsOf: () => Promise.resolve(err("not_found")),
+});
+
 export const makeAccount = (): AccountUseCases => ({
   accountDeletionOf: () => Promise.resolve({ paidSpaces: [], lastOwnerSpaces: [] }),
   deleteAccount: () => Promise.resolve(ok(undefined)),
@@ -126,6 +132,7 @@ export const makeApp = ({
     history: makeHistory(),
     tokens: makeTokens(),
     proposals: makeProposals(),
+    recipes: makeRecipes(),
     idempotent: makeIdempotent(),
     projectAccess: makeProjectAccess(),
     ...(serverTiming === undefined ? {} : { serverTiming }),

@@ -283,4 +283,38 @@ describe("tout outil qui vise un projet entre dans l'historique (ADR 0021, risqu
         ),
       );
     }));
+
+  it("chaque recette dont un argument est projectId laisse une entrée quand elle est obtenue pour un projet (ADR 0059 §1)", () =>
+    withIdentityApp(async (app, db) => {
+      const { accessToken, projectId } = await seedProject(app, db);
+      const listed = await (
+        await callMcp(app, { token: accessToken, method: "prompts/list" })
+      ).json();
+      const projectRecipes: readonly string[] = listed.result.prompts
+        .filter((prompt: { arguments?: readonly { name: string }[] }) =>
+          (prompt.arguments ?? []).some((argument) => argument.name === "projectId"),
+        )
+        .map((prompt: { name: string }) => prompt.name);
+
+      const obtained = await projectRecipes.reduce<Promise<readonly string[]>>(
+        async (previous, name) => {
+          const done = await previous;
+          await callMcp(app, {
+            token: accessToken,
+            method: "prompts/get",
+            params: { name, arguments: { projectId } },
+          });
+          return [...done, name];
+        },
+        Promise.resolve([]),
+      );
+      const actions = (await entriesOf(db, projectId)).map((entry) => entry.action);
+
+      expect(projectRecipes).toContain("releve_figma");
+      expect(actions.toSorted((left, right) => left.localeCompare(right))).toEqual(
+        ["project.created", ...obtained.map((name) => `mcp.${name}`)].toSorted((left, right) =>
+          left.localeCompare(right),
+        ),
+      );
+    }));
 });

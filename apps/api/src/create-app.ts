@@ -22,6 +22,8 @@ import {
   reviewRoutes,
 } from "#modules/proposal/presentation/review-routes.ts";
 import { registerWriteTokens } from "#modules/proposal/presentation/write-tokens-tool.ts";
+import type { RecipeUseCases } from "#modules/recipe/application/recipe-use-cases.ts";
+import { registerRecipePrompts } from "#modules/recipe/presentation/recipe-prompts.ts";
 import type { SpaceUseCases } from "#modules/space/application/spaces.ts";
 import type { Action, ProjectAccess } from "#modules/space/contracts/membership.ts";
 import { invitationsRoutes } from "#modules/space/presentation/invitations-routes.ts";
@@ -114,6 +116,7 @@ export const createApp = ({
   history,
   tokens,
   proposals,
+  recipes,
   idempotent,
   projectAccess,
   serverTiming: timed = false,
@@ -129,6 +132,7 @@ export const createApp = ({
   readonly history: HistoryUseCases;
   readonly tokens: TokenUseCases;
   readonly proposals: ProposalUseCases;
+  readonly recipes: RecipeUseCases;
   readonly idempotent: Idempotent;
   readonly projectAccess: ProjectAccess;
   readonly serverTiming?: boolean;
@@ -197,6 +201,10 @@ export const createApp = ({
     closeBatch: proposals.closeBatch,
     recordProjectCall: history.recordProjectCall,
   });
+  const registerRecipes = registerRecipePrompts({
+    ...recipes,
+    recordProjectCall: history.recordProjectCall,
+  });
   mcp.post(
     "/",
     mcpEndpoint({
@@ -212,6 +220,7 @@ export const createApp = ({
         registerFigmaTools(server, call);
         registerProposalTools(server, call);
         registerBatchTools(server, call);
+        registerRecipes(server, call);
       },
     }),
   );

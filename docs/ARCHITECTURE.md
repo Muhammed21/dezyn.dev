@@ -15,12 +15,14 @@ Modules et couches : ADR 0020 ; contenu des couches : ADR 0022. Les règles oxli
 
 ## Bounded Contexts & Context Map
 
-Un module par partie du domaine : identity, space, project, token, proposal, history (ADR 0020). Dépendances entre modules, toutes par `contracts/` :
+Un module par partie du domaine : identity, space, project, token, proposal, history, recipe (ADR 0020, ADR 0059). Dépendances entre modules, toutes par `contracts/` :
 
 - proposal → token, space, history
 - token → space, history
 - project → space, history
 - history → space
+
+Le module recipe sert les recettes en prompts MCP depuis son registre (`recipe/domain/recipes.ts`) ; la composition lui passe la lecture du projet (`readProject`), et `createApp` le `recordProjectCall` du module history, qui inscrit chaque recette obtenue pour un projet dans son historique.
 
 ## Domain Glossary (Ubiquitous Language)
 
