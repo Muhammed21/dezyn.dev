@@ -139,6 +139,8 @@ Les recettes vivent dans un registre côté MCP. Ajouter une recette, c'est ajou
 
 Le serveur MCP ne change pas.
 
+Obtenir une recette pour un projet (`prompts/get` avec ce projet en paramètre) est un appel MCP qui vise un projet : il entre dans l'historique du projet comme un appel d'outil (ADR 0021 §1), au nom de l'utilisateur et du client. Le test de l'ADR 0021 qui parcourt les outils enregistrés parcourt aussi les recettes.
+
 Ce volet amende l'ADR 0002 §1 et §2 : le MCP de dezyn sert aussi des recettes. Une recette proposée par dezyn reste un modèle que le client choisit d'utiliser. Elle ne contrôle pas l'IA du client, qui seule exécute un modèle et décide de ses appels.
 
 ### 2. Un passage de recette écrit dans un seul lot, désigné par son identifiant
@@ -147,6 +149,7 @@ Ce volet amende l'ADR 0002 §1 et §2 : le MCP de dezyn sert aussi des recettes.
 - `write_tokens`, `declare_figma_states` et `close_proposal_batch` acceptent cet identifiant. Une déclaration d'état Figma n'est pas une proposition (ADR 0024 §3) : l'identifiant la rattache au passage dans l'historique.
 - Un lot ouvert pour une recette ne ferme pas les autres lots ouverts du même utilisateur, du même client et du même projet, et ils ne le ferment pas. Il se ferme par son identifiant, ou après 30 minutes sans écriture (ADR 0013 §7).
 - Sans identifiant, le comportement actuel reste : un seul lot ouvert par utilisateur, client et projet, fermé par l'ouverture du suivant, et un lot automatique quand aucun n'est ouvert.
+- Un identifiant inconnu, d'un lot fermé, ou d'un lot d'un autre utilisateur, d'un autre client ou d'un autre projet que l'appel est refusé par une erreur. Rien n'est écrit, et aucun lot n'est ouvert à sa place.
 
 Chaque recette suit la règle : un passage, un lot, désigné par son identifiant.
 
@@ -269,7 +272,7 @@ Le spike tourne en parallèle, sur le compte Figma du mainteneur : une routine p
 - [ADR 0004](0004-historique-unique-des-actions-de-l-ia-et-des-humains.md) — l'historique nomme l'utilisateur et le client.
 - [ADR 0012](0012-les-ecritures-de-l-ia-sont-des-propositions-relues-par-un-editeur.md) — les écritures de l'IA sont des propositions.
 - [ADR 0013](0013-lots-de-propositions-declares-par-l-ia-propositions-remplacees-et-ecritures-identiques.md) — le lot, son intention, l'écriture identique ; amendé pour les lots désignés.
-- [ADR 0021](0021-seuls-les-appels-mcp-qui-visent-un-espace-ou-un-projet-entrent-dans-l-historique.md) — le changement du fichier Figma entre dans l'historique.
+- [ADR 0021](0021-seuls-les-appels-mcp-qui-visent-un-espace-ou-un-projet-entrent-dans-l-historique.md) — le changement du fichier Figma et l'obtention d'une recette pour un projet entrent dans l'historique.
 - [ADR 0024](0024-l-etat-figma-d-un-token-est-declare-par-l-ia-du-client.md) — l'état Figma, la valeur divergente, la date affichée.
 - [ADR 0041](0041-un-membre-importe-un-document-dtcg-ou-resolver-en-tokens-valides-sans-rien-perdre-ni-remplacer.md) — l'import DTCG, option écartée ici.
 - [ADR 0060](0060-l-acces-mcp-vit-avec-la-chaine-de-refresh-tokens-separe-de-la-session-web.md) — l'accès MCP qui tient sans humain.
