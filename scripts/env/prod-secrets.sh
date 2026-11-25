@@ -18,14 +18,16 @@ has_secret() {
 }
 
 expire_keys() {
-  local current=$1 url stale
+  local current=$1 project migrator_url app_url stale
   require_neon_login
-  url=$(neon_role_url "$(preview_variable NEON_PROJECT_ID)" "$PRODUCTION_BRANCH" migrator)
-  echo "Clés de signature expirées : $(expire_signing_keys "$url")"
+  project=$(preview_variable NEON_PROJECT_ID)
+  migrator_url=$(neon_role_url "$project" "$PRODUCTION_BRANCH" migrator)
+  app_url=$(neon_role_url "$project" "$PRODUCTION_BRANCH" app)
+  echo "Clés de signature expirées : $(expire_signing_keys "$migrator_url")"
   if [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$HEALTH_URL" || true)" != 200 ]; then
     echo "$HEALTH_URL ne répond pas 200 : vérifier avec pnpm prod:check" >&2
   fi
-  stale=$(stale_secret_versions "$(secret_versions_in_use "$url")" "$current")
+  stale=$(stale_secret_versions "$(secret_versions_in_use "$app_url")" "$current")
   if [ -n "$stale" ]; then
     echo "Des clés valides dépendent encore de : $(tr '\n' ' ' <<< "$stale")"
     echo "Une instance servait encore l'ancienne version du Worker : relancer dans une minute pnpm prod:secrets --expire-keys"

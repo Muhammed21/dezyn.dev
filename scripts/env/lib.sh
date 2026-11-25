@@ -108,7 +108,7 @@ expire_signing_keys() {
 }
 
 secret_versions_in_use() {
-  DATABASE_URL_MIGRATOR=$1 node packages/db/scripts/secret-versions.ts
+  DATABASE_URL=$1 node packages/db/scripts/secret-versions.ts
 }
 
 wrangler_api() {

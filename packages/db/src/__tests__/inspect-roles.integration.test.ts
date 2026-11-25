@@ -6,6 +6,7 @@ import { inspectRoles } from "../inspect-roles.ts";
 import { migrate } from "../migrate.ts";
 import { asAdminOn, onClient, urlOf } from "../testing/clients.ts";
 import { withThrowawayDatabase } from "../testing/throwaway-database.ts";
+import { READ_ONLY_REFUSAL, seedWriteOnRead } from "../testing/write-on-read.ts";
 
 const ROLES = ["migrator", "app", "history_maintainer"];
 
@@ -59,4 +60,31 @@ describe("inspectRoles", () => {
 
       expect(report.foreign).toEqual(["drizzle.hors_de_portee", "public.hors_de_portee"]);
     }));
+
+  it("compte les lignes d'une table que app ne lit pas : migrator lit tout le schéma qu'il possède, app ne suffit pas", () =>
+    withThrowawayDatabase(async ({ migratorUrl }) => {
+      await migrate({ connectionString: migratorUrl });
+      await seedUser(migratorUrl);
+      await asAdminOn(migratorUrl, 'REVOKE SELECT ON "identity_user" FROM app');
+
+      const report = await inspectRoles({ connectionString: migratorUrl, roles: ROLES });
+
+      expect(report.rows["public.identity_user"]).toBe(1);
+    }));
+
+  it("lit dans une transaction où PostgreSQL refuse toute écriture, même permise à migrator", async () => {
+    const writeDuringRead = withThrowawayDatabase(async ({ migratorUrl }) => {
+      await migrate({ connectionString: migratorUrl });
+      await seedUser(migratorUrl);
+      await seedWriteOnRead({
+        databaseUrl: migratorUrl,
+        readTable: "identity_user",
+        reader: "migrator",
+        write: `INSERT INTO space (id, name, plan, created_at) VALUES (gen_random_uuid(), 'Atelier', 'free', now())`,
+      });
+      return inspectRoles({ connectionString: migratorUrl, roles: ROLES });
+    });
+
+    await expect(writeDuringRead).rejects.toThrow(READ_ONLY_REFUSAL);
+  });
 });

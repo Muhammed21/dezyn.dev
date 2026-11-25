@@ -3,7 +3,8 @@ import { randomUUID } from "node:crypto";
 import type { Client } from "pg";
 import { describe, expect, it } from "vitest";
 
-import { endedTeamSpaces, inControlTransaction } from "../ended-team-spaces.ts";
+import { inControlTransaction } from "../control-transaction.ts";
+import { endedTeamSpaces } from "../ended-team-spaces.ts";
 import { migrate } from "../migrate.ts";
 import { onClient } from "../testing/clients.ts";
 import { withThrowawayDatabase } from "../testing/throwaway-database.ts";
