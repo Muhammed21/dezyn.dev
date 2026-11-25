@@ -10,6 +10,10 @@ Plateforme centrale de design pensée pour l'IA : la source de vérité du desig
 La plateforme elle-même, source de vérité du design de ses projets. « La plateforme » est accepté comme synonyme.
 _À éviter_ : Muhammed (désigne la personne), outil Figma → code, pont
 
+**Recette** :
+Une consigne servie par dezyn en prompt MCP, avec un nom, une description, ses paramètres et ses règles, que l'IA du client choisit de suivre. Un agent est une IA du client qui suit une recette ; dezyn ne connaît que les recettes. Chaque passage d'une recette écrit dans un seul lot de propositions, désigné par son identifiant.
+_À éviter_ : agent (pour la recette), workflow, skill, automatisation
+
 ### Organisation
 
 **Espace** :
@@ -103,6 +107,14 @@ _À éviter_ : manquant, supprimé
 **Doublon dans Figma** :
 État Figma d'un token auquel correspondent plusieurs variables Figma.
 _À éviter_ : doublon (seul), qui désigne un doublon dans dezyn
+
+**Fichier Figma** :
+Le fichier Figma qu'un projet compare à ses tokens : un lien vers ce fichier, avec sa clé. Un projet en a au plus un, que tout membre renseigne, modifie ou retire.
+_À éviter_ : maquette, source Figma, lien Figma (seul)
+
+**Relevé Figma** :
+La première recette, qui fait comparer par l'IA du client le fichier Figma d'un projet à ses tokens. L'IA déclare l'état Figma de chaque token comparé et, seulement s'il y a du nouveau, ouvre un seul lot de propositions. dezyn ne stocke pas de relevé ; la date du dernier relevé est celle de la plus récente déclaration d'état Figma du projet.
+_À éviter_ : synchro, import Figma, scan
 
 ### Relecture
 
