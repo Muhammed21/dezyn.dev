@@ -1,6 +1,6 @@
 # 0013 — Lots de propositions déclarés par l'IA, propositions remplacées et écritures identiques
 
-- Statut : Accepté — §6 et §8 (écriture directe d'un membre) complétés par [0026](0026-suppressions-ecritures-des-membres-variantes-et-decisions-dans-la-relecture-des-propositions.md)
+- Statut : Accepté — §6 et §8 (écriture directe d'un membre) complétés par [0026](0026-suppressions-ecritures-des-membres-variantes-et-decisions-dans-la-relecture-des-propositions.md) ; §1 et §2 (plusieurs lots ouverts, désignés par leur identifiant) amendés par [0059](0059-les-agents-sont-des-recettes-servies-en-prompt-mcp-le-releve-figma-est-la-premiere.md)
 - Date : 2026-10-15
 - Décideurs : Muhammed
 - Amende : ADR 0012 (§4 : un lot de propositions est déclaré par l'IA avec une intention, et non délimité par une session ; §1 : une écriture identique à la valeur validée ne crée pas de proposition, et une proposition en attente peut passer au statut Remplacée)

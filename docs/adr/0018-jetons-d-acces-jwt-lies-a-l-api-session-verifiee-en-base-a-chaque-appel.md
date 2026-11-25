@@ -1,6 +1,6 @@
 # 0018 — Jetons d'accès JWT liés à l'API, session vérifiée en base à chaque appel
 
-- Statut : Accepté
+- Statut : Accepté — §2 et §3 (l'accès MCP vit avec la chaîne de refresh tokens, séparé de la session web) amendés par [0060](0060-l-acces-mcp-vit-avec-la-chaine-de-refresh-tokens-separe-de-la-session-web.md)
 - Date : 2026-10-15
 - Décideurs : Muhammed
 

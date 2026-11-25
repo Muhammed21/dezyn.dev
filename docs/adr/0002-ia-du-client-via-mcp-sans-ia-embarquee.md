@@ -1,6 +1,6 @@
 # 0002 — L'IA du client lit et écrit via le MCP de la plateforme, sans IA embarquée
 
-- Statut : Accepté
+- Statut : Accepté — §1 et §2 (une recette servie en prompt MCP ne contrôle pas l'IA du client) amendés par [0059](0059-les-agents-sont-des-recettes-servies-en-prompt-mcp-le-releve-figma-est-la-premiere.md)
 - Date : 2026-10-14
 - Décideurs : Muhammed
 
