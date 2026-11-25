@@ -13,6 +13,7 @@
     "check-types": "turbo run check-types",
     "test": "turbo run test",
     "test:integration": "turbo run test:integration",
+    "eval": "pnpm --filter @repo/api eval",
     "bench": "turbo run bench",
     "secrets": "secretlint \"**/*\"",
     "infra:up": "./docker/up.sh",

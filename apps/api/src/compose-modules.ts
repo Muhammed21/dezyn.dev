@@ -22,6 +22,7 @@ import {
   proposalReplacerOn,
   proposalWriterOn,
 } from "#modules/proposal/proposal-module.ts";
+import { recipeModule } from "#modules/recipe/recipe-module.ts";
 import type { MembershipKey } from "#modules/space/contracts/membership.ts";
 import { lastOwnerSpacesOn, orphanSpacesOn, spaceModule } from "#modules/space/space-module.ts";
 import {
@@ -138,6 +139,7 @@ export const composeModules = ({
     signals: projectSignals,
     clock,
   });
+  const recipes = recipeModule({ projectOf: projects.readProject, clock });
   const subscriptions = subscriptionModule({
     db,
     memberships: spaces.memberships,
@@ -201,6 +203,7 @@ export const composeModules = ({
     history,
     tokens,
     proposals,
+    recipes,
     idempotent: idempotent({ store: postgresIdempotencyStore(db) }),
     projectAccess: access,
   };

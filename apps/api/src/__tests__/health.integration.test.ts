@@ -12,6 +12,7 @@ import {
   makeSpaces,
   makeSubscriptions,
   makeProposals,
+  makeRecipes,
   makeTokens,
 } from "#testing/make-app.ts";
 
@@ -37,6 +38,7 @@ describe("GET /health", () => {
       history: makeHistory(),
       tokens: makeTokens(),
       proposals: makeProposals(),
+      recipes: makeRecipes(),
       idempotent: makeIdempotent(),
       projectAccess: makeProjectAccess(),
     });
@@ -60,6 +62,7 @@ describe("GET /health", () => {
       history: makeHistory(),
       tokens: makeTokens(),
       proposals: makeProposals(),
+      recipes: makeRecipes(),
       idempotent: makeIdempotent(),
       projectAccess: makeProjectAccess(),
     });
@@ -86,6 +89,7 @@ describe("GET /health", () => {
       history: makeHistory(),
       tokens: makeTokens(),
       proposals: makeProposals(),
+      recipes: makeRecipes(),
       idempotent: makeIdempotent(),
       projectAccess: makeProjectAccess(),
     });

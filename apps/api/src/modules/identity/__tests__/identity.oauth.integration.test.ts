@@ -11,6 +11,7 @@ import {
   makeSpaces,
   makeSubscriptions,
   makeProposals,
+  makeRecipes,
   makeTokens,
 } from "#testing/make-app.ts";
 import { migrate } from "@repo/db";
@@ -48,6 +49,7 @@ const withIdentityApp = (run: (app: ReturnType<typeof createApp>) => Promise<voi
           history: makeHistory(),
           tokens: makeTokens(),
           proposals: makeProposals(),
+          recipes: makeRecipes(),
           idempotent: makeIdempotent(),
           projectAccess: makeProjectAccess(),
         }),

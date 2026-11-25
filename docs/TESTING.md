@@ -6,6 +6,7 @@
 - Intégration (`pnpm test:integration`) : l'app entière en mémoire (`app.request()`), sur une vraie PostgreSQL, un fichier par comportement d'ADR. 959 tests.
 - Visuels (`pnpm --filter @repo/web test:visual`) : `*.visual.test.tsx` de l'app web, comparés à une référence de `__tests__/__references__/` ; le Chromium tourne dans l'image Docker de Playwright, Docker est donc requis (ADR 0047). `--update` régénère les références.
 - Mutation (`pnpm --filter @repo/api mutation`, Stryker en place, en local seulement) : mesure la force des tests ; seuils 90 / 100 %, sans blocage. `--mutate <fichiers>` restreint le run aux fichiers touchés.
+- Évaluation des recettes (`pnpm eval`, ADR 0059 §3) : une vraie IA, pilotée par le SDK Agent de Claude (`@repo/recipe-agent`), suit chaque recette contre le MCP de dezyn servi en local avec un vrai jeton OAuth et de faux serveurs MCP (le faux Figma de `apps/api/src/evaluation/fake-figma.ts`). Chaque scénario de `apps/api/src/evaluation/recipe-scenarios.ts` tourne 3 fois sur une base jetable, et les 3 passages doivent réussir ; les vérifications portent sur la base, jamais sur le texte de l'IA. Elle demande `ANTHROPIC_API_KEY` dans l'environnement et s'arrête sans rien lancer sans elle ; `--recipe <nom>` et `--scenario <nom>` la restreignent, `DEZYN_EVAL_MODEL` change le modèle (`claude-opus-5-5` par défaut), et `--verbose` affiche chaque session d'agent (serveurs MCP connectés, outils, appels, résultat). Un passage dont la session échoue (erreur de l'API ou du SDK, aucun tour, coût nul, serveur MCP non connecté, aucun appel d'outil MCP quand le scénario en demande) échoue avec l'erreur du SDK, avant toute vérification.
 - Bench (`pnpm bench`) : `apps/api/bench/*.bench.ts`, sur une vraie PostgreSQL ; voir [PERFORMANCE.md](PERFORMANCE.md).
 - Vert = les deux suites en CI (`ci.yml`).
 
@@ -51,5 +52,6 @@ Exemple : `MembershipReader` (`apps/api/src/modules/space/application/membership
 ## CI Gates
 
 - `ci.yml` : `pnpm test`, `pnpm test:integration` et le projet visuel de l'app web (job `Test (visual)`) bloquent le merge.
+- `recipe-eval.yml` lance `pnpm eval` par déclenchement manuel seulement, avec le secret `ANTHROPIC_API_KEY` : chaque passage coûte des minutes de CI et des appels à l'API Anthropic.
 - Stryker tourne en local seulement : sur un diff de 10 fichiers, le run dépasse 60 min en CI, même sans les mutants statiques.
 - `perf-pr.yml` et `perf-main.yml` comparent les benchs à la référence de `main`, à titre informatif, sans jamais bloquer ; un bench sans échantillon fait échouer le job.

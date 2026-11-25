@@ -1,0 +1,72 @@
+name: recipe-eval
+
+# Fait suivre chaque recette à une vraie IA contre de faux serveurs MCP (ADR 0059 §3).
+# Déclenchement manuel seulement : chaque passage coûte des minutes de CI et des appels à l'API Anthropic.
+
+on:
+  workflow_dispatch:
+    inputs:
+      recipe:
+        description: "Recette à évaluer (vide : toutes)"
+        required: false
+        default: ""
+      scenario:
+        description: "Scénario à évaluer (vide : tous)"
+        required: false
+        default: ""
+
+concurrency:
+  group: recipe-eval
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  recipe-eval:
+    name: Évaluation des recettes
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    services:
+      postgres:
+        image: postgres:17.11-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci_postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+    env:
+      # secretlint-disable -- identifiants factices, propres au service de la CI
+      DATABASE_URL_MIGRATOR: postgresql://migrator:ci_migrator@127.0.0.1:5432/dezyn
+      DATABASE_URL: postgresql://app:ci_app@127.0.0.1:5432/dezyn
+      DATABASE_URL_HISTORY_MAINTAINER: postgresql://history_maintainer:ci_history_maintainer@127.0.0.1:5432/dezyn
+      DATABASE_URL_ADMIN: postgresql://postgres:ci_postgres@127.0.0.1:5432/postgres
+      # secretlint-enable
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/install
+      - name: Provision PostgreSQL roles
+        run: sh docker/postgres/init-roles.sh
+        env:
+          PGHOST: 127.0.0.1
+          PGPASSWORD: ci_postgres
+          PG_DATABASE: dezyn
+          PG_PASSWORD_MIGRATOR: ci_migrator
+          PG_PASSWORD_APP: ci_app
+          PG_PASSWORD_HISTORY_MAINTAINER: ci_history_maintainer
+      - name: Évaluer les recettes
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          RECIPE: ${{ inputs.recipe }}
+          SCENARIO: ${{ inputs.scenario }}
+        run: |
+          set --
+          if [ -n "$RECIPE" ]; then set -- "$@" --recipe "$RECIPE"; fi
+          if [ -n "$SCENARIO" ]; then set -- "$@" --scenario "$SCENARIO"; fi
+          pnpm --filter @repo/api eval "$@"
