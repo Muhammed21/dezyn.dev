@@ -225,6 +225,13 @@
       "when": 1795532557532,
       "tag": "0031_space_refund_revocation",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1795618682161,
+      "tag": "0032_proposal_batch_recipe",
+      "breakpoints": true
     }
   ]
 }

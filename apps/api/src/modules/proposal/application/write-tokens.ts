@@ -17,9 +17,14 @@ import {
 } from "#modules/token/contracts/token-issues.ts";
 import { err, ok, type Result } from "@repo/result";
 
-import { batchExpirySignal } from "../domain/proposal-batch.ts";
-import { comparedTokens, type Proposal, type ProposalBatch } from "../domain/proposal.ts";
-import { liveBatchOf } from "./proposal-batches.ts";
+import { batchExpirySignal, type DesignationRefusal } from "../domain/proposal-batch.ts";
+import {
+  comparedTokens,
+  type Proposal,
+  type ProposalBatch,
+  type RecipeBatch,
+} from "../domain/proposal.ts";
+import { designatedBatchOf, liveBatchOf } from "./proposal-batches.ts";
 
 export type Writer = {
   readonly projectId: string;
@@ -42,7 +47,11 @@ export interface ProposalStore {
   pendingTokensOf(projectId: string): Promise<readonly TokenDefinition[]>;
   replace(proposalIds: readonly string[]): Promise<void>;
   findOpenBatch(writer: Writer): Promise<ProposalBatch | undefined>;
+  findBatch(batchId: string): Promise<RecipeBatch | undefined>;
   openBatchOf(candidate: ProposalBatch & Writer): Promise<ProposalBatch>;
+  openDesignatedBatch(
+    candidate: ProposalBatch & Writer & { readonly recipe: string },
+  ): Promise<RecipeBatch>;
   closeBatch(batchId: string): Promise<void>;
   touchBatch(batchId: string, lastWrittenAt: Date): Promise<void>;
   propose(projectId: string, proposals: readonly Proposal[]): Promise<void>;
@@ -80,6 +89,7 @@ export type ProposedTokens = Writer & {
   readonly tokens: readonly TokenDefinition[];
   readonly validated: readonly ValidatedDefinition[];
   readonly createdAt: Date;
+  readonly batchId?: string;
 };
 
 export const proposeTokens = async (
@@ -89,9 +99,17 @@ export const proposeTokens = async (
     validated,
     createdAt,
     newId,
+    batchId,
     ...writer
   }: ProposedTokens & { readonly newId: () => string },
-): Promise<Written> => {
+): Promise<Result<Written, DesignationRefusal>> => {
+  const designated =
+    batchId === undefined
+      ? undefined
+      : await designatedBatchOf(store, { batchId, writer, now: createdAt });
+  if (designated !== undefined && !designated.ok) {
+    return designated;
+  }
   const pending = await store.pendingOf(
     writer.projectId,
     tokens.map(({ name }) => name),
@@ -116,9 +134,9 @@ export const proposeTokens = async (
   await store.replace(replaced.map(({ id }) => id));
   const unchanged = written.filter((entry) => entry.unchanged).map(({ token }) => token.name);
   const changed = written.filter((entry) => !entry.unchanged);
-  const live = await liveBatchOf(store, { writer, now: createdAt });
+  const live = designated?.value ?? (await liveBatchOf(store, { writer, now: createdAt }));
   if (changed.length === 0) {
-    return { batch: live ?? null, proposals: [], unchanged, replaced };
+    return ok({ batch: live ?? null, proposals: [], unchanged, replaced });
   }
   const batch =
     live ??
@@ -141,7 +159,7 @@ export const proposeTokens = async (
     createdAt,
   }));
   await store.propose(writer.projectId, proposals);
-  return { batch, proposals, unchanged, replaced };
+  return ok({ batch, proposals, unchanged, replaced });
 };
 
 const nameConflicts = (
@@ -170,11 +188,13 @@ export const writeTokens =
   async ({
     tokens,
     spaceId,
+    batchId,
     ...writer
   }: Writer & {
     readonly spaceId: string;
     readonly tokens: readonly TokenDefinition[];
-  }): Promise<Result<WrittenWithDuplicates, UncheckedTokens>> => {
+    readonly batchId?: string;
+  }): Promise<Result<WrittenWithDuplicates, UncheckedTokens | DesignationRefusal>> => {
     const outcome = await unitOfWork.run(
       async ({ store, storageAlert, project, checkTokens, validatedTokensOf }) => {
         await project.write(writer.projectId);
@@ -199,15 +219,19 @@ export const writeTokens =
           validated,
           createdAt,
           newId,
+          batchId,
         });
+        if (!written.ok) {
+          return written;
+        }
         const among = comparedTokens<ComparedToken>({
           validated,
           pending: await store.pendingTokensOf(writer.projectId),
         });
         return ok({
           written: {
-            ...written,
-            proposals: written.proposals.map((proposal) => ({
+            ...written.value,
+            proposals: written.value.proposals.map((proposal) => ({
               ...proposal,
               duplicates: duplicatesOf({ token: proposal.token, among }),
             })),

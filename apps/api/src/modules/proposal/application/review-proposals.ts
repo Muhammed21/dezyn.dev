@@ -21,6 +21,7 @@ import {
   type Decision,
   type Proposal,
   type ProposalBatch,
+  type RecipeBatch,
   type ProposalStatus,
   review,
 } from "../domain/proposal.ts";
@@ -32,9 +33,9 @@ export type BatchSummary = Pick<ProposalBatch, "id" | "intent" | "state"> & {
 
 export type StoredBatchSummary = BatchSummary & Pick<ProposalBatch, "lastWrittenAt">;
 
-export type StoredBatch = ProposalBatch & { readonly proposals: readonly Proposal[] };
+export type StoredBatch = RecipeBatch & { readonly proposals: readonly Proposal[] };
 
-export type Batch = ProposalBatch & {
+export type Batch = RecipeBatch & {
   readonly proposals: readonly (Proposal & {
     readonly validated: ValidatedDefinition | null;
     readonly duplicates: readonly string[];

@@ -18,11 +18,17 @@ import { err, type Result } from "@repo/result";
 
 import type { ProposalUseCases } from "../application/proposal-use-cases.ts";
 import type { UncheckedTokens, WrittenWithDuplicates } from "../application/write-tokens.ts";
+import {
+  BatchIdArgument,
+  DESIGNATION_REFUSAL_TEXT,
+  type DesignationRefusal,
+  isDesignationRefusal,
+} from "../contracts/batch-designation.ts";
 import { WrittenTokensOutput } from "../contracts/proposal.ts";
 
 type InvalidTokens = { readonly code: "invalid_tokens"; readonly issues: readonly string[] };
 
-type WriteFailure = RecordFailure | InvalidTokens | UncheckedTokens;
+type WriteFailure = RecordFailure | DesignationRefusal | InvalidTokens | UncheckedTokens;
 
 const MAX_TOKENS_PER_CALL = 500;
 
@@ -46,8 +52,12 @@ const issuesOf = (failure: InvalidTokens | UncheckedTokens): readonly string[] =
         issuesOfCheck(check).map(({ path, message }) => `tokens[${index}].${path} : ${message}`),
       );
 
-const errorTextOf = (failure: WriteFailure): string =>
-  typeof failure === "string" ? RECORD_FAILURE_TEXT[failure] : issuesOf(failure).join("\n");
+const errorTextOf = (failure: WriteFailure): string => {
+  if (isDesignationRefusal(failure)) {
+    return DESIGNATION_REFUSAL_TEXT[failure];
+  }
+  return typeof failure === "string" ? RECORD_FAILURE_TEXT[failure] : issuesOf(failure).join("\n");
+};
 
 const errorOf = (failure: WriteFailure): CallToolResult => ({
   content: [{ type: "text", text: errorTextOf(failure) }],
@@ -77,9 +87,11 @@ export const registerWriteTokens =
     const write = async ({
       projectId,
       tokens,
+      batchId,
     }: {
       readonly projectId: string;
       readonly tokens?: readonly unknown[];
+      readonly batchId?: string;
     }): Promise<Execution<CallToolResult>> => {
       const written = await recordProjectCall({
         tool: "write_tokens",
@@ -87,10 +99,12 @@ export const registerWriteTokens =
         userId: identity.userId,
         clientId: identity.clientId,
         correlationId,
-        input: { tokens },
+        input: { tokens, batchId },
         run: async (
           project,
-        ): Promise<Result<WrittenWithDuplicates, InvalidTokens | UncheckedTokens>> => {
+        ): Promise<
+          Result<WrittenWithDuplicates, InvalidTokens | UncheckedTokens | DesignationRefusal>
+        > => {
           const parsed = TokensInput.safeParse(tokens);
           if (!parsed.success) {
             return err({
@@ -106,6 +120,7 @@ export const registerWriteTokens =
             userId: identity.userId,
             clientId: identity.clientId,
             tokens: parsed.data,
+            batchId,
           });
         },
       });
@@ -130,6 +145,7 @@ export const registerWriteTokens =
         inputSchema: {
           projectId: Uuid,
           tokens: z.array(z.unknown()).optional(),
+          batchId: BatchIdArgument,
           idempotencyKey: IdempotencyKeyArgument,
         },
         outputSchema: WrittenTokensOutput,
@@ -138,7 +154,7 @@ export const registerWriteTokens =
         projectCall({
           tool: "write_tokens",
           args,
-          input: { tokens: args.tokens },
+          input: { tokens: args.tokens, batchId: args.batchId },
           run: () => write(args),
         }),
     );

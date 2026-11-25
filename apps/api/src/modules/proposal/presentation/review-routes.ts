@@ -133,11 +133,12 @@ export const reviewRoutes = ({ batchOf, reviewProposal, validateBatch }: Proposa
       if (!batch.ok) {
         return c.notFound();
       }
-      const { id, projectId, intent, state, proposals } = batch.value;
+      const { id, projectId, intent, recipe, state, proposals } = batch.value;
       return c.json({
         id,
         projectId,
         intent,
+        ...(recipe === null ? {} : { recipe }),
         state,
         proposals: proposals.map(proposalOutputOf),
       });

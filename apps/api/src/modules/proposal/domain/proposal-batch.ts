@@ -1,6 +1,9 @@
 import type { BatchState, ProposalBatch } from "./proposal.ts";
 
-export const closedBatch = (batch: ProposalBatch): ProposalBatch => ({ ...batch, state: "closed" });
+export const closedBatch = <Batch extends ProposalBatch>(batch: Batch): Batch => ({
+  ...batch,
+  state: "closed",
+});
 
 export const declareBatch = <Declared extends ProposalBatch>({
   current,
@@ -39,3 +42,25 @@ export const batchStateAt = ({
   batch.state === "open" && now.getTime() - batch.lastWrittenAt.getTime() < IDLE_LIMIT_MS
     ? "open"
     : "closed";
+
+export type DesignationRefusal = "unknown_batch" | "closed_batch";
+
+export const designatedBatch = <Designated extends ProposalBatch>({
+  batch,
+  caller,
+  now,
+}: {
+  readonly batch: Designated | undefined;
+  readonly caller: Pick<ProposalBatch, "projectId" | "clientId"> & { readonly userId: string };
+  readonly now: Date;
+}): { readonly batch: Designated } | { readonly refusal: DesignationRefusal } => {
+  if (
+    batch === undefined ||
+    batch.projectId !== caller.projectId ||
+    batch.userId !== caller.userId ||
+    batch.clientId !== caller.clientId
+  ) {
+    return { refusal: "unknown_batch" };
+  }
+  return batchStateAt({ batch, now }) === "open" ? { batch } : { refusal: "closed_batch" };
+};

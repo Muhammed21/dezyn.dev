@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import type { PostgresDatabase, PostgresTransaction } from "#db";
@@ -23,7 +23,7 @@ import type {
   ValidatedTokensOf,
   Writer,
 } from "../application/write-tokens.ts";
-import type { Proposal, ProposalBatch } from "../domain/proposal.ts";
+import type { Proposal, ProposalBatch, RecipeBatch } from "../domain/proposal.ts";
 
 const { proposal, proposalBatch } = schema;
 
@@ -40,6 +40,7 @@ const findOpenBatch = async (
         eq(proposalBatch.userId, userId),
         eq(proposalBatch.clientId, clientId),
         eq(proposalBatch.state, "open"),
+        isNull(proposalBatch.recipe),
       ),
     );
   return batch === undefined ? undefined : { ...batch, state: "open" };
@@ -143,6 +144,14 @@ export const postgresProposalStore = (
     await resize(meter, { before, after });
   },
   findOpenBatch: (writer) => findOpenBatch(tx, writer),
+  findBatch: async (batchId) => {
+    const [batch] = await tx
+      .select()
+      .from(proposalBatch)
+      .where(eq(proposalBatch.id, batchId))
+      .for("update");
+    return batch === undefined ? undefined : storedBatchOf(batch);
+  },
   openBatchOf: async (candidate) => {
     const opened = await tx
       .insert(proposalBatch)
@@ -151,6 +160,11 @@ export const postgresProposalStore = (
       .returning();
     await meter.add(candidate.projectId, opened);
     return (await findOpenBatch(tx, candidate)) ?? candidate;
+  },
+  openDesignatedBatch: async (candidate) => {
+    const opened = await tx.insert(proposalBatch).values(candidate).returning();
+    await meter.add(candidate.projectId, opened);
+    return candidate;
   },
   closeBatch: async (batchId) => {
     const before = await tx.select().from(proposalBatch).where(eq(proposalBatch.id, batchId));
@@ -236,7 +250,7 @@ const proposalOf = (row: unknown): Proposal => {
   return { ...parsed, name: tokenName, token: payload };
 };
 
-const storedBatchOf = ({ state, ...batch }: typeof proposalBatch.$inferSelect): ProposalBatch => ({
+const storedBatchOf = ({ state, ...batch }: typeof proposalBatch.$inferSelect): RecipeBatch => ({
   ...batch,
   state: BatchState.parse(state),
 });
