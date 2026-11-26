@@ -19,6 +19,13 @@ Plusieurs suites d'intégration (worktrees, agents) tournent en même temps sur 
 - `DROP DATABASE` attend un checkpoint de tout le cluster, donc les écritures des autres suites. Un test qui attend un délai fixe du serveur crée et supprime sa base hors du test, comme les tests 408 de `start-api.integration.test.ts`. Le hook qui la supprime a le même délai qu'un test, 30 s (`hookTimeout` de `vitest.integration.config.ts`) : avec les 10 s par défaut de Vitest, le checkpoint ferait échouer le fichier après ses tests.
 - Les autres tests suppriment leur base dans leur propre budget de 30 s, et c'est voulu : mesurée sur un passage complet avec une autre suite en parallèle, une suppression coûte 13 ms en médiane, 53 ms au p95 et 1,8 s au pire, 5 % du passage. Sur une journée de logs (42 861 checkpoints de `DROP DATABASE`), le pire a duré 11,7 s, dont 8,5 s de fsync pour 10 Mo : un disque bloqué, qui bloque aussi les écritures du test. Un test qui dépasse ses 30 s cherche donc sa cause ailleurs que dans la suppression de sa base.
 
+## Base modèle et parallélisme
+
+- `createMigratedDatabase` (`@repo/db/testing`) rend une base jetable déjà migrée : elle la clone par `CREATE DATABASE … TEMPLATE` depuis une base modèle `dezyn_template_<empreinte>`, migrée une seule fois. L'empreinte couvre le journal et chaque fichier `.sql` de `packages/db/migrations` : une migration ajoutée ou modifiée crée un nouveau modèle, l'ancien reste et se supprime à la main. Le modèle est construit sous un nom provisoire puis renommé, fermé aux connexions : deux suites qui le construisent en même temps ne se gênent pas, et le clone ne bute jamais sur une connexion ouverte au modèle.
+- `startIdentityApp` part de ce clone : un clone coûte 45 ms, une migration complète 170 ms. `createThrowawayDatabase` rend une base vide, pour un test qui migre lui-même (`migrate`, ou `migrateUntil` pour s'arrêter à une migration précise).
+- Les fichiers d'intégration de l'API tournent sur 3 workers (`maxWorkers` de `apps/api/vitest.integration.config.ts`) : les 4 vCPU du runner de la CI, moins PostgreSQL. Chaque test a sa base, le parallélisme ne partage rien de plus. Les suites de `@repo/db` et de l'app web restent en série : les tests de `@repo/db` créent et remplacent des rôles du cluster.
+- Sur la CI, le cluster PostgreSQL tourne sans `fsync`, `synchronous_commit` ni `full_page_writes` : il meurt avec le job. En local, la base de `compose.yaml` les garde.
+
 ## Tests de contrat des ports
 
 Un port de `application` qui a un faux a une suite de contrat, lancée contre le faux et contre son adaptateur PostgreSQL avec les mêmes cas. Un test unitaire qui passe avec le faux passe donc pour une raison qui existe en production.
