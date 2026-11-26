@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { ObservedBatch, Observation } from "../observation.ts";
+import type { ObservedBatch, ObservedProposal, Observation } from "../observation.ts";
 import { RELEVE_FIGMA_SCENARIOS } from "../releve-figma-scenarios.ts";
 import type { ScenarioRun } from "../scenario.ts";
 
@@ -24,15 +24,23 @@ const makeObservation = (overrides: Partial<Observation> = {}): Observation => (
   ...overrides,
 });
 
+const makeProposal = (overrides: Partial<ObservedProposal> = {}): ObservedProposal => ({
+  name: "couleur.alerte",
+  kind: "create",
+  status: "proposed",
+  token: { $type: "color", $value: { colorSpace: "srgb", components: [0.8, 0.1, 0.1] } },
+  ...overrides,
+});
+
 const makeBatch = (overrides: Partial<ObservedBatch> = {}): ObservedBatch => ({
   id: "lot-du-releve",
   intent: "Relevé Figma du 25 nov. : 2 nouveaux tokens, 1 valeur changée",
   recipe: "releve_figma",
   state: "closed",
   proposals: [
-    { name: "couleur.alerte", kind: "create", status: "proposed" },
-    { name: "couleur.fond.primaire", kind: "update", status: "proposed" },
-    { name: "couleur.succes", kind: "create", status: "proposed" },
+    makeProposal({ name: "couleur.alerte", kind: "create" }),
+    makeProposal({ name: "couleur.fond.primaire", kind: "update" }),
+    makeProposal({ name: "couleur.succes", kind: "create" }),
   ],
   ...overrides,
 });
@@ -100,15 +108,15 @@ describe("les scénarios d'évaluation du relevé Figma (#398)", () => {
 
     it("échoue quand une proposition du relevé tombe dans un autre lot", () => {
       const designated = makeBatch({
-        proposals: [{ name: "couleur.alerte", kind: "create", status: "proposed" }],
+        proposals: [makeProposal({ name: "couleur.alerte", kind: "create" })],
       });
       const implicit = makeBatch({
         id: "lot-implicite",
         intent: null,
         recipe: null,
         proposals: [
-          { name: "couleur.fond.primaire", kind: "update", status: "proposed" },
-          { name: "couleur.succes", kind: "create", status: "proposed" },
+          makeProposal({ name: "couleur.fond.primaire", kind: "update" }),
+          makeProposal({ name: "couleur.succes", kind: "create" }),
         ],
       });
 
@@ -164,8 +172,8 @@ describe("les scénarios d'évaluation du relevé Figma (#398)", () => {
       id: "lot-precedent",
       intent: "Relevé Figma du 18 nov. : 1 nouveau token, 1 valeur changée",
       proposals: [
-        { name: "couleur.alerte", kind: "create", status: "proposed" },
-        { name: "couleur.fond.primaire", kind: "update", status: "proposed" },
+        makeProposal({ name: "couleur.alerte", kind: "create" }),
+        makeProposal({ name: "couleur.fond.primaire", kind: "update" }),
       ],
     });
     const tokens = [
@@ -179,7 +187,7 @@ describe("les scénarios d'évaluation du relevé Figma (#398)", () => {
     it("échoue quand le relevé recopie une proposition en attente", () => {
       const copied = makeBatch({
         intent: "Relevé Figma du 25 nov. : 1 nouveau token",
-        proposals: [{ name: "couleur.alerte", kind: "create", status: "proposed" }],
+        proposals: [makeProposal({ name: "couleur.alerte", kind: "create" })],
       });
 
       expect(

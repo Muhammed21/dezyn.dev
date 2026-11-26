@@ -1,4 +1,4 @@
-import { releveDateOf } from "#modules/recipe/domain/releve-figma.ts";
+import { recipeDateOf } from "#modules/recipe/domain/recipe-date.ts";
 
 import type { FakeFigmaFile, FakeFigmaVariable, FigmaColor } from "./fake-figma.ts";
 import {
@@ -165,7 +165,7 @@ export const RELEVE_FIGMA_SCENARIOS: readonly EvalScenario[] = [
       ]);
     },
     batch: ({ startedAt }) => ({
-      intent: `Relevé Figma du ${releveDateOf(startedAt)} : 1 nouveau token`,
+      intent: `Relevé Figma du ${recipeDateOf(startedAt)} : 1 nouveau token`,
       proposals: ["create couleur.alerte"],
     }),
     states: { "couleur.fond.primaire": "synced", "couleur.texte": "synced" },
@@ -210,7 +210,7 @@ export const RELEVE_FIGMA_SCENARIOS: readonly EvalScenario[] = [
       ]);
     },
     batch: ({ startedAt }) => ({
-      intent: `Relevé Figma du ${releveDateOf(startedAt)} : 2 nouveaux tokens, 1 valeur changée`,
+      intent: `Relevé Figma du ${recipeDateOf(startedAt)} : 2 nouveaux tokens, 1 valeur changée`,
       proposals: ["create couleur.alerte", "create couleur.succes", "update couleur.fond.primaire"],
     }),
     states: { "couleur.fond.primaire": "diverged", "couleur.texte": "synced" },

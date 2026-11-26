@@ -22,7 +22,9 @@ describe("l'évaluation branche la vraie IA sur le MCP de dezyn en local", () =>
         });
 
         expect(await response.json()).toMatchObject({
-          result: { prompts: [expect.objectContaining({ name: "releve_figma" })] },
+          result: {
+            prompts: expect.arrayContaining([expect.objectContaining({ name: "releve_figma" })]),
+          },
         });
       } finally {
         await exposed.close();
