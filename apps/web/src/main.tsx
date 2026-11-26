@@ -14,6 +14,7 @@ import { projectFigmaFile } from "./modules/project/presentation/project-figma-f
 import { projectFigmaSurvey } from "./modules/project/presentation/project-figma-survey.tsx";
 import { spaceProjectsRoute } from "./modules/project/presentation/space-projects-route.tsx";
 import { createProjectEvents, createProjects } from "./modules/project/project-module.ts";
+import { ValuePreview } from "./modules/proposal/presentation/before-after.tsx";
 import { projectProposals } from "./modules/proposal/presentation/project-proposals.tsx";
 import { proposalBatchRoute } from "./modules/proposal/presentation/proposal-batch-route.tsx";
 import { createProposals } from "./modules/proposal/proposal-module.ts";
@@ -147,6 +148,7 @@ const appRouter = ({
           subscribe: projectEvents.subscribe,
         }),
         ProjectBanners: ProjectHeader,
+        ValuePreview,
         subscribe: projectEvents.subscribe,
         clock,
       }),

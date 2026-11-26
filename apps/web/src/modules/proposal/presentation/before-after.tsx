@@ -104,7 +104,7 @@ const PreviewFigure = ({
   children,
 }: {
   readonly label: string;
-  readonly column: number;
+  readonly column?: number;
   readonly token: TokenValue;
   readonly aliases: AliasValues;
   readonly children?: ReactNode;
@@ -138,6 +138,18 @@ const PreviewFigure = ({
     </figure>
   );
 };
+
+export const ValuePreview = ({
+  label,
+  type,
+  value,
+  aliases,
+}: {
+  readonly label: string;
+  readonly type: string;
+  readonly value: unknown;
+  readonly aliases: AliasValues;
+}) => <PreviewFigure label={label} token={{ $type: type, $value: value }} aliases={aliases} />;
 
 const ValueBeforeAfter = ({
   validated,

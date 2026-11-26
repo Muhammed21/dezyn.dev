@@ -346,3 +346,68 @@ describe("declare_figma_states signale tokens, que suit l'indice du dernier rele
     );
   });
 });
+
+const post = (
+  app: App,
+  { accessToken, path, body }: { accessToken: string; path: string; body?: object },
+) =>
+  app.request(`${BASE_URL}/v1${path}`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json" },
+    body: JSON.stringify(body ?? {}),
+  });
+
+describe("rejeter une valeur Figma signale tokens, que suit la liste des tokens (ADR 0046)", () => {
+  it("rejeter une proposition née d'une divergence signale proposals, history et tokens", () => {
+    const recorder = makeAllSignalsRecorder();
+    return withIdentityApp(
+      async (app, db) => {
+        const seeded = await seedProject(app, db);
+        await addToken(app, { ...seeded, token: makeColorToken({ name: "couleur.fond" }) });
+        const declared = await declareFigmaStates(app, { ...seeded, states: [DIVERGED_FOND] });
+        const mark = recorder.received.length;
+
+        const response = await post(app, {
+          accessToken: seeded.accessToken,
+          path: `/proposals/${declared.structuredContent.states[0].proposal.id}/reject`,
+        });
+
+        expect(response.status).toBe(200);
+        expect(recorder.since(mark)).toEqual([
+          { projectId: seeded.projectId, topics: ["proposals", "history", "tokens"] },
+        ]);
+      },
+      { signals: recorder.signals },
+    );
+  });
+
+  it("valider un lot qui rejette une valeur Figma signale tokens", () => {
+    const recorder = makeAllSignalsRecorder();
+    return withIdentityApp(
+      async (app, db) => {
+        const seeded = await seedProject(app, db);
+        await addToken(app, { ...seeded, token: makeColorToken({ name: "couleur.fond" }) });
+        const declared = await declareFigmaStates(app, { ...seeded, states: [DIVERGED_FOND] });
+        const { proposal } = declared.structuredContent.states[0];
+        await callTool(app, {
+          accessToken: seeded.accessToken,
+          name: "close_proposal_batch",
+          args: { projectId: seeded.projectId },
+        });
+        const mark = recorder.received.length;
+
+        const response = await post(app, {
+          accessToken: seeded.accessToken,
+          path: `/proposal-batches/${proposal.batch.id}/validate`,
+          body: { rejected: [proposal.id] },
+        });
+
+        expect(response.status).toBe(200);
+        expect(recorder.since(mark)).toEqual([
+          { projectId: seeded.projectId, topics: ["proposals", "history", "tokens"] },
+        ]);
+      },
+      { signals: recorder.signals },
+    );
+  });
+});

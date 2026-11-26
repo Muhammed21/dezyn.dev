@@ -36,8 +36,16 @@ import type {
 import type { Citation, CitationVia } from "../domain/citations.ts";
 import type { ComparedDefinition } from "../domain/same-definition.ts";
 
-const { identityUser, mode, modifier, token, tokenFigmaState, tokenValue, tokenValueReference } =
-  schema;
+const {
+  identityUser,
+  mode,
+  modifier,
+  proposal,
+  token,
+  tokenFigmaState,
+  tokenValue,
+  tokenValueReference,
+} = schema;
 
 type Queryable = Pick<
   PostgresTransaction,
@@ -512,6 +520,16 @@ const FigmaState = z.enum(["synced", "missing_in_figma", "duplicate_in_figma", "
 
 const FigmaVariables = z.array(z.string()).nullable();
 
+const FigmaValue = z.object({
+  $value: z.unknown().optional(),
+  modes: z.record(z.string(), z.unknown()).optional(),
+});
+
+const figmaValueOf = (stored: unknown) => {
+  const { $value, modes } = FigmaValue.parse(stored);
+  return modes === undefined ? { $value } : { modes };
+};
+
 export const postgresFigmaStateReader = (db: PostgresDatabase): FigmaStateReader => ({
   figmaStatesOf: async (projectId) => {
     const rows = await db.orm
@@ -519,29 +537,58 @@ export const postgresFigmaStateReader = (db: PostgresDatabase): FigmaStateReader
         tokenId: tokenFigmaState.tokenId,
         state: tokenFigmaState.state,
         figmaVariables: tokenFigmaState.figmaVariables,
+        rejectedValue: tokenFigmaState.rejectedValue,
         declaredAt: tokenFigmaState.declaredAt,
         userId: tokenFigmaState.userId,
         name: identityUser.name,
         clientId: tokenFigmaState.clientId,
+        proposalId: proposal.id,
+        batchId: proposal.batchId,
+        proposed: proposal.payload,
       })
       .from(tokenFigmaState)
       .innerJoin(token, eq(token.id, tokenFigmaState.tokenId))
       .leftJoin(identityUser, eq(identityUser.id, tokenFigmaState.userId))
+      .leftJoin(
+        proposal,
+        and(eq(proposal.id, tokenFigmaState.proposalId), eq(proposal.status, "proposed")),
+      )
       .where(eq(token.projectId, projectId));
-    return rows.map(({ tokenId, state, figmaVariables, declaredAt, userId, name, clientId }) => {
-      const variables = FigmaVariables.parse(figmaVariables);
-      return {
+    return rows.map(
+      ({
         tokenId,
-        state: FigmaState.parse(state),
-        ...(variables === null ? {} : { figmaVariables: variables }),
+        state,
+        figmaVariables,
+        rejectedValue,
         declaredAt,
-        author:
-          userId === null || name === null
-            ? { kind: "deleted_member" as const }
-            : { kind: "member" as const, userId, name },
+        userId,
+        name,
         clientId,
-      };
-    });
+        proposalId,
+        batchId,
+        proposed,
+      }) => {
+        const variables = FigmaVariables.parse(figmaVariables);
+        const declared = FigmaState.parse(state);
+        return {
+          tokenId,
+          state: declared,
+          ...(variables === null ? {} : { figmaVariables: variables }),
+          ...(proposalId === null || batchId === null
+            ? {}
+            : { proposal: { id: proposalId, batchId, value: figmaValueOf(proposed) } }),
+          ...(declared !== "diverged" || rejectedValue === null
+            ? {}
+            : { rejectedValue: figmaValueOf(rejectedValue) }),
+          declaredAt,
+          author:
+            userId === null || name === null
+              ? { kind: "deleted_member" as const }
+              : { kind: "member" as const, userId, name },
+          clientId,
+        };
+      },
+    );
   },
 });
 
@@ -579,7 +626,7 @@ const resizeFigmaStatesOf = async (
   },
 ) => {
   if (proposalIds.length === 0) {
-    return;
+    return false;
   }
   const before = await tx
     .select({ row: tokenFigmaState, projectId: token.projectId })
@@ -594,9 +641,10 @@ const resizeFigmaStatesOf = async (
     .returning();
   const [changed] = before;
   if (changed === undefined) {
-    return;
+    return false;
   }
   await meter.resize(changed.projectId, { removed: before.map(({ row }) => row), added: after });
+  return true;
 };
 
 export const postgresFigmaStateSynchronizer = (tx: Queryable, meter: StorageMeter) => ({
@@ -607,10 +655,10 @@ export const postgresFigmaStateSynchronizer = (tx: Queryable, meter: StorageMete
       change: { state: "synced", proposalId: null },
     });
   },
-  proposalsRejected: async (
+  proposalsRejected: (
     rejected: readonly { readonly proposalId: string; readonly token: ComparedDefinition }[],
-  ) => {
-    await resizeFigmaStatesOf(tx, {
+  ) =>
+    resizeFigmaStatesOf(tx, {
       meter,
       proposalIds: rejected.map(({ proposalId }) => proposalId),
       change: {
@@ -623,13 +671,7 @@ export const postgresFigmaStateSynchronizer = (tx: Queryable, meter: StorageMete
         )} end`,
         proposalId: null,
       },
-    });
-  },
-});
-
-const RejectedValue = z.object({
-  $value: z.unknown().optional(),
-  modes: z.record(z.string(), z.unknown()).optional(),
+    }),
 });
 
 export const postgresRejectedValueReader = (db: PostgresDatabase): RejectedValueReader => ({
@@ -641,7 +683,7 @@ export const postgresRejectedValueReader = (db: PostgresDatabase): RejectedValue
       .where(and(eq(token.projectId, projectId), isNotNull(tokenFigmaState.rejectedValue)));
     return rows.map(({ tokenId, rejectedValue }) => ({
       tokenId,
-      rejected: RejectedValue.parse(rejectedValue),
+      rejected: FigmaValue.parse(rejectedValue),
     }));
   },
 });

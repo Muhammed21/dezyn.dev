@@ -181,6 +181,92 @@ describe("lecture des tokens d'un projet dans l'app web (ADR 0044)", () => {
     expect(read.ok && read.value.tokens.map(({ figma }) => figma?.state)).toEqual(["unknown"]);
   });
 
+  const PROPOSAL_ID = "9d8c7b6a-5f4e-4d3c-8b2a-1f0e9d8c7b6a";
+  const BATCH_ID = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
+
+  it("donne la proposition en attente d'un token divergent, avec sa valeur Figma unique", async () => {
+    const { tokens } = answering(
+      json(
+        makeTokensOutput({
+          tokens: [
+            makeTokenOutput({
+              figma: makeFigmaOutput({
+                state: "diverged",
+                proposal: { id: PROPOSAL_ID, batchId: BATCH_ID, value: { $value: NIGHT_BLUE } },
+              }),
+            }),
+          ],
+        }),
+      ),
+    );
+
+    const read = await tokens.readTokens(reading);
+
+    expect(read.ok && read.value.tokens.map(({ figma }) => figma)).toEqual([
+      {
+        state: "diverged",
+        declaredAt: new Date(DECLARED_AT),
+        proposal: {
+          id: PROPOSAL_ID,
+          batchId: BATCH_ID,
+          value: { kind: "single", value: NIGHT_BLUE },
+        },
+      },
+    ]);
+  });
+
+  it("donne la valeur Figma d'une proposition mode par mode", async () => {
+    const { tokens } = answering(
+      json(
+        makeTokensOutput({
+          tokens: [
+            makeTokenOutput({
+              figma: makeFigmaOutput({
+                state: "diverged",
+                proposal: {
+                  id: PROPOSAL_ID,
+                  batchId: BATCH_ID,
+                  value: { modes: { clair: PRIMARY_BLUE, sombre: NIGHT_BLUE } },
+                },
+              }),
+            }),
+          ],
+        }),
+      ),
+    );
+
+    const read = await tokens.readTokens(reading);
+
+    expect(read.ok && read.value.tokens[0]?.figma?.proposal?.value).toEqual({
+      kind: "by_mode",
+      values: { clair: PRIMARY_BLUE, sombre: NIGHT_BLUE },
+    });
+  });
+
+  it("donne la dernière valeur Figma rejetée d'un token divergent", async () => {
+    const { tokens } = answering(
+      json(
+        makeTokensOutput({
+          tokens: [
+            makeTokenOutput({
+              figma: makeFigmaOutput({ state: "diverged", rejectedValue: { $value: NIGHT_BLUE } }),
+            }),
+          ],
+        }),
+      ),
+    );
+
+    const read = await tokens.readTokens(reading);
+
+    expect(read.ok && read.value.tokens.map(({ figma }) => figma)).toEqual([
+      {
+        state: "diverged",
+        declaredAt: new Date(DECLARED_AT),
+        rejectedValue: { kind: "single", value: NIGHT_BLUE },
+      },
+    ]);
+  });
+
   it("ne donne aucun état Figma à un token qui n'en a pas", async () => {
     const { tokens } = answering(json(makeTokensOutput()));
 

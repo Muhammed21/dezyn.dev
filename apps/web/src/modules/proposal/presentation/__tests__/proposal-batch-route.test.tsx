@@ -306,6 +306,16 @@ describe("page d'un lot de propositions (ADR 0012 §1, ADR 0044 §6)", () => {
   });
 });
 
+describe("chaque proposition du lot s'atteint par une ancre", () => {
+  it("la ligne d'une proposition porte l'ancre proposition-<id>, cible du lien de la liste des tokens", async () => {
+    const proposal = makeProposal({ name: "couleur.fond.nuit" });
+    const { screen } = await renderBatch(reading(makeBatch({ proposals: [proposal] })));
+
+    await expect.element(proposalItems(screen).nth(0)).toBeVisible();
+    expect(proposalItems(screen).nth(0).element().id).toBe(`proposition-${proposal.id}`);
+  });
+});
+
 const reviewedAs =
   (status: ReviewedProposal["status"]): ReviewProposal =>
   ({ proposalId }) =>
