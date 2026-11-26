@@ -90,6 +90,8 @@ Le token qui déclare est le premier plan ; le token cité par `on` est le fond.
 
 Les autres clés d'`$extensions` restent conservées sans être interprétées (ADR 0030 §2).
 
+Jusqu'ici, le contenu de `dev.dezyn` était libre (ADR 0030 §1) : un token déjà stocké pourrait y porter une autre clé, et sa prochaine écriture serait refusée. Avant la mise en production de ces règles, un contrôle en lecture seule de la production (ADR 0057) vérifie qu'aucun token stocké ne porte `dev.dezyn`. S'il en trouve, une migration retire cette clé avant le déploiement.
+
 Ce volet amende l'ADR 0030 §1 et §2 pour la seule clé `dev.dezyn` : son contenu n'est plus libre, et dezyn l'interprète.
 
 ### 3. Un token cité dans un `contrastOn` ne se supprime pas
@@ -141,7 +143,7 @@ La recette `bilan_sante` (#408) est la première à appeler `check_contrast`. El
 
 - Une paire non déclarée n'est pas contrôlée : le contrôle ne vaut que ce que le projet déclare.
 - dezyn interprète désormais une partie d'`$extensions` : la règle simple de l'ADR 0030, « dezyn ne lit aucune extension », a une exception.
-- Une autre clé sous `dev.dezyn` est refusée : un document DTCG qui en porte une ne s'importe pas tel quel.
+- Une autre clé sous `dev.dezyn` est refusée : un document DTCG qui en porte une ne s'importe pas tel quel, et un token déjà stocké qui en porterait une devrait d'abord être nettoyé (§2).
 - Supprimer un fond demande de retirer d'abord les paires qui le citent.
 - Un fond translucide ne reçoit aucun verdict, seulement « indéterminé ».
 - L'IA ne propose jamais `large-text` : un vrai texte large déclaré par elle est jugé au seuil de 4,5:1 tant qu'un humain ne change pas l'usage.
@@ -153,14 +155,14 @@ La recette `bilan_sante` (#408) est la première à appeler `check_contrast`. El
 - **L'IA suggère une paire ou un usage faux** : la suggestion est une proposition qu'un éditeur relit et peut rejeter (ADR 0012).
 - **Les paires déclarées ne couvrent pas le projet** : la recette `bilan_sante` fait suggérer par l'IA les paires manquantes ; elles entrent dans le projet après validation, et le passage suivant les contrôle.
 - **Un besoin nouveau veut une autre clé sous `dev.dezyn`** : elle reste refusée jusqu'à ce qu'un ADR la définisse, plutôt que d'y laisser un contenu libre.
-- **L'écart entre deux implémentations du ratio** (seuil de linéarisation, arrondi) : le calcul se fait à un seul endroit, dans dezyn, et ses tests fixent des paires de référence aux ratios connus.
+- **L'écart entre deux implémentations du ratio** (seuil de linéarisation, arrondi) : le calcul se fait à un seul endroit, dans dezyn, avec le seuil 0,04045 fixé dans les notes d'implémentation, et ses tests fixent des paires de référence aux ratios connus.
 
 ## Notes d'implémentation
 
 1. Le schéma de `dev.dezyn` s'ajoute à `token-definition.ts`, strict (ADR 0023 §1) : `contrastOn` seul, chaque entrée en chaîne de référence ou en objet `{ on, usage }`. Les autres clés d'`$extensions` gardent le contenu libre de l'ADR 0030.
 2. La validation des références de `contrastOn` (couleur existante ou créée dans la même écriture, lot ou import, pas le token lui-même, pas de doublon) se fait avec celle des alias, à l'écriture.
 3. Le refus de suppression de l'ADR 0026 §2 compte les `contrastOn` parmi les références, et nomme les tokens qui citent le fond.
-4. Le calcul est une fonction pure du domaine `token` : valeurs résolues de chaque mode en entrée, ratio et verdict en sortie. Luminance relative `L = 0,2126 R + 0,7152 G + 0,0722 B` sur les composantes linéarisées, ratio `(L1 + 0,05) / (L2 + 0,05)` avec `L1` la plus claire. Un premier plan translucide est composé sur son fond en « source-over », composante par composante dans l'espace sRGB non linéarisé : `C = α·Cpremier + (1 − α)·Cfond`, avant la linéarisation.
+4. Le calcul est une fonction pure du domaine `token` : valeurs résolues de chaque mode en entrée, ratio et verdict en sortie. Chaque composante sRGB `C` (entre 0 et 1) se linéarise par `C ≤ 0,04045 ? C / 12,92 : ((C + 0,055) / 1,055)^2,4`, avec le seuil 0,04045 de la norme sRGB, que reprennent les errata de WCAG, plutôt que 0,03928 ; un test fixe une composante entre les deux seuils. Luminance relative `L = 0,2126 R + 0,7152 G + 0,0722 B` sur les composantes linéarisées, ratio `(L1 + 0,05) / (L2 + 0,05)` avec `L1` la plus claire. Un premier plan translucide est composé sur son fond en « source-over », composante par composante dans l'espace sRGB non linéarisé : `C = α·Cpremier + (1 − α)·Cfond`, avant la linéarisation.
 5. `check_contrast` s'enregistre comme les autres outils MCP ; le test de l'ADR 0021 qui parcourt les outils enregistrés le couvre.
 6. La recette `bilan_sante` s'ajoute ensuite au registre des recettes (ADR 0059 §1).
 
