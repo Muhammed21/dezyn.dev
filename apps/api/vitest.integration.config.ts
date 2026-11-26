@@ -9,7 +9,7 @@ export default defineConfig({
   test: {
     include: ["src/**/*.integration.test.ts"],
     env: existsSync(ROOT_ENV) ? parseEnv(readFileSync(ROOT_ENV, "utf8")) : {},
-    fileParallelism: false,
+    maxWorkers: 3,
     testTimeout: 30_000,
     hookTimeout: 30_000,
   },
