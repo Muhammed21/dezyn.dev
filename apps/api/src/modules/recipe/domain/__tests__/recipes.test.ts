@@ -7,6 +7,10 @@ describe("le registre des recettes (ADR 0059 §1)", () => {
     expect(RECIPES.map(({ name }) => name)).toContain("releve_figma");
   });
 
+  it("sert le bilan de santé", () => {
+    expect(RECIPES.map(({ name }) => name)).toContain("bilan_sante");
+  });
+
   it("donne à chaque recette un nom unique, en minuscules et soulignés", () => {
     const names = RECIPES.map(({ name }) => name);
 

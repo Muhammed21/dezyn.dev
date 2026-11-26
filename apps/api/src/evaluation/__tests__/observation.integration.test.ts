@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { type App, callMcp, withIdentityApp } from "#testing/authorization-flow.ts";
 import { seedProject } from "#testing/project-fixtures.ts";
-import { addToken, makeColorToken } from "#testing/token-fixtures.ts";
+import { addToken, makeColorToken, PRIMARY_BLUE } from "#testing/token-fixtures.ts";
 
 import { observeProject } from "../observation.ts";
 
@@ -26,7 +26,7 @@ const callTool = async (
 };
 
 describe("l'évaluation observe en base ce qu'un passage de recette a laissé dans un projet", () => {
-  it("rend le fichier Figma, les tokens validés et leur état Figma, les lots et leurs propositions, et l'historique", () =>
+  it("rend le fichier Figma, les tokens validés et leur état Figma, les lots et le contenu de leurs propositions, et l'historique", () =>
     withIdentityApp(
       async (app, db) => {
         const { accessToken, projectId } = await seedProject(app, db);
@@ -74,7 +74,14 @@ describe("l'évaluation observe en base ce qu'un passage de recette a laissé da
               intent: "Relevé Figma du 25 nov. : 1 nouveau token",
               recipe: "releve_figma",
               state: "open",
-              proposals: [{ name: "couleur.alerte", kind: "create", status: "proposed" }],
+              proposals: [
+                {
+                  name: "couleur.alerte",
+                  kind: "create",
+                  status: "proposed",
+                  token: expect.objectContaining({ $type: "color", $value: PRIMARY_BLUE }),
+                },
+              ],
             },
           ],
           history: expect.arrayContaining([

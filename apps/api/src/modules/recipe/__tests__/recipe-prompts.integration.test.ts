@@ -114,6 +114,53 @@ describe("le MCP de dezyn sert ses recettes en prompts (ADR 0059 §1)", () => {
     }));
 });
 
+describe("prompts/get rend la recette du bilan de santé pour un projet (spec #425)", () => {
+  it("prompts/list la liste, et prompts/get la rend pour le projet en entrant dans son historique", () =>
+    withIdentityApp(async (app, db) => {
+      const { accessToken, projectId } = await seedProject(app, db);
+
+      const listed = await (
+        await callMcp(app, { token: accessToken, method: "prompts/list" })
+      ).json();
+      const reply = await getPrompt(app, {
+        token: accessToken,
+        name: "bilan_sante",
+        args: { projectId },
+      });
+
+      expect(listed.result.prompts).toContainEqual(
+        expect.objectContaining({
+          name: "bilan_sante",
+          title: "Bilan de santé",
+          arguments: [expect.objectContaining({ name: "projectId", required: true })],
+        }),
+      );
+      expect(recipeTextOf(reply)).toContain(projectId);
+      expect(recipeTextOf(reply)).toContain("check_contrast");
+      expect((await historyByApi(app, { accessToken, projectId })).entries[0]).toMatchObject({
+        action: "mcp.bilan_sante",
+        after: { outcome: "success", input: {} },
+        correlationId: CORRELATION_ID,
+      });
+    }));
+
+  it("refuse un projet inconnu, sans entrée d'historique", () =>
+    withIdentityApp(async (app, db) => {
+      const { accessToken } = await seedProject(app, db);
+
+      const reply = await getPrompt(app, {
+        token: accessToken,
+        name: "bilan_sante",
+        args: { projectId: UNKNOWN_PROJECT_ID },
+      });
+
+      expect(reply).toMatchObject({
+        error: { message: expect.stringContaining("Projet introuvable") },
+      });
+      expect(await db.orm.select().from(schema.historyEntry)).toHaveLength(1);
+    }));
+});
+
 describe("prompts/get rend la recette du relevé Figma pour un projet (ADR 0059 §5)", () => {
   it("avec le lien et la clé du fichier Figma du projet", () =>
     withIdentityApp(async (app, db) => {

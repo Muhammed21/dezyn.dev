@@ -7,6 +7,7 @@ export type ObservedProposal = {
   readonly name: string;
   readonly kind: string;
   readonly status: string;
+  readonly token: unknown;
 };
 
 export type ObservedBatch = {
@@ -83,6 +84,7 @@ export const observeProject = async (
             name: schema.proposal.tokenName,
             kind: schema.proposal.kind,
             status: schema.proposal.status,
+            token: schema.proposal.payload,
           })
           .from(schema.proposal)
           .where(
@@ -110,7 +112,7 @@ export const observeProject = async (
       ...batch,
       proposals: proposals
         .filter(({ batchId }) => batchId === batch.id)
-        .map(({ name, kind, status }) => ({ name, kind, status })),
+        .map(({ name, kind, status, token }) => ({ name, kind, status, token })),
     })),
     history: history.map(({ id, action, after }) => ({ id, action, outcome: outcomeOf(after) })),
   };

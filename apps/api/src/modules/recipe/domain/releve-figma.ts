@@ -1,11 +1,5 @@
+import { recipeDateOf } from "./recipe-date.ts";
 import type { Recipe, RecipeProject } from "./recipe.ts";
-
-const MONTH = new Intl.DateTimeFormat("fr-FR", { month: "short", timeZone: "UTC" });
-
-export const releveDateOf = (today: Date): string => {
-  const day = today.getUTCDate();
-  return `${day === 1 ? "1er" : String(day)} ${MONTH.format(today)}`;
-};
 
 const figmaFileSectionOf = (project: RecipeProject): string => {
   if (project.figmaFile === null) {
@@ -18,7 +12,7 @@ const figmaFileSectionOf = (project: RecipeProject): string => {
 };
 
 const instructionsFor: Recipe["instructionsFor"] = ({ project, today }) => {
-  const date = releveDateOf(today);
+  const date = recipeDateOf(today);
   return `# Relevé Figma du projet « ${project.name} » (${project.id})
 
 Tu fais le relevé Figma de ce projet dezyn : tu compares son fichier Figma à ses tokens, tu déclares l'état Figma de chaque token comparé et, seulement s'il y a du nouveau, tu ouvres un seul lot de propositions qu'un éditeur relira. dezyn ne lit pas Figma : tu le lis avec tes propres accès. Toute écriture devient une proposition ; rien n'est validé sans un éditeur.
