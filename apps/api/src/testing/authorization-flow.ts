@@ -13,7 +13,7 @@ import type { Clock } from "#platform/clock.ts";
 import type { LogSink } from "#platform/logging.ts";
 import type { Mailer } from "#platform/mailer.ts";
 import { migrate } from "@repo/db";
-import { createThrowawayDatabase, type ThrowawayDatabase } from "@repo/db/testing";
+import { createMigratedDatabase, type ThrowawayDatabase } from "@repo/db/testing";
 import { ok } from "@repo/result";
 
 import { makeMerchantOfRecord, WEBHOOK_SECRET } from "./merchant-of-record.ts";
@@ -73,7 +73,7 @@ export const startIdentityApp = async ({
   wrapHistoryWriter,
   clock,
   log = () => undefined,
-  createDatabase = createThrowawayDatabase,
+  createDatabase = createMigratedDatabase,
   secret = "secret-de-test-de-32-caracteres-au-moins",
   secrets = [],
   authLog = () => undefined,
