@@ -1,3 +1,4 @@
+import { and, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -17,6 +18,7 @@ import {
   seedFigmaState,
 } from "#testing/token-fixtures.ts";
 import { InvalidBatchProblem, InvalidProposalProblem } from "@repo/contracts";
+import { schema } from "@repo/db";
 
 const NIGHT_BLUE = { colorSpace: "srgb", components: [0.1, 0.2, 0.4] };
 
@@ -76,6 +78,17 @@ const tokenNamesOf = async (
   });
   return (await response.json()).tokens.map(({ name }: { name: string }) => name);
 };
+
+const BACKGROUND = { name: "couleur.fond", $type: "color", $value: PRIMARY_BLUE };
+
+const makeText = (extensions?: object) => ({
+  name: "couleur.texte",
+  $type: "color",
+  $value: NIGHT_BLUE,
+  ...(extensions === undefined ? {} : { $extensions: extensions }),
+});
+
+const TEXT_ON_BACKGROUND = makeText({ "dev.dezyn": { contrastOn: ["{couleur.fond}"] } });
 
 const seedCitedSize = async (app: App, seeded: { accessToken: string; projectId: string }) => {
   for (const token of [BODY_SIZE, TITLE_SIZE, BODY_TEXT]) {
@@ -316,5 +329,72 @@ describe("un token encore cité ne se supprime pas (ADR 0026 §2, ADR 0029)", ()
       ]);
       expect(validated.status).toBe(200);
       expect(await tokenNamesOf(app, seeded)).toEqual(["taille.titre", "texte.corps"]);
+    }));
+});
+
+describe("un fond cité dans une paire de contraste ne se supprime pas (ADR 0061 §3)", () => {
+  it("à la proposition, refuse en nommant la paire ; une modification en attente dans le même lot qui retire la paire rend la suppression possible", () =>
+    withIdentityApp(async (app, db) => {
+      const seeded = await seedProject(app, db);
+      await addToken(app, { ...seeded, token: BACKGROUND });
+      await addToken(app, { ...seeded, token: TEXT_ON_BACKGROUND });
+
+      const refused = await deleteTokens(app, { ...seeded, names: ["couleur.fond"] });
+      const written = await writeTokens(app, { ...seeded, tokens: [makeText()] });
+      const deleted = await deleteTokens(app, { ...seeded, names: ["couleur.fond"] });
+
+      expect(refused).toEqual({
+        content: [
+          {
+            type: "text",
+            text: "names[0] : Token encore cité : couleur.texte (paire de contraste)",
+          },
+        ],
+        isError: true,
+      });
+      expect(deleted.structuredContent).toMatchObject({
+        batch: { id: written.batch.id },
+        proposals: [{ name: "couleur.fond", kind: "delete", status: "proposed" }],
+      });
+    }));
+
+  it("à la validation d'un lot, la modification qui retire une paire apparue depuis passe avant la suppression ; sans elle, le lot est refusé", () =>
+    withIdentityApp(async (app, db) => {
+      const seeded = await seedProject(app, db);
+      const { accessToken } = seeded;
+      await addToken(app, { ...seeded, token: BACKGROUND });
+      await addToken(app, { ...seeded, token: makeText() });
+      await deleteTokens(app, { ...seeded, names: ["couleur.fond"] });
+      await db.orm
+        .update(schema.token)
+        .set({ extensions: TEXT_ON_BACKGROUND.$extensions })
+        .where(
+          and(eq(schema.token.projectId, seeded.projectId), eq(schema.token.name, "couleur.texte")),
+        );
+      const written = await writeTokens(app, { ...seeded, tokens: [makeText()] });
+      await callTool(app, {
+        accessToken,
+        name: "close_proposal_batch",
+        args: { projectId: seeded.projectId },
+      });
+      const validate = (rejected: readonly string[]) =>
+        app.request(`${BASE_URL}/v1/proposal-batches/${written.batch.id}/validate`, {
+          method: "POST",
+          headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json" },
+          body: JSON.stringify({ rejected }),
+        });
+
+      const refused = await validate([written.proposals[0].id]);
+      const validated = await validate([]);
+
+      expect(refused.status).toBe(409);
+      expect(InvalidBatchProblem.parse(await refused.json()).errors).toEqual([
+        {
+          path: expect.stringMatching(/^proposals\..+\.name$/),
+          message: "Token encore cité : couleur.texte (paire de contraste)",
+        },
+      ]);
+      expect(validated.status).toBe(200);
+      expect(await tokenNamesOf(app, seeded)).toEqual(["couleur.texte"]);
     }));
 });

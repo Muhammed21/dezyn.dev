@@ -226,3 +226,35 @@ describe("un token encore cité ne se supprime pas (ADR 0026 §2, ADR 0029)", ()
       expect(await tokenNamesOf(app, { accessToken, projectId })).toEqual([]);
     }));
 });
+
+describe("un fond cité dans une paire de contraste ne se supprime pas (ADR 0061 §3)", () => {
+  it("répond 409 en nommant le token qui le cite dans une paire, puis accepte une fois ce token supprimé", () =>
+    withIdentityApp(async (app, db) => {
+      const { accessToken, projectId } = await seedProject(app, db);
+      await addToken(app, {
+        accessToken,
+        projectId,
+        token: makeColorToken({ name: "couleur.fond" }),
+      });
+      await addToken(app, {
+        accessToken,
+        projectId,
+        token: makeColorToken({
+          name: "couleur.texte",
+          $value: NIGHT_BLUE,
+          $extensions: { "dev.dezyn": { contrastOn: [{ on: "{couleur.fond}", usage: "ui" }] } },
+        }),
+      });
+
+      const refused = await deleteToken(app, { accessToken, projectId, name: "couleur.fond" });
+
+      expect(refused.status).toBe(409);
+      expect((await refused.json()).errors).toEqual([
+        { path: "name", message: "Token encore cité : couleur.texte (paire de contraste)" },
+      ]);
+      await deleteToken(app, { accessToken, projectId, name: "couleur.texte" });
+      expect(
+        (await deleteToken(app, { accessToken, projectId, name: "couleur.fond" })).status,
+      ).toBe(200);
+    }));
+});

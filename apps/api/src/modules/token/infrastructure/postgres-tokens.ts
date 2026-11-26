@@ -34,6 +34,7 @@ import type {
   TokenWriter,
 } from "../application/token-values.ts";
 import type { Citation, CitationVia } from "../domain/citations.ts";
+import { contrastBackgrounds } from "../domain/contrast-pairs.ts";
 import type { ComparedDefinition } from "../domain/same-definition.ts";
 
 const {
@@ -341,6 +342,8 @@ const citedBy = (projectId: string, names: readonly string[]) =>
     notInArray(citing.name, [...names]),
   );
 
+const StoredExtensions = z.record(z.string(), z.unknown());
+
 const CITATION_SOURCES: readonly CitationSource[] = [
   citationsOfSource("alias", (orm, { projectId, names }) =>
     orm
@@ -358,6 +361,25 @@ const CITATION_SOURCES: readonly CitationSource[] = [
       .innerJoin(cited, eq(cited.id, tokenValueReference.referencedTokenId))
       .innerJoin(citing, eq(citing.id, tokenValue.tokenId))
       .where(citedBy(projectId, names)),
+  ),
+  citationsOfSource("contrastOn", async (orm, { projectId, names }) =>
+    (
+      await orm
+        .select({ name: token.name, extensions: token.extensions })
+        .from(token)
+        .where(
+          and(
+            eq(token.projectId, projectId),
+            eq(token.status, "validated"),
+            isNotNull(token.extensions),
+            notInArray(token.name, [...names]),
+          ),
+        )
+    ).flatMap(({ name, extensions }) =>
+      contrastBackgrounds(StoredExtensions.parse(extensions))
+        .filter((background) => names.includes(background.name))
+        .map((background) => ({ cited: background.name, citing: name })),
+    ),
   ),
 ];
 

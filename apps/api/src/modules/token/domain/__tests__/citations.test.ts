@@ -22,6 +22,12 @@ describe("un token encore cité ne se supprime pas, et le refus nomme ceux qui l
     );
   });
 
+  it("nomme un token qui le cite dans une paire de contraste (ADR 0061 §3)", () => {
+    expect(citationMessage([makeCitation({ citing: "couleur.texte", via: "contrastOn" })])).toBe(
+      "Token encore cité : couleur.texte (paire de contraste)",
+    );
+  });
+
   it("nomme chaque token qui le cite, par ordre de nom", () => {
     expect(
       citationMessage([

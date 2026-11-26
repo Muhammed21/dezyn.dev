@@ -228,3 +228,82 @@ describe("une modification en attente dans le même lot retire la citation qu'el
     ).toEqual([CITED_BY_ALIAS]);
   });
 });
+
+const makeText = (extensions?: Readonly<Record<string, unknown>>): TokenDefinition => ({
+  name: "couleur.texte",
+  $type: "color",
+  $value: PRIMARY_BLUE,
+  ...(extensions === undefined ? {} : { $extensions: extensions }),
+});
+
+describe("une modification en attente dans le même lot qui retire la paire de contraste retire la citation (ADR 0061 §3)", () => {
+  const CITED_BY_PAIR = {
+    cited: "couleur.fond",
+    citing: "couleur.texte",
+    via: "contrastOn",
+  } as const;
+
+  it("une modification en attente qui garde la paire laisse la citation", () => {
+    expect(
+      remainingCitations({
+        citations: [CITED_BY_PAIR],
+        pendingInBatch: [
+          makeWaiting({
+            name: "couleur.texte",
+            kind: "update",
+            token: makeText({
+              "dev.dezyn": { contrastOn: [{ on: "{couleur.fond}", usage: "ui" }] },
+            }),
+          }),
+        ],
+      }),
+    ).toEqual([CITED_BY_PAIR]);
+  });
+
+  it("une modification en attente qui retire la paire retire la citation", () => {
+    expect(
+      remainingCitations({
+        citations: [CITED_BY_PAIR],
+        pendingInBatch: [
+          makeWaiting({
+            name: "couleur.texte",
+            kind: "update",
+            token: makeText({ "dev.dezyn": { contrastOn: ["{couleur.bord}"] } }),
+          }),
+        ],
+      }),
+    ).toEqual([]);
+  });
+
+  it("une modification en attente qui garde un alias vers le fond mais retire la paire retire la citation de la paire", () => {
+    expect(
+      remainingCitations({
+        citations: [CITED_BY_PAIR],
+        pendingInBatch: [
+          makeWaiting({
+            name: "couleur.texte",
+            kind: "update",
+            token: { name: "couleur.texte", $type: "color", $value: "{couleur.fond}" },
+          }),
+        ],
+      }),
+    ).toEqual([]);
+  });
+
+  it("une modification en attente qui garde la paire mais retire l'alias retire la citation de l'alias", () => {
+    const citedByAlias = { ...CITED_BY_PAIR, via: "alias" } as const;
+
+    expect(
+      remainingCitations({
+        citations: [citedByAlias, CITED_BY_PAIR],
+        pendingInBatch: [
+          makeWaiting({
+            name: "couleur.texte",
+            kind: "update",
+            token: makeText({ "dev.dezyn": { contrastOn: ["{couleur.fond}"] } }),
+          }),
+        ],
+      }),
+    ).toEqual([CITED_BY_PAIR]);
+  });
+});
