@@ -567,11 +567,6 @@ export const postgresFigmaStateSynchronizer = (tx: Queryable, meter: StorageMete
     }),
 });
 
-const RejectedValue = z.object({
-  $value: z.unknown().optional(),
-  modes: z.record(z.string(), z.unknown()).optional(),
-});
-
 export const postgresRejectedValueReader = (db: PostgresDatabase): RejectedValueReader => ({
   rejectedValuesOf: async (projectId) => {
     const rows = await db.orm
@@ -581,7 +576,7 @@ export const postgresRejectedValueReader = (db: PostgresDatabase): RejectedValue
       .where(and(eq(token.projectId, projectId), isNotNull(tokenFigmaState.rejectedValue)));
     return rows.map(({ tokenId, rejectedValue }) => ({
       tokenId,
-      rejected: RejectedValue.parse(rejectedValue),
+      rejected: FigmaValue.parse(rejectedValue),
     }));
   },
 });
