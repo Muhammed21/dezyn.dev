@@ -83,8 +83,16 @@ Un token dont la valeur est identique, dans chaque mode, à celle d'un autre tok
 _À éviter_ : copie, duplicata
 
 **Extension** :
-Une donnée propre à un outil, rangée dans un token sous une clé d'espace de noms (par exemple `com.figma`), que dezyn conserve et rend sans l'interpréter.
+Une donnée propre à un outil, rangée dans un token sous une clé d'espace de noms (par exemple `com.figma`), que dezyn conserve et rend sans l'interpréter. Seule la clé `dev.dezyn` est propre à dezyn, qui la valide et l'interprète : elle porte les paires de contraste.
 _À éviter_ : métadonnée, propriété personnalisée
+
+**Paire de contraste** :
+Un token de couleur au premier plan et le fond sur lequel il se pose, déclarés par le premier plan dans `$extensions["dev.dezyn"].contrastOn`, avec un usage. dezyn calcule le ratio de contraste WCAG de chaque paire déclarée, dans chaque mode ; l'IA du client ne fait que suggérer les paires manquantes.
+_À éviter_ : couple de couleurs, combinaison
+
+**Usage** :
+Ce que le premier plan d'une paire de contraste est sur son fond, qui fixe le seuil : `text` (texte courant, 4,5:1), `large-text` (texte large, 3:1) ou `ui` (bordure, icône, focus, 3:1). Une paire déclarée sans usage est un `text`.
+_À éviter_ : rôle, type (qui désigne le type d'un token)
 
 ### Figma
 

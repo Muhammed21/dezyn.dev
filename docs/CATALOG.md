@@ -80,6 +80,7 @@ Chaque page de `docs/`, une ligne chacune : titre, [mode](README.md#carte), stat
 - [0058 — Un remboursement total de la commande d'un abonnement le révoque automatiquement](adr/0058-un-remboursement-total-de-la-commande-d-un-abonnement-le-revoque-automatiquement.md) — _explanation · Accepté_ — Un remboursement total de la commande d'un abonnement doit-il le révoquer, et par quel événement de Polar dezyn le sait-il ?
 - [0059 — Les agents sont des recettes servies en prompt MCP ; le relevé Figma est la première](adr/0059-les-agents-sont-des-recettes-servies-en-prompt-mcp-le-releve-figma-est-la-premiere.md) — _explanation · Accepté_ — Comment dezyn rend-il régulières des tâches d'IA comme le relevé Figma, sans exécuter d'IA ni appeler Figma, et sans que deux agents mélangent leurs lots ?
 - [0060 — L'accès MCP vit avec la chaîne de refresh tokens, séparé de la session web](adr/0060-l-acces-mcp-vit-avec-la-chaine-de-refresh-tokens-separe-de-la-session-web.md) — _explanation · Accepté_ — Comment l'accès MCP d'un agent tient-il sans humain au-delà de 7 jours, sans allonger la session web et sans perdre les moyens de le couper ?
+- [0061 — dezyn calcule le contraste WCAG des paires déclarées dans les tokens](adr/0061-dezyn-calcule-le-contraste-wcag-des-paires-declarees-dans-les-tokens.md) — _explanation · Accepté_ — Où vivent les paires de couleurs dont le contraste se contrôle, et qui calcule ce contraste ?
 - [Décisions d'architecture](adr/README.md) — _explanation_ — Format et circuit : voir `.claude/rules/adr-et-spikes.md`.
 
 ## Spikes — recherche bornée
