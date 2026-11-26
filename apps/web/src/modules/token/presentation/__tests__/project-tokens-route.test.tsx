@@ -50,6 +50,22 @@ const ProjectBanners = ({ projectId }: { readonly projectId: string }) => (
   <p>Bandeaux du projet {projectId}</p>
 );
 
+const ValuePreview = ({
+  label,
+  type,
+  value,
+  aliases,
+}: {
+  readonly label: string;
+  readonly type: string;
+  readonly value: unknown;
+  readonly aliases: ReadonlyMap<string, unknown>;
+}) => (
+  <figure aria-label={label}>
+    {type} {JSON.stringify(value)} parmi {[...aliases.keys()].join(", ")}
+  </figure>
+);
+
 const renderProjectTokens = (
   readTokens: ReadTokens,
   history = createMemoryHistory({ initialEntries: [`/projets/${PROJECT_ID}`] }),
@@ -69,6 +85,7 @@ const renderProjectTokens = (
         readTokens,
         ProjectProposals,
         ProjectBanners,
+        ValuePreview,
         subscribe: events.subscribe,
         clock: () => NOW,
       }),
@@ -449,6 +466,219 @@ describe("l'état Figma de chaque token, déclaré par l'IA du client (ADR 0024)
 
     await expect
       .element(tokenItems(screen).nth(0).getByText("Figma : Synchronisé (aujourd’hui)"))
+      .toBeVisible();
+  });
+});
+
+const PROPOSAL_ID = "9d8c7b6a-5f4e-4d3c-8b2a-1f0e9d8c7b6a";
+const BATCH_ID = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
+
+const DIVERGED_STATE = { state: "diverged", declaredAt: DAYS_AGO(3) } as const;
+
+const makeFigmaProposal = (value: Token["value"]) => ({
+  id: PROPOSAL_ID,
+  batchId: BATCH_ID,
+  value,
+});
+
+describe("un token divergent montre la valeur relevée dans Figma (ADR 0024 §4)", () => {
+  it("montre la valeur Figma de la proposition en attente, et mène à sa ligne dans le lot", async () => {
+    const screen = await renderProjectTokens(
+      reading({
+        modes: [],
+        tokens: [
+          makeToken({
+            figma: {
+              ...DIVERGED_STATE,
+              proposal: makeFigmaProposal({ kind: "single", value: NIGHT_BLUE }),
+            },
+          }),
+        ],
+      }),
+    );
+
+    const item = tokenItems(screen).nth(0);
+    await expect.element(item.getByText("Figma : Divergent (il y a 3 jours)")).toBeVisible();
+    await expect
+      .element(item.getByRole("figure", { name: "Valeur Figma" }))
+      .toHaveTextContent(`color ${JSON.stringify(NIGHT_BLUE)}`);
+    await expect
+      .element(item.getByRole("link", { name: "Voir la proposition" }))
+      .toHaveAttribute("href", `/lots/${BATCH_ID}#proposition-${PROPOSAL_ID}`);
+  });
+
+  it("montre la valeur Figma mode par mode, dans l'ordre des modes du projet", async () => {
+    const screen = await renderProjectTokens(
+      reading({
+        modes: ["clair", "sombre"],
+        tokens: [
+          makeToken({
+            value: { kind: "by_mode", values: { clair: PRIMARY_BLUE, sombre: PRIMARY_BLUE } },
+            figma: {
+              ...DIVERGED_STATE,
+              proposal: makeFigmaProposal({
+                kind: "by_mode",
+                values: { sombre: NIGHT_BLUE, clair: PRIMARY_BLUE },
+              }),
+            },
+          }),
+        ],
+      }),
+    );
+
+    const figures = tokenItems(screen).nth(0).getByRole("figure");
+    await expect.element(figures.nth(0)).toHaveAccessibleName("clair");
+    await expect.element(figures.nth(0)).toHaveTextContent(JSON.stringify(PRIMARY_BLUE));
+    await expect.element(figures.nth(1)).toHaveAccessibleName("sombre");
+    await expect.element(figures.nth(1)).toHaveTextContent(JSON.stringify(NIGHT_BLUE));
+    expect(figures.elements()).toHaveLength(2);
+    await expect.element(tokenItems(screen).nth(0).getByText("Valeur Figma :")).toBeVisible();
+  });
+
+  it("résout les alias de la valeur Figma parmi les tokens à valeur unique de la liste", async () => {
+    const screen = await renderProjectTokens(
+      reading({
+        modes: [],
+        tokens: [
+          makeToken({
+            figma: {
+              ...DIVERGED_STATE,
+              proposal: makeFigmaProposal({ kind: "single", value: "{couleur.fond.nuit}" }),
+            },
+          }),
+          NIGHT,
+          makeToken({
+            id: "8d7f3c2a-8d4e-4f1a-9c7b-5e2d1a0f9b8c",
+            name: "couleur.bord",
+            value: { kind: "by_mode", values: { clair: PRIMARY_BLUE } },
+          }),
+        ],
+      }),
+    );
+
+    await expect
+      .element(tokenItems(screen).nth(0).getByRole("figure", { name: "Valeur Figma" }))
+      .toHaveTextContent(/parmi couleur\.fond\.primaire, couleur\.fond\.nuit$/);
+  });
+
+  it("ne montre que les modes que porte la valeur Figma", async () => {
+    const screen = await renderProjectTokens(
+      reading({
+        modes: ["clair", "sombre"],
+        tokens: [
+          makeToken({
+            figma: {
+              ...DIVERGED_STATE,
+              proposal: makeFigmaProposal({ kind: "by_mode", values: { sombre: NIGHT_BLUE } }),
+            },
+          }),
+        ],
+      }),
+    );
+
+    const figures = tokenItems(screen).nth(0).getByRole("figure");
+    await expect.element(figures.nth(0)).toHaveAccessibleName("sombre");
+    expect(figures.elements()).toHaveLength(1);
+  });
+
+  it("après un rejet, montre la dernière valeur Figma rejetée, sans lien", async () => {
+    const screen = await renderProjectTokens(
+      reading({
+        modes: [],
+        tokens: [
+          makeToken({
+            figma: { ...DIVERGED_STATE, rejectedValue: { kind: "single", value: NIGHT_BLUE } },
+          }),
+        ],
+      }),
+    );
+
+    const item = tokenItems(screen).nth(0);
+    await expect
+      .element(item.getByRole("figure", { name: "Dernière valeur Figma rejetée" }))
+      .toHaveTextContent(JSON.stringify(NIGHT_BLUE));
+    expect(item.getByRole("link").elements()).toHaveLength(0);
+  });
+
+  it("montre la dernière valeur rejetée mode par mode", async () => {
+    const screen = await renderProjectTokens(
+      reading({
+        modes: ["clair"],
+        tokens: [
+          makeToken({
+            figma: {
+              ...DIVERGED_STATE,
+              rejectedValue: { kind: "by_mode", values: { clair: NIGHT_BLUE } },
+            },
+          }),
+        ],
+      }),
+    );
+
+    const item = tokenItems(screen).nth(0);
+    await expect.element(item.getByText("Dernière valeur Figma rejetée :")).toBeVisible();
+    await expect
+      .element(item.getByRole("figure", { name: "clair" }))
+      .toHaveTextContent(JSON.stringify(NIGHT_BLUE));
+  });
+
+  it("montre la proposition en attente plutôt qu'une valeur rejetée plus ancienne", async () => {
+    const screen = await renderProjectTokens(
+      reading({
+        modes: [],
+        tokens: [
+          makeToken({
+            figma: {
+              ...DIVERGED_STATE,
+              proposal: makeFigmaProposal({ kind: "single", value: NIGHT_BLUE }),
+              rejectedValue: { kind: "single", value: PRIMARY_BLUE },
+            },
+          }),
+        ],
+      }),
+    );
+
+    const item = tokenItems(screen).nth(0);
+    await expect.element(item.getByRole("figure", { name: "Valeur Figma" })).toBeVisible();
+    expect(item.getByText(/rejetée/).elements()).toHaveLength(0);
+  });
+
+  it("sans proposition ni valeur rejetée, ne montre que l'état", async () => {
+    const screen = await renderProjectTokens(
+      reading({ modes: [], tokens: [makeToken({ figma: DIVERGED_STATE })] }),
+    );
+
+    const item = tokenItems(screen).nth(0);
+    await expect.element(item.getByText("Figma : Divergent (il y a 3 jours)")).toBeVisible();
+    expect(item.getByRole("figure").elements()).toHaveLength(0);
+    expect(item.getByRole("link").elements()).toHaveLength(0);
+    expect(item.getByText(/inconnue/).elements()).toHaveLength(0);
+  });
+
+  it("un signal tokens retire la valeur Figma d'une proposition relue ailleurs", async () => {
+    const events = makeProjectEvents();
+    const { state, readTokens } = changingTokens([
+      makeToken({
+        figma: {
+          ...DIVERGED_STATE,
+          proposal: makeFigmaProposal({ kind: "single", value: NIGHT_BLUE }),
+        },
+      }),
+    ]);
+    const screen = await renderLive(readTokens, events);
+    await expect.element(tokenItems(screen).nth(0).getByRole("figure")).toBeVisible();
+
+    state.tokens = [
+      makeToken({
+        figma: { ...DIVERGED_STATE, rejectedValue: { kind: "single", value: NIGHT_BLUE } },
+      }),
+    ];
+    events.emit(PROJECT_ID, ["proposals", "history", "tokens"]);
+
+    await expect
+      .element(
+        tokenItems(screen).nth(0).getByRole("figure", { name: "Dernière valeur Figma rejetée" }),
+      )
       .toBeVisible();
   });
 });

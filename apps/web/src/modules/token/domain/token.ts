@@ -19,7 +19,18 @@ const FIGMA_STATES = ["synced", "diverged", "missing_in_figma", "duplicate_in_fi
 
 export type FigmaState = (typeof FIGMA_STATES)[number] | "unknown";
 
-export type TokenFigmaState = { readonly state: FigmaState; readonly declaredAt: Date };
+export type FigmaProposal = {
+  readonly id: string;
+  readonly batchId: string;
+  readonly value: TokenValue;
+};
+
+export type TokenFigmaState = {
+  readonly state: FigmaState;
+  readonly declaredAt: Date;
+  readonly proposal?: FigmaProposal;
+  readonly rejectedValue?: TokenValue;
+};
 
 export type Token = {
   readonly id: string;

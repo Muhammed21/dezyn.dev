@@ -227,7 +227,7 @@ const ProposalItem = ({
   });
   const decide = (decision: Decision) => () => mutate({ proposalId: proposal.id, decision });
   return (
-    <li>
+    <li id={`proposition-${proposal.id}`}>
       <p>{proposal.name}</p>
       <p>{KIND_LABELS[proposal.kind]}</p>
       <p>{STATUS_LABELS[proposal.status]}</p>
