@@ -269,7 +269,7 @@ describe("valider une modification fait de la valeur proposée la valeur validé
         ),
       ).toMatchObject({
         before: { name: "couleur.fond.primaire", $type: "color", $value: PRIMARY_BLUE },
-        after: { proposalId: proposals[0].id, token: proposed },
+        after: { proposalId: proposals[0].id, kind: "update", token: proposed },
       });
     }));
 

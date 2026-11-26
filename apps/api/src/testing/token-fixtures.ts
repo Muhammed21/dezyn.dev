@@ -39,6 +39,20 @@ export const addToken = (
     body: JSON.stringify(token),
   });
 
+export const DELETION_CORRELATION_ID = "suppression-du-token-1";
+
+export const deleteToken = (
+  app: App,
+  { accessToken, projectId, name }: { accessToken: string; projectId: string; name: string },
+) =>
+  app.request(`${BASE_URL}/v1/projects/${projectId}/tokens/${encodeURIComponent(name)}`, {
+    method: "DELETE",
+    headers: {
+      authorization: `Bearer ${accessToken}`,
+      "x-correlation-id": DELETION_CORRELATION_ID,
+    },
+  });
+
 export const historyOf = async (
   app: App,
   { accessToken, projectId }: { accessToken: string; projectId: string },

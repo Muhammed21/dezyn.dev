@@ -1,23 +1,25 @@
 import type { ProjectLock } from "#modules/project/contracts/project-lock.ts";
 import type { ProjectSignals } from "#modules/project/contracts/project-signals.ts";
 import type {
+  DecidedStorageAlert,
   StorageAlertDecision,
   StorageAlertSender,
 } from "#modules/space/contracts/storage-alert.ts";
 import { type ComparedToken, duplicatesOf } from "#modules/token/contracts/duplicates.ts";
-import {
-  type ComparedDefinition,
-  sameDefinition,
-  type TokenDefinition,
+import type {
+  ComparedDefinition,
+  TokenDefinition,
 } from "#modules/token/contracts/token-definition.ts";
 import {
   type CheckTokens,
+  type CitationReader,
   groupConflict,
   type TokenCheck,
 } from "#modules/token/contracts/token-issues.ts";
 import { err, ok, type Result } from "@repo/result";
 
 import { batchExpirySignal, type DesignationRefusal } from "../domain/proposal-batch.ts";
+import { plannedChange, type RequestedChange } from "../domain/proposal-change.ts";
 import {
   comparedTokens,
   type Proposal,
@@ -63,6 +65,7 @@ export type ProposalUnit = {
   readonly project: ProjectLock;
   readonly checkTokens: CheckTokens;
   readonly validatedTokensOf: ValidatedTokensOf;
+  readonly citations: CitationReader;
 };
 
 export interface ProposalUnitOfWork {
@@ -92,16 +95,17 @@ export type ProposedTokens = Writer & {
   readonly batchId?: string;
 };
 
-export const proposeTokens = async (
+type ProposedChanges = Writer & {
+  readonly changes: readonly RequestedChange[];
+  readonly validated: readonly ValidatedDefinition[];
+  readonly createdAt: Date;
+  readonly batchId?: string;
+  readonly newId: () => string;
+};
+
+export const proposeChanges = async (
   store: ProposalStore,
-  {
-    tokens,
-    validated,
-    createdAt,
-    newId,
-    batchId,
-    ...writer
-  }: ProposedTokens & { readonly newId: () => string },
+  { changes, validated, createdAt, newId, batchId, ...writer }: ProposedChanges,
 ): Promise<Result<Written, DesignationRefusal>> => {
   const designated =
     batchId === undefined
@@ -112,28 +116,23 @@ export const proposeTokens = async (
   }
   const pending = await store.pendingOf(
     writer.projectId,
-    tokens.map(({ name }) => name),
+    changes.map(({ token }) => token.name),
   );
-  const written = tokens.map((token) => {
-    const current = validated.find(({ name }) => name === token.name);
-    const waiting = pending.find(({ name }) => name === token.name);
-    const sameAsWaiting = waiting !== undefined && sameDefinition(waiting.token, token);
-    const sameAsValidated = current !== undefined && sameDefinition(current, token);
-    return {
-      token,
-      current,
-      replaces: sameAsWaiting ? undefined : waiting,
-      unchanged: sameAsWaiting || sameAsValidated,
-    };
-  });
-  const replaced = written.flatMap(({ replaces }): readonly Replaced[] =>
+  const planned = changes.map((change) =>
+    plannedChange({
+      change,
+      validated: validated.find(({ name }) => name === change.token.name),
+      waiting: pending.find(({ name }) => name === change.token.name),
+    }),
+  );
+  const replaced = planned.flatMap(({ replaces }): readonly Replaced[] =>
     replaces === undefined
       ? []
       : [{ id: replaces.id, name: replaces.name, batchId: replaces.batchId }],
   );
   await store.replace(replaced.map(({ id }) => id));
-  const unchanged = written.filter((entry) => entry.unchanged).map(({ token }) => token.name);
-  const changed = written.filter((entry) => !entry.unchanged);
+  const unchanged = planned.filter((entry) => entry.unchanged).map(({ token }) => token.name);
+  const changed = planned.filter((entry) => !entry.unchanged);
   const live = designated?.value ?? (await liveBatchOf(store, { writer, now: createdAt }));
   if (changed.length === 0) {
     return ok({ batch: live ?? null, proposals: [], unchanged, replaced });
@@ -149,11 +148,11 @@ export const proposeTokens = async (
       lastWrittenAt: createdAt,
     }));
   await store.touchBatch(batch.id, createdAt);
-  const proposals = changed.map(({ token, current }): Proposal => ({
+  const proposals = changed.map(({ token, kind }): Proposal => ({
     id: newId(),
     batchId: batch.id,
     name: token.name,
-    kind: current === undefined ? "create" : "update",
+    kind,
     token,
     status: "proposed",
     createdAt,
@@ -161,6 +160,50 @@ export const proposeTokens = async (
   await store.propose(writer.projectId, proposals);
   return ok({ batch, proposals, unchanged, replaced });
 };
+
+export const proposeTokens = (
+  store: ProposalStore,
+  { tokens, ...proposed }: ProposedTokens & { readonly newId: () => string },
+): Promise<Result<Written, DesignationRefusal>> =>
+  proposeChanges(store, {
+    ...proposed,
+    changes: tokens.map((token) => ({ kind: "write", token })),
+  });
+
+type WrittenOutcome<W extends Written> = {
+  readonly written: W;
+  readonly alert: DecidedStorageAlert | undefined;
+  readonly createdAt: Date;
+};
+
+export const announceWritten =
+  ({
+    sendStorageAlert,
+    signals,
+    projectId,
+  }: {
+    readonly sendStorageAlert: StorageAlertSender;
+    readonly signals: ProjectSignals;
+    readonly projectId: string;
+  }) =>
+  async <W extends Written, E>(outcome: Result<WrittenOutcome<W>, E>): Promise<Result<W, E>> => {
+    if (!outcome.ok) {
+      return outcome;
+    }
+    if (outcome.value.alert !== undefined) {
+      await sendStorageAlert(outcome.value.alert);
+    }
+    const { proposals, replaced, batch } = outcome.value.written;
+    if (proposals.length > 0 || replaced.length > 0) {
+      await signals.changed({ projectId, topics: ["proposals"] });
+    }
+    if (proposals.length > 0 && batch !== null) {
+      await signals.signalAt(
+        batchExpirySignal({ projectId, batchId: batch.id, lastWrittenAt: outcome.value.createdAt }),
+      );
+    }
+    return ok(outcome.value.written);
+  };
 
 const nameConflicts = (
   tokens: readonly TokenDefinition[],
@@ -241,24 +284,8 @@ export const writeTokens =
         });
       },
     );
-    if (!outcome.ok) {
-      return outcome;
-    }
-    if (outcome.value.alert !== undefined) {
-      await sendStorageAlert(outcome.value.alert);
-    }
-    const { proposals, replaced, batch } = outcome.value.written;
-    if (proposals.length > 0 || replaced.length > 0) {
-      await signals.changed({ projectId: writer.projectId, topics: ["proposals"] });
-    }
-    if (proposals.length > 0 && batch !== null) {
-      await signals.signalAt(
-        batchExpirySignal({
-          projectId: writer.projectId,
-          batchId: batch.id,
-          lastWrittenAt: outcome.value.createdAt,
-        }),
-      );
-    }
-    return ok(outcome.value.written);
+    return announceWritten({ sendStorageAlert, signals, projectId: writer.projectId })<
+      WrittenWithDuplicates,
+      UncheckedTokens | DesignationRefusal
+    >(outcome);
   };

@@ -19,7 +19,7 @@ import type {
   ValidatedBatch,
 } from "../domain/proposal.ts";
 import { type AliasSources, type ReadTokens, useAliasSources } from "./alias-sources.ts";
-import { BeforeAfter } from "./before-after.tsx";
+import { BeforeAfter, Deletion } from "./before-after.tsx";
 import { useProjectModes } from "./project-modes.ts";
 import { useProposalSignals } from "./proposal-signals.ts";
 
@@ -76,6 +76,7 @@ const STATE_LABELS: Readonly<Record<BatchState, string>> = {
 const KIND_LABELS: Readonly<Record<ProposalKind, string>> = {
   create: "Création",
   update: "Modification",
+  delete: "Suppression",
   unknown: "nature inconnue",
 };
 
@@ -231,12 +232,20 @@ const ProposalItem = ({
       <p>{proposal.name}</p>
       <p>{KIND_LABELS[proposal.kind]}</p>
       <p>{STATUS_LABELS[proposal.status]}</p>
-      <BeforeAfter
-        validated={proposal.validated}
-        proposed={proposal.proposed}
-        aliases={aliases}
-        projectModes={projectModes}
-      />
+      {proposal.kind === "delete" ? (
+        <Deletion
+          token={proposal.validated ?? proposal.proposed}
+          aliases={aliases}
+          projectModes={projectModes}
+        />
+      ) : (
+        <BeforeAfter
+          validated={proposal.validated}
+          proposed={proposal.proposed}
+          aliases={aliases}
+          projectModes={projectModes}
+        />
+      )}
       {proposal.duplicates.length === 0 ? null : (
         <p>Même valeur que {proposal.duplicates.join(", ")}</p>
       )}

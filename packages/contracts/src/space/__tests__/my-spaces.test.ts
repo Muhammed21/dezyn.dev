@@ -71,6 +71,7 @@ describe("sortie de la liste de mes espaces", () => {
                         "member.manage",
                         "project.setFigmaFile",
                         "token.create",
+                        "token.delete",
                         "token.declareFigmaState",
                         "proposal.review",
                         "subscription.checkout",

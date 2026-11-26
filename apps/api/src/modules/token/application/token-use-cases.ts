@@ -2,12 +2,14 @@ import type { addToken } from "./add-token.ts";
 import type { checkContrast } from "./check-contrast.ts";
 import type { checkTokens } from "./check-tokens.ts";
 import type { declareFigmaStates } from "./declare-figma-states.ts";
+import type { deleteToken } from "./delete-token.ts";
 import type { exportTokens } from "./export-tokens.ts";
 import type { importTokens } from "./import-tokens.ts";
 import type { readProjectTokens, readTokens } from "./read-tokens.ts";
 
 export type TokenUseCases = {
   readonly addToken: ReturnType<typeof addToken>;
+  readonly deleteToken: ReturnType<typeof deleteToken>;
   readonly readTokens: ReturnType<typeof readTokens>;
   readonly checkTokens: ReturnType<typeof checkTokens>;
   readonly checkContrast: ReturnType<typeof checkContrast>;

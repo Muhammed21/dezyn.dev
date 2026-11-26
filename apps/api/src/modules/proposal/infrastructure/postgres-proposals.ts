@@ -7,7 +7,11 @@ import type { ProjectLock } from "#modules/project/contracts/project-lock.ts";
 import type { StorageMeter } from "#modules/project/contracts/storage-meter.ts";
 import type { StorageAlertDecision } from "#modules/space/contracts/storage-alert.ts";
 import { TokenDefinitionInput } from "#modules/token/contracts/token-definition.ts";
-import type { CheckTokens, ValidatedTokenWriter } from "#modules/token/contracts/token-issues.ts";
+import type {
+  CheckTokens,
+  CitationReader,
+  ValidatedTokenWriter,
+} from "#modules/token/contracts/token-issues.ts";
 import { schema } from "@repo/db";
 import type { Err, Result } from "@repo/result";
 
@@ -23,7 +27,12 @@ import type {
   ValidatedTokensOf,
   Writer,
 } from "../application/write-tokens.ts";
-import type { Proposal, ProposalBatch, RecipeBatch } from "../domain/proposal.ts";
+import {
+  PROPOSAL_KINDS,
+  type Proposal,
+  type ProposalBatch,
+  type RecipeBatch,
+} from "../domain/proposal.ts";
 
 const { proposal, proposalBatch } = schema;
 
@@ -209,6 +218,7 @@ export const postgresProposalUnitOfWork = ({
   projectLockOn,
   checkTokensOn,
   validatedTokensOn,
+  citationsOn,
   storageMeterOn,
   storageAlertOn,
 }: {
@@ -216,6 +226,7 @@ export const postgresProposalUnitOfWork = ({
   readonly projectLockOn: (tx: PostgresTransaction) => ProjectLock;
   readonly checkTokensOn: (tx: PostgresTransaction) => CheckTokens;
   readonly validatedTokensOn: (tx: PostgresTransaction) => ValidatedTokensOf;
+  readonly citationsOn: (tx: PostgresTransaction) => CitationReader;
   readonly storageMeterOn: (tx: PostgresTransaction) => StorageMeter;
   readonly storageAlertOn: (tx: PostgresTransaction) => StorageAlertDecision;
 }): ProposalUnitOfWork => ({
@@ -227,6 +238,7 @@ export const postgresProposalUnitOfWork = ({
         project: projectLockOn(tx),
         checkTokens: checkTokensOn(tx),
         validatedTokensOf: validatedTokensOn(tx),
+        citations: citationsOn(tx),
       }),
     ),
 });
@@ -239,7 +251,7 @@ const ProposalRow = z.object({
   id: z.string(),
   batchId: z.string(),
   tokenName: z.string(),
-  kind: z.enum(["create", "update"]),
+  kind: z.enum(PROPOSAL_KINDS),
   payload: TokenDefinitionInput,
   status: ProposalStatus,
   createdAt: z.date(),

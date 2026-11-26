@@ -15,17 +15,19 @@ const makeProposal = ({
   value = PRIMARY_BLUE,
   modes,
   status = "proposed",
+  kind = "create",
 }: {
   readonly id: string;
   readonly name?: string;
   readonly value?: ColorValue;
   readonly modes?: Readonly<Record<string, ColorValue>>;
   readonly status?: Proposal["status"];
+  readonly kind?: Proposal["kind"];
 }): Proposal => ({
   id,
   batchId: "lot",
   name,
-  kind: "create",
+  kind,
   token:
     modes === undefined ? { name, $type: "color", $value: value } : { name, $type: "color", modes },
   status,
@@ -182,5 +184,38 @@ describe("un token se valide après les tokens du lot qu'il référence", () => 
     });
 
     expect("toValidate" in plan && idsOf(plan.toValidate)).toEqual(["a", "b"]);
+  });
+});
+
+describe("les modifications d'un lot se valident avant ses suppressions (ADR 0026 §2)", () => {
+  it("une suppression écrite avant la modification qui retire l'alias se valide après elle", () => {
+    const plan = planBatchValidation({
+      batchState: "closed",
+      proposals: [
+        makeProposal({ id: "suppression", name: "couleur.bleu", kind: "delete" }),
+        makeProposal({ id: "fond", name: "couleur.fond", kind: "update" }),
+        makeProposal({ id: "neuve", name: "couleur.neuve", kind: "create" }),
+      ],
+      rejected: [],
+    });
+
+    expect("toValidate" in plan && idsOf(plan.toValidate)).toEqual([
+      "fond",
+      "neuve",
+      "suppression",
+    ]);
+  });
+
+  it("une suppression rejetée n'est pas validée", () => {
+    const plan = planBatchValidation({
+      batchState: "closed",
+      proposals: [makeProposal({ id: "suppression", kind: "delete" })],
+      rejected: ["suppression"],
+    });
+
+    expect(plan).toEqual({
+      toValidate: [],
+      toReject: [expect.objectContaining({ id: "suppression" })],
+    });
   });
 });

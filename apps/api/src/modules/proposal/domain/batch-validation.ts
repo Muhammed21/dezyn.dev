@@ -24,11 +24,15 @@ export const planBatchValidation = ({
     return { refusal: "unknown_propositions", ids: unknown };
   }
   const proposed = proposals.filter(({ status }) => status === "proposed");
+  const validated = proposed.filter(({ id }) => !rejected.includes(id));
   return {
-    toValidate: referencesFirst(
-      proposed.filter(({ id }) => !rejected.includes(id)),
-      ({ token }) => token,
-    ),
+    toValidate: [
+      ...referencesFirst(
+        validated.filter(({ kind }) => kind !== "delete"),
+        ({ token }) => token,
+      ),
+      ...validated.filter(({ kind }) => kind === "delete"),
+    ],
     toReject: proposed.filter(({ id }) => rejected.includes(id)),
   };
 };

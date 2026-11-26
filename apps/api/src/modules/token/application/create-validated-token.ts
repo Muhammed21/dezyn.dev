@@ -7,6 +7,7 @@ import type {
 } from "../domain/token-check.ts";
 import { groupConflict } from "../domain/token-name.ts";
 import {
+  type CitationReader,
   checkedValues,
   type CreatedToken,
   type ModeReader,
@@ -22,6 +23,7 @@ type Planned<Write extends ValidatedWrite> = {
   readonly known: readonly ProjectToken[];
   readonly created: readonly (CreatedToken & { readonly write: Write })[];
   readonly replaced: readonly ReplacedToken[];
+  readonly deleted: readonly Write[];
   readonly failed?: FailedWrite<Write>;
 };
 
@@ -59,15 +61,37 @@ const checkedWrite = (
   return { values: checked.value.map(modeValueOf) };
 };
 
+const citedDeletion = async <Write extends ValidatedWrite>(
+  citations: CitationReader,
+  { projectId, deleted }: { readonly projectId: string; readonly deleted: readonly Write[] },
+): Promise<FailedWrite<Write> | undefined> => {
+  const found = await citations.citationsOf({
+    projectId,
+    names: deleted.map(({ token }) => token.name),
+  });
+  const cited = deleted.find(({ token }) => found.some(({ cited: name }) => name === token.name));
+  return cited === undefined
+    ? undefined
+    : {
+        write: cited,
+        failure: {
+          code: "cited_token",
+          citations: found.filter(({ cited: name }) => name === cited.token.name),
+        },
+      };
+};
+
 export const validatedTokenWriter = ({
   modes,
   projectTokens,
   tokens,
+  citations,
   newId,
 }: {
   readonly modes: ModeReader;
   readonly projectTokens: ProjectTokenReader;
   readonly tokens: TokenWriter;
+  readonly citations: CitationReader;
   readonly newId: () => string;
 }): ValidatedTokenWriter => ({
   write: async ({ projectId, writes, pending, createdAt }) => {
@@ -81,11 +105,14 @@ export const validatedTokenWriter = ({
         if (plan.failed !== undefined) {
           return plan;
         }
+        if (write.kind === "delete") {
+          return { ...plan, deleted: [...plan.deleted, write] };
+        }
         const checked = checkedWrite(write, {
           known: plan.known,
           projectModes,
           pending,
-          writtenTogether: writes.map(({ token }) => token),
+          writtenTogether: writes.filter(({ kind }) => kind !== "delete").map(({ token }) => token),
         });
         if ("failure" in checked) {
           return { ...plan, failed: { write, failure: checked.failure } };
@@ -112,7 +139,7 @@ export const validatedTokenWriter = ({
           created: [...plan.created, { write, token: created, values: checked.values }],
         };
       },
-      { known, created: [], replaced: [] },
+      { known, created: [], replaced: [], deleted: [] },
     );
     if (planned.failed !== undefined) {
       return planned.failed;
@@ -122,6 +149,11 @@ export const validatedTokenWriter = ({
       return { write: taken.write, failure: { code: "name_taken" } };
     }
     await tokens.replaceAll(planned.replaced);
+    const cited = await citedDeletion(citations, { projectId, deleted: planned.deleted });
+    if (cited !== undefined) {
+      return cited;
+    }
+    await tokens.deleteAll({ projectId, names: planned.deleted.map(({ token }) => token.name) });
     return undefined;
   },
 });

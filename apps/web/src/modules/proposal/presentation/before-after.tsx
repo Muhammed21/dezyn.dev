@@ -215,3 +215,32 @@ export const BeforeAfter = ({
     </ValueBeforeAfter>
   );
 };
+
+const DELETED_TOKEN = <p style={{ margin: 0 }}>Token supprimé</p>;
+
+export const Deletion = ({
+  token,
+  aliases,
+  projectModes,
+}: {
+  readonly token: TokenValue;
+  readonly aliases: AliasSources;
+  readonly projectModes: readonly string[];
+}) => {
+  const rows = modeRows({ validated: token, proposed: token, projectModes });
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+      {DELETED_TOKEN}
+      {rows === undefined ? (
+        <ValueBeforeAfter validated={token} proposed={undefined} aliases={aliases} />
+      ) : (
+        rows.map(({ mode, validated }) => (
+          <div key={mode} role="group" aria-label={mode}>
+            <p style={{ margin: 0 }}>{mode}</p>
+            <ValueBeforeAfter validated={validated} proposed={undefined} aliases={aliases} />
+          </div>
+        ))
+      )}
+    </div>
+  );
+};

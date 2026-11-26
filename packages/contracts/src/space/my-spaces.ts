@@ -14,6 +14,7 @@ export const ACTIONS = [
   "member.manage",
   "project.setFigmaFile",
   "token.create",
+  "token.delete",
   "token.declareFigmaState",
   "proposal.review",
   "subscription.checkout",

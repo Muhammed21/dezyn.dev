@@ -11,7 +11,9 @@ import { err, ok, type Result } from "@repo/result";
 
 import { groupConflict } from "../domain/token-name.ts";
 import type { Token, TokenDefinition } from "../domain/token.ts";
+import type { ValidatedTokenReader } from "./read-tokens.ts";
 import {
+  type CitationReader,
   checkedValues,
   type InvalidModes,
   type InvalidReferences,
@@ -38,6 +40,8 @@ export interface TokenUnitOfWork {
       readonly modes: ModeReader;
       readonly projectTokens: ProjectTokenReader;
       readonly tokens: TokenWriter;
+      readonly validatedTokens: ValidatedTokenReader;
+      readonly citations: CitationReader;
       readonly history: HistoryWriter;
       readonly proposals: PendingProposals;
       readonly storageAlert: StorageAlertDecision;

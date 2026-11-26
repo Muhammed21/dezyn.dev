@@ -42,6 +42,8 @@ const ACTION_LABELS: ReadonlyMap<string, string> = new Map([
   ["mcp.set_project_figma_file", "Fichier Figma changé par l'IA"],
   ["mcp.check_contrast", "Contraste vérifié par l'IA"],
   ["mcp.export_tokens", "Tokens exportés par l'IA"],
+  ["token.deleted", "Token supprimé"],
+  ["mcp.delete_tokens", "Suppression proposée par l'IA"],
 ]);
 
 const DATE_TIME = new Intl.DateTimeFormat("fr-FR", { dateStyle: "long", timeStyle: "short" });

@@ -94,7 +94,7 @@ describe("le contrat de sortie d'une écriture de l'IA reste ouvert (ADR 0023)",
         proposals: {
           items: {
             properties: {
-              kind: { anyOf: [{ enum: ["create", "update"] }, { type: "string" }] },
+              kind: { anyOf: [{ enum: ["create", "update", "delete"] }, { type: "string" }] },
               status: { anyOf: [{ enum: ["proposed"] }, { type: "string" }] },
             },
           },

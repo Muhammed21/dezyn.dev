@@ -186,7 +186,7 @@ describe("la lecture des tokens rend aussi les propositions en attente, sur dema
         proposals: {
           items: {
             properties: {
-              kind: { anyOf: [{ enum: ["create", "update"] }, { type: "string" }] },
+              kind: { anyOf: [{ enum: ["create", "update", "delete"] }, { type: "string" }] },
               status: { anyOf: [{ enum: ["proposed"] }, { type: "string" }] },
               token: {
                 properties: {

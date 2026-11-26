@@ -60,6 +60,7 @@ const ELEVATED_PRIVILEGE_MIGRATIONS: Readonly<Record<string, readonly string[]>>
   "0032_project_figma_file.sql": [
     `GRANT UPDATE ("figma_file_url", "figma_file_key") ON "project" TO app`,
   ],
+  "0035_token_deletion.sql": [`GRANT DELETE ON "token", "token_figma_state" TO app`],
 };
 
 const NON_ADDITIVE_MIGRATIONS = [

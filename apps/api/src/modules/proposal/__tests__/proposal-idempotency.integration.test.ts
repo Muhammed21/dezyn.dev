@@ -464,6 +464,7 @@ describe("write_tokens relancé avec la même clé d'idempotence rejoue son prem
       expect(keyed).toEqual([
         "close_proposal_batch",
         "declare_figma_states",
+        "delete_tokens",
         "open_proposal_batch",
         "set_project_figma_file",
         "write_tokens",

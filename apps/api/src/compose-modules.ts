@@ -34,6 +34,7 @@ import {
 } from "#modules/subscription/subscription-module.ts";
 import {
   checkTokensOn,
+  citationsOn,
   figmaStateOn,
   tokenModule,
   validatedTokensOn,
@@ -129,6 +130,7 @@ export const composeModules = ({
     projectLockOn,
     checkTokensOn,
     validatedTokensOn,
+    citationsOn,
     validatedTokensOf: async (projectId) => (await tokens.readTokens(projectId)).tokens,
     historyWriterOn: writerOn,
     validatedTokenWriterOn: (tx) => validatedTokenWriterOn(tx, storageMeterOn(tx)),

@@ -411,7 +411,7 @@ describe("chaque relecture entre dans l'historique avec l'éditeur (ADR 0012 §7
         author: { kind: "member", userId, name: ADA.name, membership: "active" },
         clientId: null,
         before: null,
-        after: { proposalId: proposals[0].id, token },
+        after: { proposalId: proposals[0].id, kind: "create", token },
         occurredAt: expect.any(String),
         correlationId: REVIEW_CORRELATION_ID,
       });
@@ -435,7 +435,7 @@ describe("chaque relecture entre dans l'historique avec l'éditeur (ADR 0012 §7
 
       expect((await historyOf(app, { accessToken, projectId }))[0]).toMatchObject({
         action: "proposal.rejected",
-        after: { proposalId: proposals[0].id, token },
+        after: { proposalId: proposals[0].id, kind: "create", token },
       });
     }));
 
