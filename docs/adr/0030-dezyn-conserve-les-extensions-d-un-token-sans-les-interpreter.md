@@ -1,6 +1,6 @@
 # 0030 — dezyn conserve les extensions d'un token sans les interpréter
 
-- Statut : Accepté
+- Statut : Accepté — §1 et §2 (la clé `dev.dezyn`, validée et interprétée par dezyn) amendés par [0061](0061-dezyn-calcule-le-contraste-wcag-des-paires-declarees-dans-les-tokens.md)
 - Date : 2026-10-20
 - Décideurs : Muhammed
 
