@@ -36,6 +36,11 @@ if ended=$(ended_team_spaces "$(neon_role_url "$project" "$branch" app)"); then
 else
   check "aucun espace en Team avec un abonnement terminé" "lecture impossible" ""
 fi
+if carriers=$(dezyn_extension_carriers "$(neon_role_url "$project" "$branch" app)"); then
+  check "aucun token ni proposition ne porte l'extension dev.dezyn" "$(tr '\n' ' ' <<< "$carriers" | sed 's/ *$//')" ""
+else
+  check "aucun token ni proposition ne porte l'extension dev.dezyn" "lecture impossible" ""
+fi
 
 versions_in_use=$(secret_versions_in_use "$(neon_role_url "$project" "$PRODUCTION_BRANCH" app)")
 

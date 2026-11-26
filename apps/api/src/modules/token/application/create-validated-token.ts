@@ -1,4 +1,4 @@
-import type { ProjectToken } from "../domain/reference.ts";
+import type { ProjectToken, WrittenToken } from "../domain/reference.ts";
 import type {
   FailedWrite,
   ValidatedTokenFailure,
@@ -31,10 +31,12 @@ const checkedWrite = (
     known,
     projectModes,
     pending,
+    writtenTogether,
   }: {
     readonly known: readonly ProjectToken[];
     readonly projectModes: readonly ProjectMode[];
-    readonly pending: readonly { readonly name: string; readonly $type: string }[];
+    readonly pending: readonly WrittenToken[];
+    readonly writtenTogether: readonly WrittenToken[];
   },
 ): { readonly failure: ValidatedTokenFailure } | { readonly values: readonly ModeValue[] } => {
   const other =
@@ -47,7 +49,7 @@ const checkedWrite = (
   if (other !== undefined) {
     return { failure: { code: "name_conflict", other } };
   }
-  const checked = checkedValues(token, { projectModes, tokens: known, pending });
+  const checked = checkedValues(token, { projectModes, tokens: known, pending, writtenTogether });
   if (!checked.ok) {
     return { failure: checked.error };
   }
@@ -79,7 +81,12 @@ export const validatedTokenWriter = ({
         if (plan.failed !== undefined) {
           return plan;
         }
-        const checked = checkedWrite(write, { known: plan.known, projectModes, pending });
+        const checked = checkedWrite(write, {
+          known: plan.known,
+          projectModes,
+          pending,
+          writtenTogether: writes.map(({ token }) => token),
+        });
         if ("failure" in checked) {
           return { ...plan, failed: { write, failure: checked.failure } };
         }

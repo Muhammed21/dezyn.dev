@@ -6,7 +6,12 @@ export type TokenCheckFailure =
   | { readonly code: "invalid_modes"; readonly refusals: readonly ModeRefusal[] }
   | {
       readonly code: "invalid_references";
-      readonly refusals: readonly { readonly mode?: string; readonly refusal: ReferenceRefusal }[];
+      readonly refusals: readonly {
+        readonly mode?: string;
+        readonly field?: string;
+        readonly contrastOn?: number;
+        readonly refusal: ReferenceRefusal;
+      }[];
     }
   | { readonly code: "type_changed" }
   | { readonly code: "name_conflict"; readonly other: string }

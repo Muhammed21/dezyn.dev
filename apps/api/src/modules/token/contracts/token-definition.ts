@@ -1,6 +1,11 @@
 import { z } from "zod";
 
 import { type ColorRefusal, colorRefusal, type SrgbColor } from "../domain/color.ts";
+import {
+  type ContrastPairRefusal,
+  contrastPairRefusals,
+  DEZYN_EXTENSION,
+} from "../domain/contrast-pairs.ts";
 import { type ExtensionsRefusal, extensionsRefusals } from "../domain/extensions.ts";
 import { type Gradient, type GradientRefusal, gradientRefusals } from "../domain/gradient.ts";
 import { pendingTypeOf } from "../domain/pending-type.ts";
@@ -125,8 +130,32 @@ const extensionIssueOf = (refusal: ExtensionsRefusal): ValueIssue =>
     ? { path: ["$extensions", refusal.key], message: EXTENSION_KEY_MESSAGE }
     : { path: ["$extensions"], message: "Extensions limitées à 16 Ko sérialisés" };
 
-const extensionIssues = ({ $extensions }: TokenDefinition): readonly ValueIssue[] =>
-  $extensions === undefined ? [] : extensionsRefusals($extensions).map(extensionIssueOf);
+const CONTRAST_PAIR_MESSAGES: Readonly<Record<ContrastPairRefusal["refusal"], string>> = {
+  malformed_extension: "Objet attendu sous dev.dezyn",
+  unknown_property: "Seul contrastOn est défini sous dev.dezyn",
+  unknown_entry_property: "Propriété inconnue dans une paire de contraste",
+  malformed_contrast_on: "Liste de paires attendue",
+  malformed_entry: "Paire attendue en référence {nom.du.token} ou en objet { on, usage }",
+  malformed_reference: "Référence attendue au format {nom.du.token}",
+  unknown_usage: "Usage attendu : text, large-text ou ui",
+  not_a_color: "Seul un token de couleur déclare des paires de contraste",
+  self_reference: "Une paire ne cite pas le token qui la déclare",
+  duplicate_background: "Fond déjà cité par une autre paire",
+};
+
+const contrastPairIssues = (token: TokenDefinition): readonly ValueIssue[] =>
+  contrastPairRefusals(token).map(({ path, refusal }) => ({
+    path: ["$extensions", DEZYN_EXTENSION, ...path],
+    message: CONTRAST_PAIR_MESSAGES[refusal],
+  }));
+
+const extensionIssues = (token: TokenDefinition): readonly ValueIssue[] =>
+  token.$extensions === undefined
+    ? []
+    : [
+        ...extensionsRefusals(token.$extensions).map(extensionIssueOf),
+        ...contrastPairIssues(token),
+      ];
 
 const sentValues = <Value>({
   $value,

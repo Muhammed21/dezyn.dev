@@ -178,6 +178,10 @@ ended_team_spaces() {
   DATABASE_URL=$1 node packages/db/scripts/ended-team-spaces.ts
 }
 
+dezyn_extension_carriers() {
+  DATABASE_URL=$1 node packages/db/scripts/dezyn-extension-carriers.ts
+}
+
 polar_webhook_status() {
   curl -s -o /dev/null -w '%{http_code}' --max-time 10 -X POST \
     -H 'content-type: application/json' --data '{}' "$POLAR_WEBHOOK_URL" || true

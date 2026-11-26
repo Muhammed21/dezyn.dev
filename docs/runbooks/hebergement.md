@@ -268,7 +268,7 @@ L'alerte se pose comme la précédente, avec le texte `fully refunded polar orde
 pnpm prod:check
 ```
 
-Chaque contrôle doit être `OK` : rôles de la branche `production`, aucun espace en Team avec un abonnement terminé, secrets GitHub et `DEPLOY_ENABLED`, secret du Worker, Polar (aucune var `POLAR_*` dans `wrangler.jsonc`, les quatre secrets ou aucun, et, quand ils sont posés, `/webhooks/polar` qui refuse un événement non signé), Hyperdrive connecté en `app` au compute de `production`, et `/health`, qui répond 503 quand la base ne répond pas ou que la clé de signature des jetons est inutilisable. Sans secret `POLAR_*`, `prod:check` signale que le paiement est fermé.
+Chaque contrôle doit être `OK` : rôles de la branche `production`, aucun espace en Team avec un abonnement terminé, aucun token ni proposition qui porte l'extension `dev.dezyn` (ADR 0061 §2), secrets GitHub et `DEPLOY_ENABLED`, secret du Worker, Polar (aucune var `POLAR_*` dans `wrangler.jsonc`, les quatre secrets ou aucun, et, quand ils sont posés, `/webhooks/polar` qui refuse un événement non signé), Hyperdrive connecté en `app` au compute de `production`, et `/health`, qui répond 503 quand la base ne répond pas ou que la clé de signature des jetons est inutilisable. Sans secret `POLAR_*`, `prod:check` signale que le paiement est fermé.
 
 ## 9. Opérations courantes
 
