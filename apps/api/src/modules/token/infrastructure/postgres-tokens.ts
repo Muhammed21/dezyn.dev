@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, notInArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 
@@ -26,12 +26,14 @@ import type {
 } from "../application/import-tokens.ts";
 import type { FigmaStateReader, ValidatedTokenReader } from "../application/read-tokens.ts";
 import type {
+  CitationReader,
   ModeReader,
   CreatedToken,
   ModeValue,
   ProjectTokenReader,
   TokenWriter,
 } from "../application/token-values.ts";
+import type { Citation, CitationVia } from "../domain/citations.ts";
 import type { ComparedDefinition } from "../domain/same-definition.ts";
 
 const {
@@ -45,7 +47,10 @@ const {
   tokenValueReference,
 } = schema;
 
-type Queryable = Pick<PostgresTransaction, "select" | "insert" | "update" | "delete">;
+type Queryable = Pick<
+  PostgresTransaction,
+  "select" | "selectDistinct" | "insert" | "update" | "delete"
+>;
 
 export const postgresProjectTokenReader = (orm: Queryable): ProjectTokenReader => ({
   tokensOf: (projectId) =>
@@ -185,6 +190,50 @@ const createAllOn =
     return undefined;
   };
 
+const deleteAllOn =
+  (tx: Queryable, meter: StorageMeter) =>
+  async ({
+    projectId,
+    names,
+  }: {
+    readonly projectId: string;
+    readonly names: readonly string[];
+  }) => {
+    if (names.length === 0) {
+      return;
+    }
+    const ids = (
+      await tx
+        .select({ id: token.id })
+        .from(token)
+        .where(and(eq(token.projectId, projectId), inArray(token.name, [...names])))
+        .for("update")
+    ).map(({ id }) => id);
+    if (ids.length === 0) {
+      return;
+    }
+    const removedReferences = await tx
+      .select({ row: tokenValueReference })
+      .from(tokenValueReference)
+      .innerJoin(tokenValue, eq(tokenValue.id, tokenValueReference.tokenValueId))
+      .where(inArray(tokenValue.tokenId, ids));
+    const removedValues = await tx
+      .delete(tokenValue)
+      .where(inArray(tokenValue.tokenId, ids))
+      .returning();
+    const removedStates = await tx
+      .delete(tokenFigmaState)
+      .where(inArray(tokenFigmaState.tokenId, ids))
+      .returning();
+    const removedTokens = await tx.delete(token).where(inArray(token.id, ids)).returning();
+    await meter.remove(projectId, [
+      ...removedTokens,
+      ...removedValues,
+      ...removedReferences.map(({ row }) => row),
+      ...removedStates,
+    ]);
+  };
+
 export const postgresTokenWriter = (
   tx: Queryable,
   { newId, meter }: { readonly newId: () => string; readonly meter: StorageMeter },
@@ -192,6 +241,7 @@ export const postgresTokenWriter = (
   const createAll = createAllOn(tx, { newId, meter });
   return {
     createAll,
+    deleteAll: deleteAllOn(tx, meter),
     create: async (added, values) =>
       (await createAll([{ token: added, values }])) === undefined ? "created" : "name_taken",
     replaceAll: async (replaced) => {
@@ -265,6 +315,61 @@ export const postgresTokenWriter = (
   };
 };
 
+const cited = alias(token, "cited");
+
+const citing = alias(token, "citing");
+
+type CitedTarget = { readonly projectId: string; readonly names: readonly string[] };
+
+type CitationSource = (orm: Queryable, target: CitedTarget) => Promise<readonly Citation[]>;
+
+const citationsOfSource =
+  (
+    via: CitationVia,
+    rowsOf: (
+      orm: Queryable,
+      target: CitedTarget,
+    ) => Promise<readonly { readonly cited: string; readonly citing: string }[]>,
+  ): CitationSource =>
+  async (orm, target) =>
+    (await rowsOf(orm, target)).map((row) => ({ ...row, via }));
+
+const citedBy = (projectId: string, names: readonly string[]) =>
+  and(
+    eq(cited.projectId, projectId),
+    inArray(cited.name, [...names]),
+    notInArray(citing.name, [...names]),
+  );
+
+const CITATION_SOURCES: readonly CitationSource[] = [
+  citationsOfSource("alias", (orm, { projectId, names }) =>
+    orm
+      .selectDistinct({ cited: cited.name, citing: citing.name })
+      .from(tokenValue)
+      .innerJoin(cited, eq(cited.id, tokenValue.referencedTokenId))
+      .innerJoin(citing, eq(citing.id, tokenValue.tokenId))
+      .where(citedBy(projectId, names)),
+  ),
+  citationsOfSource("field", (orm, { projectId, names }) =>
+    orm
+      .selectDistinct({ cited: cited.name, citing: citing.name })
+      .from(tokenValueReference)
+      .innerJoin(tokenValue, eq(tokenValue.id, tokenValueReference.tokenValueId))
+      .innerJoin(cited, eq(cited.id, tokenValueReference.referencedTokenId))
+      .innerJoin(citing, eq(citing.id, tokenValue.tokenId))
+      .where(citedBy(projectId, names)),
+  ),
+];
+
+export const postgresCitationReader = (orm: Queryable): CitationReader => ({
+  citationsOf: async (target) => {
+    if (target.names.length === 0) {
+      return [];
+    }
+    return (await Promise.all(CITATION_SOURCES.map((source) => source(orm, target)))).flat();
+  },
+});
+
 export const postgresTokenUnitOfWork = ({
   db,
   projectLockOn,
@@ -289,6 +394,8 @@ export const postgresTokenUnitOfWork = ({
         modes: postgresModeReader(tx),
         projectTokens: postgresProjectTokenReader(tx),
         tokens: postgresTokenWriter(tx, { newId, meter: storageMeterOn(tx) }),
+        validatedTokens: postgresValidatedTokenReader(tx),
+        citations: postgresCitationReader(tx),
         history: historyWriterOn(tx),
         proposals: proposalReplacerOn(tx),
         storageAlert: storageAlertOn(tx),

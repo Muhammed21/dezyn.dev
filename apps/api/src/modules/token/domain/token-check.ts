@@ -1,3 +1,4 @@
+import type { CitedToken } from "./citations.ts";
 import type { ModeRefusal } from "./mode-completeness.ts";
 import type { ReferenceRefusal, WrittenToken } from "./reference.ts";
 import type { TokenDefinition } from "./token.ts";
@@ -24,10 +25,13 @@ export type CheckTokens = (written: {
   readonly tokens: readonly TokenDefinition[];
 }) => Promise<readonly TokenCheck[]>;
 
-export type ValidatedTokenFailure = TokenCheckFailure | { readonly code: "name_taken" };
+export type ValidatedTokenFailure =
+  | TokenCheckFailure
+  | { readonly code: "name_taken" }
+  | CitedToken;
 
 export type ValidatedWrite = {
-  readonly kind: "create" | "update";
+  readonly kind: "create" | "update" | "delete";
   readonly token: TokenDefinition;
 };
 

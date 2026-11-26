@@ -1,8 +1,11 @@
+import { citationMessage } from "../domain/citations.ts";
 import type { ModeRefusal } from "../domain/mode-completeness.ts";
 import type { ReferenceRefusal } from "../domain/reference.ts";
 import type { ValidatedTokenFailure } from "../domain/token-check.ts";
 import type { GroupConflict } from "../domain/token-name.ts";
 export { groupConflict } from "../domain/token-name.ts";
+export type { Citation, CitationReader, CitedToken } from "../domain/citations.ts";
+export { citationMessage } from "../domain/citations.ts";
 export type {
   CheckTokens,
   TokenCheck,
@@ -72,6 +75,8 @@ export const issuesOfCheck = (
       return [{ path: "name", message: "Nom déjà pris dans le projet" }];
     case "name_conflict":
       return [{ path: "name", message: `Nom en conflit de groupe avec le token ${failure.other}` }];
+    case "cited_token":
+      return [{ path: "name", message: citationMessage(failure.citations) }];
     default:
       return [{ path: "$type", message: "Type différent du token validé" }];
   }

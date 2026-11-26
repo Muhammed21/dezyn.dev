@@ -17,11 +17,13 @@ import { checkContrast } from "./application/check-contrast.ts";
 import { checkTokens } from "./application/check-tokens.ts";
 import { validatedTokenWriter } from "./application/create-validated-token.ts";
 import { declareFigmaStates, type FigmaProposals } from "./application/declare-figma-states.ts";
+import { deleteToken } from "./application/delete-token.ts";
 import { exportTokens } from "./application/export-tokens.ts";
 import { importTokens } from "./application/import-tokens.ts";
 import { readProjectTokens, readTokens, readValidatedTokens } from "./application/read-tokens.ts";
 import { parseTokenDefinition } from "./contracts/token-definition.ts";
 import {
+  postgresCitationReader,
   postgresFigmaStateReader,
   postgresFigmaStateSynchronizer,
   postgresFigmaUnitOfWork,
@@ -42,8 +44,11 @@ export const validatedTokenWriterOn = (tx: PostgresTransaction, meter: StorageMe
     modes: postgresModeReader(tx),
     projectTokens: postgresProjectTokenReader(tx),
     tokens: postgresTokenWriter(tx, { newId: randomUUID, meter }),
+    citations: postgresCitationReader(tx),
     newId: randomUUID,
   });
+
+export const citationsOn = postgresCitationReader;
 
 export const checkTokensOn = (tx: PostgresTransaction) =>
   checkTokens({ modes: postgresModeReader(tx), projectTokens: postgresProjectTokenReader(tx) });
@@ -105,6 +110,20 @@ export const tokenModule = ({
       sendStorageAlert,
       signals,
       newId: randomUUID,
+      now: clock,
+    }),
+    deleteToken: deleteToken({
+      access,
+      unitOfWork: postgresTokenUnitOfWork({
+        db,
+        projectLockOn,
+        historyWriterOn,
+        proposalReplacerOn,
+        storageMeterOn,
+        storageAlertOn,
+        newId: randomUUID,
+      }),
+      signals,
       now: clock,
     }),
     checkTokens: check,

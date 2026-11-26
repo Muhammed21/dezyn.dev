@@ -7,7 +7,7 @@ export type BatchSummary = {
   readonly toReview: number;
 };
 
-export type ProposalKind = "create" | "update" | "unknown";
+export type ProposalKind = "create" | "update" | "delete" | "unknown";
 
 export type ProposalStatus = "proposed" | "validated" | "rejected" | "replaced" | "unknown";
 

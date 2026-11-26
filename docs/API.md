@@ -18,16 +18,17 @@ Un client qui renvoie une écriture après un timeout, sans savoir si la premiè
 
 Routes qui acceptent la clé, avec le droit revérifié avant un rejeu :
 
-| Route                                          | Écriture                     | Droit revérifié au rejeu                 |
-| ---------------------------------------------- | ---------------------------- | ---------------------------------------- |
-| `POST /v1/spaces/{spaceId}/projects`           | Création de projet           | `project.create` dans l'espace           |
-| `POST /v1/spaces/{spaceId}/invitations`        | Invitation                   | `member.invite` dans l'espace            |
-| `POST /v1/invitations/{token}/accept`          | Acceptation d'une invitation | Membre actif de l'espace de l'invitation |
-| `POST /v1/projects/{projectId}/tokens`         | Ajout d'un token             | `token.create` sur le projet             |
-| `POST /v1/projects/{projectId}/tokens/import`  | Import                       | `token.create` sur le projet             |
-| `POST /v1/proposals/{proposalId}/validate`     | Validation d'une proposition | `proposal.review` sur le projet          |
-| `POST /v1/proposals/{proposalId}/reject`       | Rejet d'une proposition      | `proposal.review` sur le projet          |
-| `POST /v1/proposal-batches/{batchId}/validate` | Validation d'un lot          | `proposal.review` sur le projet          |
+| Route                                           | Écriture                     | Droit revérifié au rejeu                 |
+| ----------------------------------------------- | ---------------------------- | ---------------------------------------- |
+| `POST /v1/spaces/{spaceId}/projects`            | Création de projet           | `project.create` dans l'espace           |
+| `POST /v1/spaces/{spaceId}/invitations`         | Invitation                   | `member.invite` dans l'espace            |
+| `POST /v1/invitations/{token}/accept`           | Acceptation d'une invitation | Membre actif de l'espace de l'invitation |
+| `POST /v1/projects/{projectId}/tokens`          | Ajout d'un token             | `token.create` sur le projet             |
+| `POST /v1/projects/{projectId}/tokens/import`   | Import                       | `token.create` sur le projet             |
+| `DELETE /v1/projects/{projectId}/tokens/{name}` | Suppression d'un token       | `token.delete` sur le projet             |
+| `POST /v1/proposals/{proposalId}/validate`      | Validation d'une proposition | `proposal.review` sur le projet          |
+| `POST /v1/proposals/{proposalId}/reject`        | Rejet d'une proposition      | `proposal.review` sur le projet          |
+| `POST /v1/proposal-batches/{batchId}/validate`  | Validation d'un lot          | `proposal.review` sur le projet          |
 
 Sans en-tête, la route répond comme toute requête. Les autres routes ignorent l'en-tête : les changements de rôle et les départs, idempotents par nature, les pages d'autorisation OAuth et les routes de better-auth (`/auth/*`).
 

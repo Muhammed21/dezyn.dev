@@ -185,7 +185,9 @@ export const batchOf =
         ...proposal,
         validated: validatedOf(validated, proposal),
         duplicates:
-          proposal.status === "proposed" ? duplicatesOf({ token: proposal.token, among }) : [],
+          proposal.status === "proposed" && proposal.kind !== "delete"
+            ? duplicatesOf({ token: proposal.token, among })
+            : [],
       })),
     });
   };
@@ -289,7 +291,7 @@ export const reviewProposal =
             userId,
             clientId: null,
             before: before === null ? null : definitionOf(before),
-            after: { proposalId, token: proposal.token },
+            after: { proposalId, kind: proposal.kind, token: proposal.token },
             correlationId,
             occurredAt,
           },
@@ -427,7 +429,7 @@ export const validateBatch =
               userId,
               clientId: null,
               before: before === null ? null : definitionOf(before),
-              after: { proposalId: proposal.id, token: proposal.token },
+              after: { proposalId: proposal.id, kind: proposal.kind, token: proposal.token },
               correlationId,
               occurredAt,
             };

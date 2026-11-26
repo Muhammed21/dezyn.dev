@@ -41,8 +41,11 @@ type ProposalOutput = z.infer<typeof ProposalBatchOutput>["proposals"][number];
 const stateOf = (state: string): BatchState =>
   state === "open" || state === "closed" ? state : "unknown";
 
-const kindOf = (kind: string): ProposalKind =>
-  kind === "create" || kind === "update" ? kind : "unknown";
+const KINDS: ReadonlySet<string> = new Set(["create", "update", "delete"]);
+
+const isKnownKind = (kind: string): kind is Exclude<ProposalKind, "unknown"> => KINDS.has(kind);
+
+const kindOf = (kind: string): ProposalKind => (isKnownKind(kind) ? kind : "unknown");
 
 const STATUSES: ReadonlySet<string> = new Set(["proposed", "validated", "rejected", "replaced"]);
 

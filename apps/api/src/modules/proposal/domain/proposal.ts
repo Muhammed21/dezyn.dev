@@ -4,7 +4,7 @@ export const BATCH_STATES = ["open", "closed"] as const;
 
 export type BatchState = (typeof BATCH_STATES)[number];
 
-export const PROPOSAL_KINDS = ["create", "update"] as const;
+export const PROPOSAL_KINDS = ["create", "update", "delete"] as const;
 
 export type ProposalKind = (typeof PROPOSAL_KINDS)[number];
 

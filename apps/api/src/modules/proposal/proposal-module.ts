@@ -10,9 +10,14 @@ import type {
   StorageAlertDecision,
   StorageAlertSender,
 } from "#modules/space/contracts/storage-alert.ts";
-import type { CheckTokens, ValidatedTokenWriter } from "#modules/token/contracts/token-issues.ts";
+import type {
+  CheckTokens,
+  CitationReader,
+  ValidatedTokenWriter,
+} from "#modules/token/contracts/token-issues.ts";
 import type { Clock } from "#platform/clock.ts";
 
+import { deleteTokens } from "./application/delete-tokens.ts";
 import { closeBatch, openBatch } from "./application/proposal-batches.ts";
 import {
   batchOf,
@@ -51,6 +56,7 @@ export const proposalModule = ({
   projectLockOn,
   checkTokensOn,
   validatedTokensOn,
+  citationsOn,
   validatedTokensOf,
   historyWriterOn,
   validatedTokenWriterOn,
@@ -66,6 +72,7 @@ export const proposalModule = ({
   readonly projectLockOn: (tx: PostgresTransaction) => ProjectLock;
   readonly checkTokensOn: (tx: PostgresTransaction) => CheckTokens;
   readonly validatedTokensOn: (tx: PostgresTransaction) => ValidatedTokensOf;
+  readonly citationsOn: (tx: PostgresTransaction) => CitationReader;
   readonly validatedTokensOf: ValidatedTokensOf;
   readonly historyWriterOn: (tx: PostgresTransaction) => HistoryWriter;
   readonly validatedTokenWriterOn: (tx: PostgresTransaction) => ValidatedTokenWriter;
@@ -87,6 +94,7 @@ export const proposalModule = ({
     projectLockOn,
     checkTokensOn,
     validatedTokensOn,
+    citationsOn,
     storageMeterOn,
     storageAlertOn,
   });
@@ -100,6 +108,13 @@ export const proposalModule = ({
   });
   return {
     writeTokens: writeTokens({
+      unitOfWork,
+      sendStorageAlert,
+      signals,
+      newId: randomUUID,
+      now,
+    }),
+    deleteTokens: deleteTokens({
       unitOfWork,
       sendStorageAlert,
       signals,

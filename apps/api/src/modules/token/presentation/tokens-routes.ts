@@ -7,10 +7,11 @@ import { validate } from "#platform/validate.ts";
 import { Uuid } from "@repo/contracts";
 
 import type { AddedToken } from "../application/add-token.ts";
+import type { TokenDeletionFailure } from "../application/delete-token.ts";
 import type { ImportFailure } from "../application/import-tokens.ts";
 import type { TokenUseCases } from "../application/token-use-cases.ts";
 import { TokenDefinitionInput } from "../contracts/token-definition.ts";
-import { issuesOfCheck, issuesOfConflicts } from "../contracts/token-issues.ts";
+import { citationMessage, issuesOfCheck, issuesOfConflicts } from "../contracts/token-issues.ts";
 import { tokenIssuePath } from "../domain/dtcg-import.ts";
 import type { GroupConflict } from "../domain/token-name.ts";
 import { tokensOutputOf } from "./tokens-output.ts";
@@ -44,6 +45,13 @@ const exportConflict = (conflicts: readonly GroupConflict[]): Problem => ({
   errors: issuesOfConflicts(conflicts),
 });
 
+const deletionConflict = ({ citations }: Exclude<TokenDeletionFailure, "not_found">): Problem => ({
+  type: "about:blank",
+  title: "Suppression impossible",
+  status: 409,
+  errors: [{ path: "name", message: citationMessage(citations) }],
+});
+
 const ImportedDocument = z.record(z.string(), z.unknown());
 
 const importProblem = (failure: Exclude<ImportFailure, "not_found">): Problem =>
@@ -74,6 +82,7 @@ const importProblem = (failure: Exclude<ImportFailure, "not_found">): Problem =>
 
 export const tokensRoutes = ({
   addToken,
+  deleteToken,
   readProjectTokens,
   exportTokens,
   importTokens,
@@ -117,6 +126,24 @@ export const tokensRoutes = ({
       return imported.error === "not_found"
         ? c.notFound()
         : problemResponse(c, importProblem(imported.error));
+    })
+    .delete("/:projectId/tokens/:name", async (c) => {
+      const projectId = Uuid.safeParse(c.req.param("projectId")).data;
+      if (projectId === undefined) {
+        return c.notFound();
+      }
+      const deleted = await deleteToken({
+        projectId,
+        userId: c.get("identity").userId,
+        name: c.req.param("name"),
+        correlationId: c.get("correlationId"),
+      });
+      if (deleted.ok) {
+        return c.json(deleted.value);
+      }
+      return deleted.error === "not_found"
+        ? c.notFound()
+        : problemResponse(c, deletionConflict(deleted.error));
     })
     .post("/:projectId/tokens", validate("json", TokenDefinitionInput), async (c) => {
       const projectId = Uuid.safeParse(c.req.param("projectId")).data;

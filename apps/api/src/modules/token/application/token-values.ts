@@ -1,5 +1,6 @@
 import { err, ok, type Result } from "@repo/result";
 
+export type { CitationReader } from "../domain/citations.ts";
 import { contrastBackgrounds } from "../domain/contrast-pairs.ts";
 import { fieldAliases } from "../domain/field-references.ts";
 import { type ModeRefusal, modeRefusals } from "../domain/mode-completeness.ts";
@@ -44,6 +45,10 @@ export interface TokenWriter {
     created: readonly Created[],
   ): Promise<Created | undefined>;
   replaceAll(replaced: readonly ReplacedToken[]): Promise<void>;
+  deleteAll(deleted: {
+    readonly projectId: string;
+    readonly names: readonly string[];
+  }): Promise<void>;
 }
 
 export type InvalidModes = {

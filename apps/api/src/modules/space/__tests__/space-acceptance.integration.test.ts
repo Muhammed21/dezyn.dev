@@ -31,6 +31,7 @@ const EDITOR_ACTIONS = [
   "member.leave",
   "project.setFigmaFile",
   "token.create",
+  "token.delete",
   "token.declareFigmaState",
   "proposal.review",
 ];

@@ -69,6 +69,7 @@ export const makeHistory = (): HistoryUseCases => ({
 
 export const makeTokens = (): TokenUseCases => ({
   addToken: () => Promise.resolve(err("not_found")),
+  deleteToken: () => Promise.resolve(err("not_found")),
   readTokens: () => Promise.resolve({ modes: [], tokens: [] }),
   checkTokens: () => Promise.resolve([]),
   checkContrast: () => Promise.resolve([]),
@@ -80,6 +81,7 @@ export const makeTokens = (): TokenUseCases => ({
 
 export const makeProposals = (): ProposalUseCases => ({
   writeTokens: () => Promise.reject(new Error("Pas de proposition dans ce test")),
+  deleteTokens: () => Promise.reject(new Error("Pas de proposition dans ce test")),
   openBatch: () => Promise.reject(new Error("Pas de lot dans ce test")),
   closeBatch: () => Promise.reject(new Error("Pas de lot dans ce test")),
   listBatches: () => Promise.resolve(err("not_found")),

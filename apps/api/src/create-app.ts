@@ -16,6 +16,7 @@ import { projectEventsRoutes } from "#modules/project/presentation/project-event
 import { projectRoutes, projectsRoutes } from "#modules/project/presentation/projects-routes.ts";
 import { registerSetProjectFigmaFile } from "#modules/project/presentation/set-project-figma-file-tool.ts";
 import type { ProposalUseCases } from "#modules/proposal/application/proposal-use-cases.ts";
+import { registerDeleteTokens } from "#modules/proposal/presentation/delete-tokens-tool.ts";
 import { registerProposalBatchTools } from "#modules/proposal/presentation/proposal-batch-tools.ts";
 import {
   projectBatchesRoutes,
@@ -201,6 +202,10 @@ export const createApp = ({
     writeTokens: proposals.writeTokens,
     recordProjectCall: history.recordProjectCall,
   });
+  const registerDeletionTools = registerDeleteTokens({
+    deleteTokens: proposals.deleteTokens,
+    recordProjectCall: history.recordProjectCall,
+  });
   const registerBatchTools = registerProposalBatchTools({
     openBatch: proposals.openBatch,
     closeBatch: proposals.closeBatch,
@@ -225,6 +230,7 @@ export const createApp = ({
         registerContrastTools(server, call);
         registerFigmaTools(server, call);
         registerProposalTools(server, call);
+        registerDeletionTools(server, call);
         registerBatchTools(server, call);
         registerRecipes(server, call);
       },
@@ -258,6 +264,13 @@ export const createApp = ({
     idempotentRequest({
       idempotent,
       replayable: allowedOnProject({ projectAccess, action: "token.create" }),
+    }),
+  );
+  v1.delete(
+    "/projects/:projectId/tokens/:name",
+    idempotentRequest({
+      idempotent,
+      replayable: allowedOnProject({ projectAccess, action: "token.delete" }),
     }),
   );
   v1.route("/projects", tokensRoutes(tokens));

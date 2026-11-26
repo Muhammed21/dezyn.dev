@@ -59,6 +59,7 @@ describe("lire un espace (ADR 0017 §3)", () => {
           "member.manage",
           "project.setFigmaFile",
           "token.create",
+          "token.delete",
           "token.declareFigmaState",
           "proposal.review",
           "subscription.checkout",

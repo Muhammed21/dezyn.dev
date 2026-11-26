@@ -482,6 +482,54 @@ describe("aperçu avant/après d'une proposition", () => {
     ).toHaveLength(0);
   });
 
+  it("ne montre que l'aperçu Avant d'une suppression, marqué Token supprimé, et la proposition reste rejetable", async () => {
+    const sent: Decision[] = [];
+    const deleted = { $type: "color", $value: PRIMARY_BLUE };
+    const { screen } = await renderBatch(
+      reading(
+        makeBatch({
+          proposals: [makeProposal({ kind: "delete", validated: deleted, proposed: deleted })],
+        }),
+      ),
+      {
+        reviewProposal: (review) => {
+          sent.push(review.decision);
+          return reviewedAs("rejected")(review);
+        },
+      },
+    );
+
+    await expect.element(preview(screen, "Avant : #1a66e6")).toBeVisible();
+    await expect.element(proposalItems(screen).getByText("Token supprimé")).toBeVisible();
+    expect(
+      proposalItems(screen)
+        .getByRole("figure", { name: /^Après/ })
+        .elements(),
+    ).toHaveLength(0);
+    await proposalItems(screen).nth(0).getByRole("button", { name: "Rejeter" }).click();
+    await expect.poll(() => sent).toEqual(["reject"]);
+  });
+
+  it("montre la valeur demandée d'une suppression dont le token validé a déjà disparu", async () => {
+    const { screen } = await renderBatch(
+      reading(
+        makeBatch({
+          proposals: [
+            makeProposal({
+              kind: "delete",
+              status: "validated",
+              validated: undefined,
+              proposed: { $type: "color", $value: PRIMARY_BLUE },
+            }),
+          ],
+        }),
+      ),
+    );
+
+    await expect.element(preview(screen, "Avant : #1a66e6")).toBeVisible();
+    await expect.element(proposalItems(screen).getByText("Token supprimé")).toBeVisible();
+  });
+
   it.each([
     ["un type sans aperçu", { $type: "number", $value: 1.5 }, "1.5"],
     [
@@ -1107,6 +1155,29 @@ describe("aperçu avant/après d'un token à modes", () => {
     ).toHaveLength(0);
     expect(proposalItems(screen).getByText("Inchangé").elements()).toHaveLength(0);
     expect(proposalItems(screen).getByText("Nouveau mode").elements()).toHaveLength(0);
+  });
+
+  it("ne montre que l'aperçu Avant de chaque mode d'une suppression, marquée une fois Token supprimé (ADR 0026 §3)", async () => {
+    const deleted = makeModalColor({ clair: PRIMARY_BLUE, sombre: NIGHT_BLUE });
+    const { screen } = await renderBatch(
+      reading(
+        makeBatch({
+          proposals: [makeProposal({ kind: "delete", validated: deleted, proposed: deleted })],
+        }),
+      ),
+      { readTokens: projectModes("clair", "sombre") },
+    );
+
+    await expect.element(proposalItems(screen).getByText("Suppression")).toBeVisible();
+    await expect.element(modePreview(screen, "clair", "Avant : #1a66e6")).toBeVisible();
+    await expect.element(modePreview(screen, "sombre", "Avant : #1a3366")).toBeVisible();
+    await expect.element(proposalItems(screen).getByText("Token supprimé")).toBeVisible();
+    expect(
+      proposalItems(screen)
+        .getByRole("figure", { name: /^Après/ })
+        .elements(),
+    ).toHaveLength(0);
+    expect(proposalItems(screen).getByText("Mode retiré").elements()).toHaveLength(0);
   });
 
   it("ne montre que l'aperçu Après d'un mode absent de l'avant, marqué Nouveau mode", async () => {

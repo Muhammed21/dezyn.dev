@@ -227,12 +227,33 @@ describe("lecture d'un lot de propositions dans l'app web (ADR 0044 §6)", () =>
     expect((await firstProposalOf(proposals))?.status).toBe(status);
   });
 
+  it("lit une proposition de suppression, avec la valeur qui disparaît (ADR 0026 §1)", async () => {
+    const deleted = { $type: "color", $value: PRIMARY_BLUE };
+    const { proposals } = answering(
+      json(
+        makeLotOutput({
+          proposals: [
+            makeProposalOutput({ kind: "delete", validated: deleted, proposed: deleted }),
+          ],
+        }),
+      ),
+    );
+
+    const batch = await proposals.readBatch({ batchId: BATCH_ID });
+
+    expect(batch.ok && batch.value.proposals[0]).toMatchObject({
+      kind: "delete",
+      validated: deleted,
+      proposed: deleted,
+    });
+  });
+
   it("garde un état, une nature et un statut que l'app ne connaît pas (ADR 0023 §2)", async () => {
     const { proposals } = answering(
       json(
         makeLotOutput({
           state: "archived",
-          proposals: [makeProposalOutput({ kind: "delete", status: "withdrawn" })],
+          proposals: [makeProposalOutput({ kind: "archive", status: "withdrawn" })],
         }),
       ),
     );
@@ -330,7 +351,7 @@ describe("relecture d'une proposition dans l'app web (ADR 0012 §1, ADR 0044 §6
 
   it("garde une nature et un statut que l'app ne connaît pas (ADR 0023 §2)", async () => {
     const { proposals } = answering(
-      json(makeReviewedOutput({ kind: "delete", status: "archived" })),
+      json(makeReviewedOutput({ kind: "archive", status: "archived" })),
     );
 
     const reviewed = await proposals.reviewProposal({

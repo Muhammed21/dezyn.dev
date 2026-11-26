@@ -65,7 +65,7 @@ const makeValidatedBatch = (overrides: Readonly<Record<string, unknown>> = {}) =
 describe("les valeurs connues de la relecture", () => {
   it("annonce les états de lot, les natures et les statuts de proposition", () => {
     expect(BATCH_STATES).toEqual(["open", "closed"]);
-    expect(PROPOSAL_KINDS).toEqual(["create", "update"]);
+    expect(PROPOSAL_KINDS).toEqual(["create", "update", "delete"]);
     expect(PROPOSAL_STATUSES).toEqual(["proposed", "validated", "rejected", "replaced"]);
   });
 });
@@ -113,6 +113,15 @@ describe("un lot et ses propositions (ADR 0012 §1)", () => {
           proposed: { $type: "color", $value: NIGHT_BLUE, $extensions: { "dev.dezyn": {} } },
         }),
       ],
+    });
+
+    expect(ProposalBatchOutput.parse(batch)).toEqual(batch);
+  });
+
+  it("décode une suppression, avec la valeur validée qui disparaît (ADR 0026 §1)", () => {
+    const deleted = { $type: "color", $value: PRIMARY_BLUE };
+    const batch = makeBatch({
+      proposals: [makeProposal({ kind: "delete", validated: deleted, proposed: deleted })],
     });
 
     expect(ProposalBatchOutput.parse(batch)).toEqual(batch);

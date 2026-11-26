@@ -54,7 +54,7 @@ export const TokenOutput = DefinitionOutput.extend({
 const ProposalOutput = z.looseObject({
   id: Uuid,
   name: z.string(),
-  kind: openEnum(["create", "update"]),
+  kind: openEnum(["create", "update", "delete"]),
   status: openEnum(["proposed"]),
   batch: BatchRef,
   token: DefinitionOutput,
