@@ -681,4 +681,28 @@ describe("un token divergent montre la valeur relevée dans Figma (ADR 0024 §4)
       )
       .toBeVisible();
   });
+
+  it("le signal d'une proposition remplacée retire la valeur Figma et son lien, sans recharger", async () => {
+    const events = makeProjectEvents();
+    const { state, readTokens } = changingTokens([
+      makeToken({
+        figma: {
+          ...DIVERGED_STATE,
+          proposal: makeFigmaProposal({ kind: "single", value: NIGHT_BLUE }),
+        },
+      }),
+    ]);
+    const screen = await renderLive(readTokens, events);
+    await expect
+      .element(tokenItems(screen).nth(0).getByRole("link", { name: "Voir la proposition" }))
+      .toBeVisible();
+
+    state.tokens = [makeToken({ figma: DIVERGED_STATE })];
+    events.emit(PROJECT_ID, ["proposals", "tokens"]);
+
+    await expect
+      .element(tokenItems(screen).nth(0).getByRole("link", { name: "Voir la proposition" }))
+      .not.toBeInTheDocument();
+    expect(tokenItems(screen).nth(0).getByRole("figure").elements()).toHaveLength(0);
+  });
 });

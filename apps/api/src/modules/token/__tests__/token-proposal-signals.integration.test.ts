@@ -411,3 +411,90 @@ describe("rejeter une valeur Figma signale tokens, que suit la liste des tokens 
     );
   });
 });
+
+const DEEP_RED = { colorSpace: "srgb", components: [0.6, 0.1, 0.1] };
+
+type Seeded = { accessToken: string; projectId: string };
+
+const writeFondInRed = (app: App, { accessToken, projectId }: Seeded) =>
+  callTool(app, {
+    accessToken,
+    name: "write_tokens",
+    args: { projectId, tokens: [makeColorToken({ name: "couleur.fond", $value: DEEP_RED })] },
+  });
+
+describe("remplacer une valeur Figma proposée signale tokens, que suit la liste des tokens (ADR 0046)", () => {
+  it("write_tokens qui remplace une proposition née d'une divergence signale proposals et tokens", () => {
+    const recorder = makeAllSignalsRecorder();
+    return withIdentityApp(
+      async (app, db) => {
+        const seeded = await seedProject(app, db);
+        await addToken(app, { ...seeded, token: makeColorToken({ name: "couleur.fond" }) });
+        await declareFigmaStates(app, { ...seeded, states: [DIVERGED_FOND] });
+        const mark = recorder.received.length;
+
+        const written = await writeFondInRed(app, seeded);
+
+        expect(written.structuredContent.replaced).toHaveLength(1);
+        expect(recorder.since(mark)).toEqual([
+          { projectId: seeded.projectId, topics: ["proposals", "tokens"] },
+          { projectId: seeded.projectId, topics: ["history"] },
+        ]);
+      },
+      { signals: recorder.signals },
+    );
+  });
+
+  it("delete_tokens qui remplace une proposition née d'une divergence signale proposals et tokens", () => {
+    const recorder = makeAllSignalsRecorder();
+    return withIdentityApp(
+      async (app, db) => {
+        const seeded = await seedProject(app, db);
+        await addToken(app, { ...seeded, token: makeColorToken({ name: "couleur.fond" }) });
+        await declareFigmaStates(app, { ...seeded, states: [DIVERGED_FOND] });
+        const mark = recorder.received.length;
+
+        const deleted = await callTool(app, {
+          accessToken: seeded.accessToken,
+          name: "delete_tokens",
+          args: { projectId: seeded.projectId, names: ["couleur.fond"] },
+        });
+
+        expect(deleted.structuredContent.replaced).toHaveLength(1);
+        expect(recorder.since(mark)).toEqual([
+          { projectId: seeded.projectId, topics: ["proposals", "tokens"] },
+          { projectId: seeded.projectId, topics: ["history"] },
+        ]);
+      },
+      { signals: recorder.signals },
+    );
+  });
+
+  it("write_tokens qui remplace une proposition sans état Figma ne signale pas tokens", () => {
+    const recorder = makeAllSignalsRecorder();
+    return withIdentityApp(
+      async (app, db) => {
+        const seeded = await seedProject(app, db);
+        await addToken(app, { ...seeded, token: makeColorToken({ name: "couleur.fond" }) });
+        await callTool(app, {
+          accessToken: seeded.accessToken,
+          name: "write_tokens",
+          args: {
+            projectId: seeded.projectId,
+            tokens: [makeColorToken({ name: "couleur.fond", $value: NIGHT_BLUE })],
+          },
+        });
+        const mark = recorder.received.length;
+
+        const written = await writeFondInRed(app, seeded);
+
+        expect(written.structuredContent.replaced).toHaveLength(1);
+        expect(recorder.since(mark)).toEqual([
+          { projectId: seeded.projectId, topics: ["proposals"] },
+          { projectId: seeded.projectId, topics: ["history"] },
+        ]);
+      },
+      { signals: recorder.signals },
+    );
+  });
+});

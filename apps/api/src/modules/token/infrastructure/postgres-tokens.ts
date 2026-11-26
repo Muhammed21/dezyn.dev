@@ -677,6 +677,17 @@ export const postgresFigmaStateSynchronizer = (tx: Queryable, meter: StorageMete
       change: { state: "synced", proposalId: null },
     });
   },
+  proposalsReplaced: async (proposalIds: readonly string[]) => {
+    if (proposalIds.length === 0) {
+      return false;
+    }
+    const linked = await tx
+      .select({ tokenId: tokenFigmaState.tokenId })
+      .from(tokenFigmaState)
+      .where(inArray(tokenFigmaState.proposalId, [...proposalIds]))
+      .limit(1);
+    return linked.length > 0;
+  },
   proposalsRejected: (
     rejected: readonly { readonly proposalId: string; readonly token: ComparedDefinition }[],
   ) =>

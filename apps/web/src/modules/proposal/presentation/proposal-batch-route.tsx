@@ -1,6 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { type AnyRootRoute, createRoute, Link, Navigate } from "@tanstack/react-router";
-import { useState } from "react";
+import {
+  type AnyRootRoute,
+  createRoute,
+  Link,
+  Navigate,
+  useLocation,
+} from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 
 import type { Result } from "@repo/result";
 
@@ -196,6 +202,21 @@ type Rejection = {
   readonly toggle: () => void;
 };
 
+const anchorOf = ({ id }: Pick<Proposal, "id">) => `proposition-${id}`;
+
+const useScrollToAnchor = ({ loaded }: { readonly loaded: boolean }) => {
+  const hash = useLocation({ select: (location) => location.hash });
+  useEffect(() => {
+    if (!loaded) {
+      return;
+    }
+    const line = document.getElementById(hash);
+    line?.scrollIntoView();
+    line?.focus({ preventScroll: true });
+  }, [hash, loaded]);
+  return hash;
+};
+
 const ProposalItem = ({
   proposal,
   batchId,
@@ -204,6 +225,7 @@ const ProposalItem = ({
   review: { reviewProposal, onReviewed },
   aliases,
   projectModes,
+  anchored,
 }: {
   readonly proposal: Proposal;
   readonly batchId: string;
@@ -212,6 +234,7 @@ const ProposalItem = ({
   readonly review: Review;
   readonly aliases: AliasSources;
   readonly projectModes: readonly string[];
+  readonly anchored: boolean;
 }) => {
   const queryClient = useQueryClient();
   const { data, isPending, mutate } = useMutation({
@@ -228,7 +251,7 @@ const ProposalItem = ({
   });
   const decide = (decision: Decision) => () => mutate({ proposalId: proposal.id, decision });
   return (
-    <li id={`proposition-${proposal.id}`}>
+    <li id={anchorOf(proposal)} tabIndex={anchored ? -1 : undefined}>
       <p>{proposal.name}</p>
       <p>{KIND_LABELS[proposal.kind]}</p>
       <p>{STATUS_LABELS[proposal.status]}</p>
@@ -302,6 +325,7 @@ const ProposalBatch = ({
     projectId: data?.ok === true ? data.value.projectId : undefined,
     readTokens,
   });
+  const anchor = useScrollToAnchor({ loaded: data?.ok === true });
   if (data === undefined) {
     return <p>Chargement du lot…</p>;
   }
@@ -341,6 +365,7 @@ const ProposalBatch = ({
             review={review}
             aliases={aliases}
             projectModes={projectModes}
+            anchored={anchorOf(proposal) === anchor}
           />
         ))}
       </ul>

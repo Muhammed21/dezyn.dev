@@ -25,7 +25,11 @@ import {
   type ProposalStatus,
   review,
 } from "../domain/proposal.ts";
-import type { ValidatedDefinition, ValidatedTokensOf } from "./write-tokens.ts";
+import type {
+  FigmaProposalReplacer,
+  ValidatedDefinition,
+  ValidatedTokensOf,
+} from "./write-tokens.ts";
 
 export type BatchSummary = Pick<ProposalBatch, "id" | "intent" | "state"> & {
   readonly toReview: number;
@@ -58,7 +62,7 @@ export interface ProposalReader {
   ): Promise<{ readonly proposal: Proposal; readonly projectId: string } | undefined>;
 }
 
-export interface FigmaStateSynchronizer {
+export interface FigmaStateSynchronizer extends FigmaProposalReplacer {
   proposalsValidated(proposalIds: readonly string[]): Promise<void>;
   proposalsRejected(
     rejected: readonly { readonly proposalId: string; readonly token: TokenDefinition }[],

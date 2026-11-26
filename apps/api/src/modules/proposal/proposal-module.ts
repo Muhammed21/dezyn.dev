@@ -97,6 +97,7 @@ export const proposalModule = ({
     citationsOn,
     storageMeterOn,
     storageAlertOn,
+    figmaStateOn,
   });
   const reviewUnitOfWork = postgresReviewUnitOfWork({
     db,

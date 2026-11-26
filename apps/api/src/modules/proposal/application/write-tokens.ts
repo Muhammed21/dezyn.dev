@@ -59,8 +59,13 @@ export interface ProposalStore {
   propose(projectId: string, proposals: readonly Proposal[]): Promise<void>;
 }
 
+export interface FigmaProposalReplacer {
+  proposalsReplaced(proposalIds: readonly string[]): Promise<boolean>;
+}
+
 export type ProposalUnit = {
   readonly store: ProposalStore;
+  readonly figmaStates: FigmaProposalReplacer;
   readonly storageAlert: StorageAlertDecision;
   readonly project: ProjectLock;
   readonly checkTokens: CheckTokens;
@@ -174,7 +179,11 @@ type WrittenOutcome<W extends Written> = {
   readonly written: W;
   readonly alert: DecidedStorageAlert | undefined;
   readonly createdAt: Date;
+  readonly figmaReplaced: boolean;
 };
+
+export const replacingFigmaStates = (figmaStates: FigmaProposalReplacer, { replaced }: Written) =>
+  figmaStates.proposalsReplaced(replaced.map(({ id }) => id));
 
 export const announceWritten =
   ({
@@ -195,7 +204,10 @@ export const announceWritten =
     }
     const { proposals, replaced, batch } = outcome.value.written;
     if (proposals.length > 0 || replaced.length > 0) {
-      await signals.changed({ projectId, topics: ["proposals"] });
+      await signals.changed({
+        projectId,
+        topics: outcome.value.figmaReplaced ? ["proposals", "tokens"] : ["proposals"],
+      });
     }
     if (proposals.length > 0 && batch !== null) {
       await signals.signalAt(
@@ -239,7 +251,7 @@ export const writeTokens =
     readonly batchId?: string;
   }): Promise<Result<WrittenWithDuplicates, UncheckedTokens | DesignationRefusal>> => {
     const outcome = await unitOfWork.run(
-      async ({ store, storageAlert, project, checkTokens, validatedTokensOf }) => {
+      async ({ store, figmaStates, storageAlert, project, checkTokens, validatedTokensOf }) => {
         await project.write(writer.projectId);
         const checks = await checkTokens({ projectId: writer.projectId, tokens });
         if (checks.length > 0) {
@@ -281,6 +293,7 @@ export const writeTokens =
           },
           alert: await storageAlert(spaceId),
           createdAt,
+          figmaReplaced: await replacingFigmaStates(figmaStates, written.value),
         });
       },
     );
