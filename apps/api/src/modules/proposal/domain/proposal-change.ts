@@ -1,10 +1,9 @@
 import {
   type ComparedDefinition,
-  referencedNames,
   sameDefinition,
   type TokenDefinition,
 } from "#modules/token/contracts/token-definition.ts";
-import type { Citation } from "#modules/token/contracts/token-issues.ts";
+import { type Citation, stillCites } from "#modules/token/contracts/token-issues.ts";
 
 import type { Proposal, ProposalKind } from "./proposal.ts";
 
@@ -92,12 +91,10 @@ export const deletionRefusals = (known: {
     return failure === undefined ? [] : [{ index, failure }];
   });
 
-const stillCites = (citation: Citation, pendingInBatch: readonly Proposal[]): boolean =>
+const stillCitedInBatch = (citation: Citation, pendingInBatch: readonly Proposal[]): boolean =>
   pendingInBatch
     .filter(({ name }) => name === citation.citing)
-    .every(
-      ({ kind, token }) => kind !== "delete" && referencedNames(token).includes(citation.cited),
-    );
+    .every(({ kind, token }) => kind !== "delete" && stillCites(token, citation));
 
 export const remainingCitations = ({
   citations,
@@ -105,4 +102,5 @@ export const remainingCitations = ({
 }: {
   readonly citations: readonly Citation[];
   readonly pendingInBatch: readonly Proposal[];
-}): readonly Citation[] => citations.filter((citation) => stillCites(citation, pendingInBatch));
+}): readonly Citation[] =>
+  citations.filter((citation) => stillCitedInBatch(citation, pendingInBatch));

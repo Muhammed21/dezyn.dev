@@ -5,7 +5,7 @@ import type { ValidatedTokenFailure } from "../domain/token-check.ts";
 import type { GroupConflict } from "../domain/token-name.ts";
 export { groupConflict } from "../domain/token-name.ts";
 export type { Citation, CitationReader, CitedToken } from "../domain/citations.ts";
-export { citationMessage } from "../domain/citations.ts";
+export { citationMessage, stillCites } from "../domain/citations.ts";
 export type {
   CheckTokens,
   TokenCheck,
