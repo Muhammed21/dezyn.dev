@@ -35,19 +35,26 @@ const REFERENCE_MESSAGES: Readonly<Record<ReferenceRefusal, string>> = {
   type_mismatch: "Référence vers un token d'un autre type",
 };
 
+const CONTRAST_ON_PATH = "$extensions.dev.dezyn.contrastOn";
+
+const referencePath = ({ mode, field }: { readonly mode?: string; readonly field?: string }) =>
+  [mode === undefined ? "$value" : `modes.${mode}`, ...(field === undefined ? [] : [field])].join(
+    ".",
+  );
+
 const referenceIssueOf = ({
   mode,
   field,
+  contrastOn,
   refusal,
 }: {
   readonly mode?: string;
   readonly field?: string;
+  readonly contrastOn?: number;
   readonly refusal: ReferenceRefusal;
 }) => ({
-  path: [
-    mode === undefined ? "$value" : `modes.${mode}`,
-    ...(field === undefined ? [] : [field]),
-  ].join("."),
+  path:
+    contrastOn === undefined ? referencePath({ mode, field }) : `${CONTRAST_ON_PATH}.${contrastOn}`,
   message: REFERENCE_MESSAGES[refusal],
 });
 

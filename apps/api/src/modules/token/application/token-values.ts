@@ -1,5 +1,6 @@
 import { err, ok, type Result } from "@repo/result";
 
+import { contrastBackgrounds } from "../domain/contrast-pairs.ts";
 import { fieldAliases } from "../domain/field-references.ts";
 import { type ModeRefusal, modeRefusals } from "../domain/mode-completeness.ts";
 import {
@@ -55,6 +56,7 @@ export type InvalidReferences = {
   readonly refusals: readonly {
     readonly mode?: string;
     readonly field?: string;
+    readonly contrastOn?: number;
     readonly refusal: ReferenceRefusal;
   }[];
 };
@@ -133,17 +135,38 @@ export const modeValueOf = ({ mode, value, resolution, fields }: Resolved): Mode
   };
 };
 
+const contrastRefusalsOf = (
+  { $type, $extensions }: TokenDefinition,
+  {
+    tokens,
+    written,
+    pending,
+  }: {
+    readonly tokens: readonly ProjectToken[];
+    readonly written: readonly WrittenToken[];
+    readonly pending: readonly WrittenToken[];
+  },
+): InvalidReferences["refusals"] =>
+  $type !== "color"
+    ? []
+    : contrastBackgrounds($extensions).flatMap(({ index, name }) => {
+        const resolution = resolveReference({ name, $type, tokens, written, pending });
+        return "refusal" in resolution ? [{ contrastOn: index, refusal: resolution.refusal }] : [];
+      });
+
 export const checkedValues = (
   token: TokenDefinition,
   {
     projectModes,
     tokens,
     written = [],
+    writtenTogether = written,
     pending = [],
   }: {
     readonly projectModes: readonly ProjectMode[];
     readonly tokens: readonly ProjectToken[];
     readonly written?: readonly WrittenToken[];
+    readonly writtenTogether?: readonly WrittenToken[];
     readonly pending?: readonly WrittenToken[];
   },
 ): Result<readonly Resolved[], InvalidModes | InvalidReferences> => {
@@ -163,7 +186,10 @@ export const checkedValues = (
     written,
     pending,
   });
-  const referenceRefusals = referenceRefusalsOf(values);
+  const referenceRefusals = [
+    ...referenceRefusalsOf(values),
+    ...contrastRefusalsOf(token, { tokens, written: writtenTogether, pending }),
+  ];
   if (referenceRefusals.length > 0) {
     return err({ code: "invalid_references", refusals: referenceRefusals });
   }
