@@ -35,6 +35,7 @@ import {
   polarWebhookRoutes,
 } from "#modules/subscription/presentation/subscription-routes.ts";
 import type { TokenUseCases } from "#modules/token/application/token-use-cases.ts";
+import { registerCheckContrast } from "#modules/token/presentation/check-contrast-tool.ts";
 import { registerDeclareFigmaStates } from "#modules/token/presentation/declare-figma-states-tool.ts";
 import { registerExportTokens } from "#modules/token/presentation/export-tokens-tool.ts";
 import { registerReadTokens } from "#modules/token/presentation/read-tokens-tool.ts";
@@ -188,6 +189,10 @@ export const createApp = ({
     exportTokens: tokens.exportTokens,
     recordProjectCall: history.recordProjectCall,
   });
+  const registerContrastTools = registerCheckContrast({
+    checkContrast: tokens.checkContrast,
+    recordProjectCall: history.recordProjectCall,
+  });
   const registerFigmaTools = registerDeclareFigmaStates({
     declareFigmaStates: tokens.declareFigmaStates,
     recordProjectCall: history.recordProjectCall,
@@ -217,6 +222,7 @@ export const createApp = ({
         registerHistoryTools(server, call);
         registerTokenTools(server, call);
         registerExportTools(server, call);
+        registerContrastTools(server, call);
         registerFigmaTools(server, call);
         registerProposalTools(server, call);
         registerBatchTools(server, call);
