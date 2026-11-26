@@ -57,6 +57,7 @@ type Review = {
   readonly events?: ReturnType<typeof makeProjectEvents>;
   readonly readTokens?: ReadTokens;
   readonly queryClient?: QueryClient;
+  readonly at?: string;
 };
 
 type ValidatedToken = {
@@ -122,6 +123,7 @@ const renderBatch = async (
     events = makeProjectEvents(),
     readTokens = validatedTokens(),
     queryClient = new QueryClient(),
+    at = `/lots/${BATCH_ID}`,
   }: Review = {},
 ) => {
   const ProjectProposals =
@@ -141,7 +143,7 @@ const renderBatch = async (
     path: "/connexion",
     component: () => <p>Page de connexion</p>,
   });
-  const history = createMemoryHistory({ initialEntries: [`/lots/${BATCH_ID}`] });
+  const history = createMemoryHistory({ initialEntries: [at] });
   const router = createRouter({
     routeTree: root.addChildren([
       proposalBatchRoute({
@@ -314,7 +316,67 @@ describe("chaque proposition du lot s'atteint par une ancre", () => {
     await expect.element(proposalItems(screen).nth(0)).toBeVisible();
     expect(proposalItems(screen).nth(0).element().id).toBe(`proposition-${proposal.id}`);
   });
+
+  it("ouvrir le lot sur l'ancre d'une proposition amène sa ligne à l'écran et y place le focus, une fois le lot lu", async () => {
+    const proposals = makeManyProposals(40);
+    const target = proposals[39] ?? makeProposal();
+    const { screen } = await renderBatch(reading(makeBatch({ proposals })), {
+      at: `/lots/${BATCH_ID}#proposition-${target.id}`,
+    });
+
+    const line = proposalItems(screen).nth(39);
+    await expect.element(line).toBeInViewport();
+    await expect.element(line).toHaveFocus();
+    await expect.element(proposalItems(screen).nth(0)).not.toBeInViewport();
+  });
+
+  it("la ligne visée prend le focus sans entrer dans l'ordre de tabulation, et elle seule", async () => {
+    const proposals = makeManyProposals(2);
+    const target = proposals[1] ?? makeProposal();
+    const { screen } = await renderBatch(reading(makeBatch({ proposals })), {
+      at: `/lots/${BATCH_ID}#proposition-${target.id}`,
+    });
+
+    await expect.element(proposalItems(screen).nth(1)).toHaveFocus();
+    await expect.element(proposalItems(screen).nth(1)).toHaveAttribute("tabindex", "-1");
+    await expect.element(proposalItems(screen).nth(0)).not.toHaveAttribute("tabindex");
+  });
+
+  it("sans ancre, le lot s'ouvre en haut de la page, sans focus sur une proposition", async () => {
+    const proposals = makeManyProposals(40);
+    const { screen } = await renderBatch(reading(makeBatch({ proposals })));
+
+    await expect.element(proposalItems(screen).nth(0)).toBeInViewport();
+    expect(document.activeElement?.closest("li")).toBeNull();
+  });
+
+  it("un rafraîchissement en temps réel, même de la proposition visée, ne ramène pas à l'ancre une page que le membre a fait défiler", async () => {
+    const events = makeProjectEvents();
+    const proposals = makeManyProposals(40);
+    const target = proposals[39] ?? makeProposal();
+    const state = { batch: makeBatch({ proposals }) };
+    const { screen } = await renderBatch(() => Promise.resolve(ok(state.batch)), {
+      events,
+      at: `/lots/${BATCH_ID}#proposition-${target.id}`,
+    });
+    await expect.element(proposalItems(screen).nth(39)).toBeInViewport();
+    window.scrollTo({ top: 0 });
+
+    state.batch = makeBatch({
+      proposals: [...proposals.slice(0, 39), { ...target, status: "validated" }],
+    });
+    events.emit(PROJECT_ID, ["proposals"]);
+
+    await expect.element(proposalItems(screen).nth(39)).toHaveTextContent("Validée");
+    await expect.element(proposalItems(screen).nth(0)).toBeInViewport();
+    await expect.element(proposalItems(screen).nth(39)).not.toBeInViewport();
+  });
 });
+
+const makeManyProposals = (count: number) =>
+  Array.from({ length: count }, (_, index) =>
+    makeProposal({ id: `proposition-${String(index)}`, name: `couleur.nuance.${String(index)}` }),
+  );
 
 const reviewedAs =
   (status: ReviewedProposal["status"]): ReviewProposal =>

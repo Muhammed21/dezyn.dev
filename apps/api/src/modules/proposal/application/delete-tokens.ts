@@ -16,6 +16,7 @@ import {
   announceWritten,
   proposeChanges,
   type ProposalUnitOfWork,
+  replacingFigmaStates,
   type ValidatedDefinition,
   type Writer,
   type Written,
@@ -85,7 +86,7 @@ export const deleteTokens =
     readonly batchId?: string;
   }): Promise<Result<Written, UndeletableTokens | DesignationRefusal>> => {
     const outcome = await unitOfWork.run(
-      async ({ store, storageAlert, project, validatedTokensOf, citations }) => {
+      async ({ store, figmaStates, storageAlert, project, validatedTokensOf, citations }) => {
         await project.write(writer.projectId);
         const validated = await validatedTokensOf(writer.projectId);
         const refused = deletionRefusals({
@@ -132,7 +133,12 @@ export const deleteTokens =
         if (!written.ok) {
           return written;
         }
-        return ok({ written: written.value, alert: await storageAlert(spaceId), createdAt });
+        return ok({
+          written: written.value,
+          alert: await storageAlert(spaceId),
+          createdAt,
+          figmaReplaced: await replacingFigmaStates(figmaStates, written.value),
+        });
       },
     );
     return announceWritten({ sendStorageAlert, signals, projectId: writer.projectId })<

@@ -22,6 +22,7 @@ import type {
   ReviewUnitOfWork,
 } from "../application/review-proposals.ts";
 import type {
+  FigmaProposalReplacer,
   ProposalStore,
   ProposalUnitOfWork,
   ValidatedTokensOf,
@@ -221,8 +222,10 @@ export const postgresProposalUnitOfWork = ({
   citationsOn,
   storageMeterOn,
   storageAlertOn,
+  figmaStateOn,
 }: {
   readonly db: PostgresDatabase;
+  readonly figmaStateOn: (tx: PostgresTransaction) => FigmaProposalReplacer;
   readonly projectLockOn: (tx: PostgresTransaction) => ProjectLock;
   readonly checkTokensOn: (tx: PostgresTransaction) => CheckTokens;
   readonly validatedTokensOn: (tx: PostgresTransaction) => ValidatedTokensOf;
@@ -234,6 +237,7 @@ export const postgresProposalUnitOfWork = ({
     db.orm.transaction((tx) =>
       work({
         store: postgresProposalStore(tx, storageMeterOn(tx)),
+        figmaStates: figmaStateOn(tx),
         storageAlert: storageAlertOn(tx),
         project: projectLockOn(tx),
         checkTokens: checkTokensOn(tx),
