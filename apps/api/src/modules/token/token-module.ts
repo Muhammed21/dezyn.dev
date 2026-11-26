@@ -13,6 +13,7 @@ import type {
 import type { Clock } from "#platform/clock.ts";
 
 import { addToken, type PendingProposals } from "./application/add-token.ts";
+import { checkContrast } from "./application/check-contrast.ts";
 import { checkTokens } from "./application/check-tokens.ts";
 import { validatedTokenWriter } from "./application/create-validated-token.ts";
 import { declareFigmaStates, type FigmaProposals } from "./application/declare-figma-states.ts";
@@ -107,6 +108,12 @@ export const tokenModule = ({
       now: clock,
     }),
     checkTokens: check,
+    checkContrast: checkContrast({
+      readValidatedTokens: readValidatedTokens({
+        modes: postgresModeReader(db.orm),
+        tokens: postgresValidatedTokenReader(db.orm),
+      }),
+    }),
     readTokens: read,
     readProjectTokens: readProjectTokens({ access, readTokens: read }),
     importTokens: importTokens({

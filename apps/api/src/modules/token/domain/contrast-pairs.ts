@@ -143,3 +143,22 @@ export const contrastBackgrounds = (
   const dezyn = extensions?.[DEZYN_EXTENSION];
   return isObject(dezyn) && Array.isArray(dezyn.contrastOn) ? backgroundsIn(dezyn.contrastOn) : [];
 };
+
+export type ContrastPair = { readonly background: string; readonly usage: ContrastUsage };
+
+const usageOf = (entry: unknown): ContrastUsage =>
+  isObject(entry) && isUsage(entry.usage) ? entry.usage : "text";
+
+export const contrastPairs = (
+  extensions: Readonly<Record<string, unknown>> | undefined,
+): readonly ContrastPair[] => {
+  const dezyn = extensions?.[DEZYN_EXTENSION];
+  if (!isObject(dezyn) || !Array.isArray(dezyn.contrastOn)) {
+    return [];
+  }
+  const contrastOn: readonly unknown[] = dezyn.contrastOn;
+  return backgroundsIn(contrastOn).map(({ index, name }) => ({
+    background: name,
+    usage: usageOf(contrastOn[index]),
+  }));
+};
