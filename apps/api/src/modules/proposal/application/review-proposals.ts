@@ -62,7 +62,7 @@ export interface FigmaStateSynchronizer {
   proposalsValidated(proposalIds: readonly string[]): Promise<void>;
   proposalsRejected(
     rejected: readonly { readonly proposalId: string; readonly token: TokenDefinition }[],
-  ): Promise<void>;
+  ): Promise<boolean>;
 }
 
 export type Settlement = {
@@ -190,26 +190,21 @@ export const batchOf =
     });
   };
 
+type Reviewed<T> = { readonly reviewed: T; readonly tokensChanged: boolean };
+
 const signallingReview =
-  <T>({
-    signals,
-    projectId,
-    validatedAny,
-  }: {
-    readonly signals: ProjectSignals;
-    readonly projectId: string;
-    readonly validatedAny: (reviewed: T) => boolean;
-  }) =>
-  async <E>(outcome: Result<T, E>): Promise<Result<T, E>> => {
-    if (outcome.ok) {
-      await signals.changed({
-        projectId,
-        topics: validatedAny(outcome.value)
-          ? ["proposals", "history", "tokens"]
-          : ["proposals", "history"],
-      });
+  ({ signals, projectId }: { readonly signals: ProjectSignals; readonly projectId: string }) =>
+  async <T, E>(outcome: Result<Reviewed<T>, E>): Promise<Result<T, E>> => {
+    if (!outcome.ok) {
+      return outcome;
     }
-    return outcome;
+    await signals.changed({
+      projectId,
+      topics: outcome.value.tokensChanged
+        ? ["proposals", "history", "tokens"]
+        : ["proposals", "history"],
+    });
+    return ok(outcome.value.reviewed);
   };
 
 const sendingStorageAlert =
@@ -263,7 +258,7 @@ export const reviewProposal =
     }
     const { proposal, projectId } = found;
     const outcome = await unitOfWork.run(
-      async (unit): Promise<Result<WithStorageAlert<Proposal>, ReviewFailure>> => {
+      async (unit): Promise<Result<WithStorageAlert<Reviewed<Proposal>>, ReviewFailure>> => {
         const reviewed = review({ status: await unit.proposals.lock(proposalId), decision });
         if ("refusal" in reviewed) {
           return err("already_reviewed");
@@ -281,9 +276,10 @@ export const reviewProposal =
             return err(failed.failure);
           }
           await unit.figmaStates.proposalsValidated([proposalId]);
-        } else {
-          await unit.figmaStates.proposalsRejected([{ proposalId, token: proposal.token }]);
         }
+        const figmaRejected =
+          reviewed.status === "rejected" &&
+          (await unit.figmaStates.proposalsRejected([{ proposalId, token: proposal.token }]));
         await unit.proposals.settle([{ proposalId, status: reviewed.status }]);
         await unit.history.append([
           {
@@ -299,16 +295,17 @@ export const reviewProposal =
           },
         ]);
         return ok({
-          value: { ...proposal, status: reviewed.status },
+          value: {
+            reviewed: { ...proposal, status: reviewed.status },
+            tokensChanged: reviewed.status === "validated" || figmaRejected,
+          },
           alert: await unit.storageAlert(spaceId),
         });
       },
     );
-    return signallingReview<Proposal>({
-      signals,
-      projectId,
-      validatedAny: (reviewed) => reviewed.status === "validated",
-    })(await sendingStorageAlert(sendStorageAlert)(outcome));
+    return signallingReview({ signals, projectId })(
+      await sendingStorageAlert(sendStorageAlert)(outcome),
+    );
   };
 
 export type InvalidProposal = {
@@ -377,7 +374,9 @@ export const validateBatch =
     const validated = await validatedTokensOf(projectId);
     const pending = await proposals.pendingTokensOf(projectId);
     const validatedBatch = await unitOfWork.run(
-      async (unit): Promise<Result<WithStorageAlert<ValidatedBatch>, BatchValidationFailure>> => {
+      async (
+        unit,
+      ): Promise<Result<WithStorageAlert<Reviewed<ValidatedBatch>>, BatchValidationFailure>> => {
         const locked = await unit.proposals.lockBatch(batchId);
         const plan = planBatchValidation({
           batchState: batchStateAt({ batch: batch, now: occurredAt }),
@@ -415,7 +414,7 @@ export const validateBatch =
           decided.map(({ proposal, status }) => ({ proposalId: proposal.id, status })),
         );
         await unit.figmaStates.proposalsValidated(plan.toValidate.map(({ id }) => id));
-        await unit.figmaStates.proposalsRejected(
+        const figmaRejected = await unit.figmaStates.proposalsRejected(
           plan.toReject.map((proposal) => ({ proposalId: proposal.id, token: proposal.token })),
         );
         await unit.history.append(
@@ -436,20 +435,21 @@ export const validateBatch =
         );
         return ok({
           value: {
-            id: batchId,
-            state: "closed",
-            validated: plan.toValidate.map(({ id }) => id),
-            rejected: plan.toReject.map(({ id }) => id),
+            reviewed: {
+              id: batchId,
+              state: "closed",
+              validated: plan.toValidate.map(({ id }) => id),
+              rejected: plan.toReject.map(({ id }) => id),
+            },
+            tokensChanged: plan.toValidate.length > 0 || figmaRejected,
           },
           alert: await unit.storageAlert(spaceId),
         });
       },
     );
-    return signallingReview<ValidatedBatch>({
-      signals,
-      projectId,
-      validatedAny: (closed) => closed.validated.length > 0,
-    })(await sendingStorageAlert(sendStorageAlert)(validatedBatch));
+    return signallingReview({ signals, projectId })(
+      await sendingStorageAlert(sendStorageAlert)(validatedBatch),
+    );
   };
 
 export const pendingProposalsOf =

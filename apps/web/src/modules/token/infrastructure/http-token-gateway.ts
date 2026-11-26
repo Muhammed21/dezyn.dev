@@ -13,7 +13,33 @@ import {
   UNAUTHORIZED,
 } from "../../../platform/http.ts";
 import type { TokenGateway } from "../application/token-gateway.ts";
-import { figmaStateOf, type Token, tokenTypeOf } from "../domain/token.ts";
+import {
+  figmaStateOf,
+  type Token,
+  type TokenFigmaState,
+  type TokenValue,
+  tokenTypeOf,
+} from "../domain/token.ts";
+
+type FigmaOutput = NonNullable<z.infer<typeof TokenOutput>["figma"]>;
+
+const valueOf = ({
+  $value,
+  modes,
+}: {
+  readonly $value?: unknown;
+  readonly modes?: Readonly<Record<string, unknown>> | undefined;
+}): TokenValue =>
+  modes === undefined ? { kind: "single", value: $value } : { kind: "by_mode", values: modes };
+
+const figmaOf = ({ state, declaredAt, proposal, rejectedValue }: FigmaOutput): TokenFigmaState => ({
+  state: figmaStateOf(state),
+  declaredAt: new Date(declaredAt),
+  ...(proposal === undefined
+    ? {}
+    : { proposal: { id: proposal.id, batchId: proposal.batchId, value: valueOf(proposal.value) } }),
+  ...(rejectedValue === undefined ? {} : { rejectedValue: valueOf(rejectedValue) }),
+});
 
 const tokenOf = ({
   id,
@@ -27,13 +53,9 @@ const tokenOf = ({
   id,
   name,
   type: tokenTypeOf($type),
-  value:
-    modes === undefined ? { kind: "single", value: $value } : { kind: "by_mode", values: modes },
+  value: valueOf({ $value, modes }),
   description: $description,
-  figma:
-    figma === undefined
-      ? undefined
-      : { state: figmaStateOf(figma.state), declaredAt: new Date(figma.declaredAt) },
+  figma: figma === undefined ? undefined : figmaOf(figma),
 });
 
 export const createHttpTokenGateway = ({

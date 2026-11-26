@@ -21,10 +21,21 @@ export interface ValidatedTokenReader {
   validatedValuesOf(projectId: string): Promise<readonly StoredValue[]>;
 }
 
+export type FigmaValue = {
+  readonly $value?: unknown;
+  readonly modes?: Readonly<Record<string, unknown>>;
+};
+
 export type TokenFigmaState = {
   readonly tokenId: string;
   readonly state: FigmaState;
   readonly figmaVariables?: readonly string[];
+  readonly proposal?: {
+    readonly id: string;
+    readonly batchId: string;
+    readonly value: FigmaValue;
+  };
+  readonly rejectedValue?: FigmaValue;
   readonly declaredAt: Date;
   readonly author:
     | { readonly kind: "member"; readonly userId: string; readonly name: string }

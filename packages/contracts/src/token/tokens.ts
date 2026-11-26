@@ -27,9 +27,16 @@ const BatchRef = z.looseObject({ id: Uuid, state: openEnum(["open", "closed"]) }
 
 const FigmaVariables = z.array(z.string()).optional();
 
+const FigmaValueOutput = z.looseObject({
+  $value: z.unknown().optional(),
+  modes: z.record(z.string(), z.unknown()).optional(),
+});
+
 const FigmaStateOutput = z.looseObject({
   state: FigmaStateEnum,
   figmaVariables: FigmaVariables,
+  proposal: z.looseObject({ id: Uuid, batchId: Uuid, value: FigmaValueOutput }).optional(),
+  rejectedValue: FigmaValueOutput.optional(),
   declaredAt: z.iso.datetime(),
   author: extensibleUnion("kind", [
     z.looseObject({ kind: z.literal("member"), userId: Uuid, name: z.string() }),

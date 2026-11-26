@@ -13,6 +13,7 @@ import type {
   Token,
   TokenFigmaState,
   TokensFailure,
+  TokenValue as Value,
 } from "../domain/token.ts";
 
 type ReadTokens = (project: {
@@ -22,6 +23,15 @@ type ReadTokens = (project: {
 type ProjectProposals = ComponentType<{ readonly projectId: string }>;
 
 type ProjectBanners = ComponentType<{ readonly projectId: string }>;
+
+type AliasValues = ReadonlyMap<string, unknown>;
+
+export type ValuePreview = ComponentType<{
+  readonly label: string;
+  readonly type: string;
+  readonly value: unknown;
+  readonly aliases: AliasValues;
+}>;
 
 const tokensKeyOf = (projectId: string) => ["tokens", projectId];
 
@@ -66,29 +76,112 @@ const FIGMA_STATE_LABELS: Readonly<Record<FigmaState, string>> = {
   unknown: "état inconnu",
 };
 
-const TokenFigma = ({
-  figma,
-  clock,
+type Previewing = {
+  readonly token: Token;
+  readonly modes: readonly string[];
+  readonly aliases: AliasValues;
+  readonly ValuePreview: ValuePreview;
+};
+
+const FigmaValue = ({
+  label,
+  value,
+  previewing: { token, modes, aliases, ValuePreview },
 }: {
-  readonly figma: TokenFigmaState | undefined;
-  readonly clock: Clock;
+  readonly label: string;
+  readonly value: Value;
+  readonly previewing: Previewing;
 }) => {
+  if (value.kind === "single") {
+    return <ValuePreview label={label} type={token.type} value={value.value} aliases={aliases} />;
+  }
+  const { values } = value;
+  return (
+    <>
+      <p>{label} :</p>
+      {modes
+        .filter((mode) => mode in values)
+        .map((mode) => (
+          <ValuePreview
+            key={mode}
+            label={mode}
+            type={token.type}
+            value={values[mode]}
+            aliases={aliases}
+          />
+        ))}
+    </>
+  );
+};
+
+const FigmaReading = ({
+  figma: { proposal, rejectedValue },
+  previewing,
+}: {
+  readonly figma: TokenFigmaState;
+  readonly previewing: Previewing;
+}) => {
+  if (proposal !== undefined) {
+    return (
+      <>
+        <FigmaValue label="Valeur Figma" value={proposal.value} previewing={previewing} />
+        <Link
+          to="/lots/$batchId"
+          params={{ batchId: proposal.batchId }}
+          hash={`proposition-${proposal.id}`}
+        >
+          Voir la proposition
+        </Link>
+      </>
+    );
+  }
+  if (rejectedValue !== undefined) {
+    return (
+      <FigmaValue
+        label="Dernière valeur Figma rejetée"
+        value={rejectedValue}
+        previewing={previewing}
+      />
+    );
+  }
+  return null;
+};
+
+const TokenFigma = ({
+  clock,
+  previewing,
+}: {
+  readonly clock: Clock;
+  readonly previewing: Previewing;
+}) => {
+  const { figma } = previewing.token;
   if (figma === undefined) {
     return null;
   }
   const declared = daysAgoText(daysSince({ since: figma.declaredAt, now: clock() }));
   return (
-    <p>
-      Figma : {FIGMA_STATE_LABELS[figma.state]} ({declared})
-    </p>
+    <>
+      <p>
+        Figma : {FIGMA_STATE_LABELS[figma.state]} ({declared})
+      </p>
+      <FigmaReading figma={figma} previewing={previewing} />
+    </>
   );
 };
+
+const aliasValuesOf = (tokens: readonly Token[]): AliasValues =>
+  new Map(
+    tokens.flatMap(({ name, value }): readonly (readonly [string, unknown])[] =>
+      value.kind === "single" ? [[name, value.value]] : [],
+    ),
+  );
 
 const ProjectTokensList = ({
   projectId,
   readTokens,
   ProjectProposals,
   ProjectBanners,
+  ValuePreview,
   subscribe,
   clock,
 }: {
@@ -96,6 +189,7 @@ const ProjectTokensList = ({
   readonly readTokens: ReadTokens;
   readonly ProjectProposals: ProjectProposals;
   readonly ProjectBanners: ProjectBanners;
+  readonly ValuePreview: ValuePreview;
   readonly subscribe: SubscribeToProject;
   readonly clock: Clock;
 }) => {
@@ -127,6 +221,7 @@ const ProjectTokensList = ({
     );
   }
   const { modes, tokens } = data.value;
+  const aliases = aliasValuesOf(tokens);
   return (
     <main>
       <h1>Tokens</h1>
@@ -144,7 +239,7 @@ const ProjectTokensList = ({
               <p>{token.type === "unknown" ? "type inconnu" : token.type}</p>
               <TokenValue token={token} modes={modes} />
               <p>{token.description}</p>
-              <TokenFigma figma={token.figma} clock={clock} />
+              <TokenFigma clock={clock} previewing={{ token, modes, aliases, ValuePreview }} />
             </li>
           ))}
         </ul>
@@ -159,6 +254,7 @@ export const projectTokensRoute = ({
   readTokens,
   ProjectProposals,
   ProjectBanners,
+  ValuePreview,
   subscribe,
   clock,
 }: {
@@ -166,6 +262,7 @@ export const projectTokensRoute = ({
   readonly readTokens: ReadTokens;
   readonly ProjectProposals: ProjectProposals;
   readonly ProjectBanners: ProjectBanners;
+  readonly ValuePreview: ValuePreview;
   readonly subscribe: SubscribeToProject;
   readonly clock: Clock;
 }) => {
@@ -180,6 +277,7 @@ export const projectTokensRoute = ({
           readTokens={readTokens}
           ProjectProposals={ProjectProposals}
           ProjectBanners={ProjectBanners}
+          ValuePreview={ValuePreview}
           subscribe={subscribe}
           clock={clock}
         />

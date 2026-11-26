@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { type App, BASE_URL, callMcp, withIdentityApp } from "#testing/authorization-flow.ts";
-import { seedProject } from "#testing/project-fixtures.ts";
+import { seedModes, seedProject } from "#testing/project-fixtures.ts";
 import { addToken, makeColorToken } from "#testing/token-fixtures.ts";
 
 const NIGHT_BLUE = { colorSpace: "srgb", components: [0.1, 0.2, 0.4] };
@@ -100,6 +100,8 @@ describe("valider la valeur Figma passe le token à synchronisé, à la date de 
           figma: { state: "synced", declaredAt: COMPARED_AT },
         },
       ]);
+      expect(tokens[1].figma).not.toHaveProperty("proposal");
+      expect(tokens[1].figma).not.toHaveProperty("rejectedValue");
     }));
 
   it("la validation d'un lot fermé synchronise ses tokens validés, et un token rejeté reste divergent", () =>
@@ -359,5 +361,88 @@ describe("seule la proposition née de la dernière comparaison synchronise le t
       const tokens = await tokensOf(app, { accessToken, projectId });
 
       expect(tokens[0]).toMatchObject({ $value: NIGHT_BLUE, figma: { state: "missing_in_figma" } });
+    }));
+});
+
+const readTokensOverMcp = async (
+  app: App,
+  { accessToken, projectId }: { accessToken: string; projectId: string },
+) =>
+  (await callTool(app, { token: accessToken, name: "read_tokens", args: { projectId } }))
+    .structuredContent.tokens;
+
+describe("un token divergent rend la valeur relevée dans Figma, lue dans sa proposition (ADR 0024 §4)", () => {
+  it("tant que la proposition est en attente, HTTP et read_tokens la rendent, mode par mode", () =>
+    withClock(async (app, db) => {
+      const seeded = await seedProject(app, db);
+      const { accessToken, projectId } = seeded;
+      await seedModes(db, { projectId, modes: ["clair", "sombre"] });
+      await addToken(app, {
+        ...seeded,
+        token: {
+          name: "couleur.fond",
+          $type: "color",
+          modes: { clair: SKY_BLUE, sombre: SKY_BLUE },
+        },
+      });
+      const declared = await declareFigmaStates(app, {
+        token: accessToken,
+        projectId,
+        states: [
+          {
+            name: "couleur.fond",
+            state: "diverged",
+            figmaValue: { modes: { clair: SKY_BLUE, sombre: NIGHT_BLUE } },
+          },
+        ],
+      });
+      const { proposal } = declared.states[0];
+
+      const overHttp = await tokensOf(app, { accessToken, projectId });
+      const overMcp = await readTokensOverMcp(app, { accessToken, projectId });
+
+      const figma = {
+        state: "diverged",
+        proposal: {
+          id: proposal.id,
+          batchId: proposal.batch.id,
+          value: { modes: { clair: SKY_BLUE, sombre: NIGHT_BLUE } },
+        },
+      };
+      expect(overHttp[0]).toMatchObject({ figma });
+      expect(overMcp[0]).toMatchObject({ figma });
+      expect(overHttp[0].figma).not.toHaveProperty("rejectedValue");
+    }));
+
+  it("après un rejet, la proposition disparaît et la valeur rejetée est rendue", () =>
+    withClock(async (app, db, clock) => {
+      const { accessToken, projectId, fond } = await seedDivergence(app, db, clock);
+
+      await request(app, { accessToken, path: `/proposals/${fond.id}/reject`, body: {} });
+      const overHttp = await tokensOf(app, { accessToken, projectId });
+      const overMcp = await readTokensOverMcp(app, { accessToken, projectId });
+
+      expect(overHttp[1]).toMatchObject({
+        name: "couleur.fond",
+        figma: { state: "diverged", rejectedValue: { $value: NIGHT_BLUE } },
+      });
+      expect(overHttp[1].figma).not.toHaveProperty("proposal");
+      expect(overMcp[1].figma).toEqual(overHttp[1].figma);
+    }));
+
+  it("une proposition remplacée par une autre écriture n'est plus rendue", () =>
+    withClock(async (app, db, clock) => {
+      const { accessToken, projectId } = await seedDivergence(app, db, clock);
+
+      await callTool(app, {
+        token: accessToken,
+        name: "write_tokens",
+        args: { projectId, tokens: [makeColorToken({ name: "couleur.fond", $value: SKY_BLUE })] },
+      });
+      const tokens = await tokensOf(app, { accessToken, projectId });
+
+      expect(tokens[1]).toMatchObject({ name: "couleur.fond", figma: { state: "diverged" } });
+      expect(tokens[1].figma).not.toHaveProperty("proposal");
+      expect(tokens[0].figma).toHaveProperty("proposal");
     }));
 });

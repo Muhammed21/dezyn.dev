@@ -205,7 +205,7 @@ describe("l'IA lit les tokens validés d'un projet par le MCP (ADR 0012 §6)", (
             expect.objectContaining({
               name: "read_tokens",
               description:
-                "Lit les tokens validés d'un projet en DTCG, triés par nom : une valeur $value, ou une valeur par mode dans modes, et les alias en {nom.du.token}. Un token porte figma, son dernier état Figma déclaré, et duplicates, les noms des autres tokens validés de même type et de même valeur dans chaque mode. Avec includeProposals, rend aussi les propositions en attente, triées par nom, avec leur statut et leur lot. Réutilise un token existant par alias ({nom.du.token}) plutôt que de recopier sa valeur ; ne crée un nouveau token que si aucun token ne porte déjà cette valeur.",
+                "Lit les tokens validés d'un projet en DTCG, triés par nom : une valeur $value, ou une valeur par mode dans modes, et les alias en {nom.du.token}. Un token porte figma, son dernier état Figma déclaré, avec, pour un token divergent, proposal (id, batchId et value, la valeur relevée dans Figma) tant que sa proposition est en attente, et rejectedValue, la dernière valeur Figma rejetée ; et duplicates, les noms des autres tokens validés de même type et de même valeur dans chaque mode. Avec includeProposals, rend aussi les propositions en attente, triées par nom, avec leur statut et leur lot. Réutilise un token existant par alias ({nom.du.token}) plutôt que de recopier sa valeur ; ne crée un nouveau token que si aucun token ne porte déjà cette valeur.",
               inputSchema: expect.objectContaining({ required: ["projectId"] }),
               outputSchema: expect.objectContaining({
                 properties: expect.objectContaining({
