@@ -106,6 +106,7 @@ describe("page de l'historique d'un projet (ADR 0044 §6)", () => {
     ["project.created", "Projet créé"],
     ["token.created", "Token créé"],
     ["modes.created", "Modes créés"],
+    ["mode.added", "Mode ajouté"],
     ["proposal.validated", "Proposition validée"],
     ["proposal.rejected", "Proposition rejetée"],
     ["mcp.read_history", "Historique lu par l'IA"],

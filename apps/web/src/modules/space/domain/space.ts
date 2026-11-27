@@ -11,6 +11,7 @@ const ACTIONS = [
   "project.setFigmaFile",
   "token.create",
   "token.declareFigmaState",
+  "mode.create",
   "proposal.review",
   "subscription.checkout",
 ] as const;

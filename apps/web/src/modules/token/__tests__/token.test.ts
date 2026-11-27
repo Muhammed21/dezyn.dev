@@ -320,3 +320,115 @@ describe("lecture des tokens d'un projet dans l'app web (ADR 0044)", () => {
     expect(await tokens.readTokens(reading)).toEqual(err("invalid_response"));
   });
 });
+
+const makeAddedModeOutput = (overrides: Readonly<Record<string, unknown>> = {}) => ({
+  mode: "contraste-eleve",
+  copiedFrom: "sombre",
+  modes: ["clair", "sombre", "contraste-eleve"],
+  ...overrides,
+});
+
+const makeAddition = (
+  overrides: Partial<{ projectId: string; name: string; copiedFrom: string }> = {},
+) => ({
+  projectId: PROJECT_ID,
+  name: "contraste-eleve",
+  copiedFrom: "sombre",
+  ...overrides,
+});
+
+const problem = (body: Readonly<Record<string, unknown>>, status: number) =>
+  json({ type: "about:blank", title: "Refus", status, ...body }, status);
+
+describe("ajout d'un mode au projet dans l'app web (ADR 0062)", () => {
+  it("envoie le nom rogné et le mode à copier à l'API, avec le cookie du navigateur", async () => {
+    const { tokens, calls } = answering(json(makeAddedModeOutput(), 201));
+
+    await tokens.addMode(makeAddition({ name: "  contraste-eleve  " }));
+
+    expect(calls).toEqual([
+      {
+        url: `${API_URL}/v1/projects/${PROJECT_ID}/modes`,
+        init: {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name: "contraste-eleve", copiedFrom: "sombre" }),
+          credentials: "include",
+        },
+      },
+    ]);
+  });
+
+  it("donne le mode ajouté, le mode copié et les modes du projet", async () => {
+    const { tokens } = answering(json(makeAddedModeOutput(), 201));
+
+    expect(await tokens.addMode(makeAddition())).toEqual(
+      ok({
+        mode: "contraste-eleve",
+        copiedFrom: "sombre",
+        modes: ["clair", "sombre", "contraste-eleve"],
+      }),
+    );
+  });
+
+  it.each(["", "   ", "a".repeat(101)])(
+    "donne invalid_name pour le nom %j, sans appeler l'API",
+    async (name) => {
+      const { tokens, calls } = answering(json(makeAddedModeOutput(), 201));
+
+      expect(await tokens.addMode(makeAddition({ name }))).toEqual(err("invalid_name"));
+      expect(calls).toEqual([]);
+    },
+  );
+
+  it("donne not_found pour un projet qui n'est pas un UUID, sans appeler l'API", async () => {
+    const { tokens, calls } = answering(json(makeAddedModeOutput(), 201));
+
+    expect(await tokens.addMode(makeAddition({ projectId: "projet-1" }))).toEqual(err("not_found"));
+    expect(calls).toEqual([]);
+  });
+
+  it.each([
+    [
+      "des propositions en attente",
+      problem(
+        {
+          type: "https://dezyn.dev/problems/pending-proposals",
+          errors: [{ path: "modes", message: "Propositions en attente" }],
+        },
+        400,
+      ),
+      "pending_proposals",
+    ],
+    [
+      "un projet sans modes",
+      problem({ errors: [{ path: "modes", message: "Projet sans modes" }] }, 400),
+      "no_modes",
+    ],
+    [
+      "un mode à copier inconnu",
+      problem({ errors: [{ path: "copiedFrom", message: "Mode à copier absent" }] }, 400),
+      "unknown_source",
+    ],
+    [
+      "un nom refusé",
+      problem({ errors: [{ path: "name", message: "Trop long" }] }, 400),
+      "invalid_name",
+    ],
+    ["un nom déjà pris", problem({}, 409), "name_taken"],
+    ["une session expirée", problem({}, 401), "unauthenticated"],
+    ["un projet introuvable", problem({}, 404), "not_found"],
+    ["une panne", problem({}, 500), "unavailable"],
+    ["un refus inattendu", problem({}, 403), "invalid_response"],
+  ])("donne pour %s l'échec attendu", async (_case, response, failure) => {
+    const { tokens } = answering(response);
+
+    expect(await tokens.addMode(makeAddition())).toEqual(err(failure));
+  });
+
+  it("donne invalid_response sur un corps sans les modes du projet", async () => {
+    const { tokens } = answering(json({ mode: "contraste-eleve", copiedFrom: "sombre" }, 201));
+
+    expect(await tokens.addMode(makeAddition())).toEqual(err("invalid_response"));
+  });
+});

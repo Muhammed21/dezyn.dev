@@ -23,6 +23,7 @@ const HistoryEntryOutput = z.looseObject({
     "token.created",
     "token.deleted",
     "modes.created",
+    "mode.added",
     "proposal.validated",
     "proposal.rejected",
     "mcp.read_history",

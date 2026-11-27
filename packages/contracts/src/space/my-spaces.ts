@@ -16,6 +16,7 @@ export const ACTIONS = [
   "token.create",
   "token.delete",
   "token.declareFigmaState",
+  "mode.create",
   "proposal.review",
   "subscription.checkout",
 ] as const;

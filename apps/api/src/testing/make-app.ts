@@ -69,6 +69,7 @@ export const makeHistory = (): HistoryUseCases => ({
 
 export const makeTokens = (): TokenUseCases => ({
   addToken: () => Promise.resolve(err("not_found")),
+  addMode: () => Promise.resolve(err("not_found")),
   deleteToken: () => Promise.resolve(err("not_found")),
   readTokens: () => Promise.resolve({ modes: [], tokens: [] }),
   checkTokens: () => Promise.resolve([]),

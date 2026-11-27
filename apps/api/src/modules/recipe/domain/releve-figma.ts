@@ -38,7 +38,7 @@ Lis les tokens du projet avec read_tokens avec includeProposals à true : les to
 5. Une variable absente de dezyn devient une proposition de création, écrite avec write_tokens en DTCG, une valeur par mode connu du projet.
 6. Une valeur divergente devient une proposition (ADR 0024 §4) : déclare le token divergent (diverged) avec la valeur Figma dans figmaValue, et dezyn en fait la proposition. Ne l'écris pas aussi avec write_tokens.
 7. Un token absent de Figma reçoit l'état absent de Figma (missing_in_figma). Ne propose jamais sa suppression.
-8. Un mode présent seulement dans Figma n'est ni proposé ni créé : signale-le dans ton compte rendu.
+8. Un mode présent seulement dans Figma n'est ni proposé ni créé : signale-le dans ton compte rendu, et indique qu'un membre l'ajoute depuis la page du projet dans dezyn, sous le même nom, en copiant un mode existant, une fois les lots en attente relus. Au relevé suivant, ce mode est comparé comme les autres.
 9. Un relevé ouvre un lot de propositions seulement s'il crée au moins une proposition, avec open_proposal_batch avec recipe « releve_figma » et l'intention de la règle 10, avant toute écriture. Toutes les propositions du relevé vont dans ce seul lot : passe son identifiant (batch.id) en batchId à write_tokens, declare_figma_states et close_proposal_batch, puis ferme-le avec close_proposal_batch. Sans proposition à créer, n'ouvre aucun lot et déclare les états sans batchId.
 10. L'intention du lot est « Relevé Figma du ${date} : <N> nouveaux tokens, <M> valeurs changées », où N compte les propositions de création et M les valeurs divergentes proposées. Omets une partie à zéro : « Relevé Figma du ${date} : 2 valeurs changées ». Au singulier : « 1 nouveau token », « 1 valeur changée ».
 11. N et M ne comptent que les propositions créées par ce relevé. Compare la valeur Figma à la proposition en attente sur le même nom quand il y en a une, sinon à la valeur validée : une proposition encore en attente depuis un relevé précédent, de même valeur, n'est ni recopiée ni comptée.
@@ -51,7 +51,7 @@ Lis les tokens du projet avec read_tokens avec includeProposals à true : les to
 2. Compare-les selon les règles, et compte N et M.
 3. Si N + M > 0, ouvre le lot (règle 9), écris les propositions de création avec son batchId, déclare les états Figma avec son batchId, puis ferme-le.
 4. Sinon, déclare les états Figma sans batchId, et n'ouvre aucun lot.
-5. Termine par ton compte rendu : l'intention du lot ou l'absence de lot, les tokens absents de Figma, les modes présents seulement dans Figma, et toute erreur de dezyn.`;
+5. Termine par ton compte rendu : l'intention du lot ou l'absence de lot, les tokens absents de Figma, les modes présents seulement dans Figma, avec la façon de les ajouter (règle 8), et toute erreur de dezyn.`;
 };
 
 export const releveFigma: Recipe = {

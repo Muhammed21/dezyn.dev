@@ -28,6 +28,7 @@ import { spacePaymentAlert } from "./modules/space/presentation/space-payment-al
 import { spacePlanRoute } from "./modules/space/presentation/space-plan-route.tsx";
 import { spaceStorageAlert } from "./modules/space/presentation/space-storage-alert.tsx";
 import { createSpaces } from "./modules/space/space-module.ts";
+import { projectModeAddition } from "./modules/token/presentation/project-mode-addition.tsx";
 import {
   projectTokensRoute,
   refreshProjectTokens,
@@ -93,7 +94,18 @@ const appRouter = ({
     subscribe: projectEvents.subscribe,
     clock,
   });
-  const ProjectHeader = projectSections([ProjectBanners, ProjectFigmaSurvey, ProjectFigmaFile]);
+  const ProjectModeAddition = projectModeAddition({
+    readProject: projects.readProject,
+    readSpace: spaces.readSpace,
+    readTokens: tokens.readTokens,
+    addMode: tokens.addMode,
+  });
+  const ProjectHeader = projectSections([
+    ProjectBanners,
+    ProjectFigmaSurvey,
+    ProjectFigmaFile,
+    ProjectModeAddition,
+  ]);
 
   const root = createRootRoute();
   return createRouter({

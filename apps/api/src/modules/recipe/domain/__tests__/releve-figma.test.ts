@@ -86,7 +86,7 @@ describe("la recette releve_figma (ADR 0059 §5)", () => {
       "7. Un token absent de Figma reçoit l'état absent de Figma (missing_in_figma). Ne propose jamais sa suppression.",
     ],
     [
-      "8. Un mode présent seulement dans Figma n'est ni proposé ni créé : signale-le dans ton compte rendu.",
+      "8. Un mode présent seulement dans Figma n'est ni proposé ni créé : signale-le dans ton compte rendu, et indique qu'un membre l'ajoute depuis la page du projet dans dezyn, sous le même nom, en copiant un mode existant, une fois les lots en attente relus.",
     ],
     ["9. Un relevé ouvre un lot de propositions seulement s'il crée au moins une proposition"],
     [
@@ -121,6 +121,15 @@ describe("la recette releve_figma (ADR 0059 §5)", () => {
     expect(instructionsOf()).toContain(
       "Au relevé suivant, une fois validé, il est déclaré synchronisé (synced).",
     );
+  });
+
+  it("fait dire au compte rendu comment ajouter un mode présent seulement dans Figma (ADR 0062 §7)", () => {
+    const text = instructionsOf();
+
+    expect(text).toContain(
+      "les modes présents seulement dans Figma, avec la façon de les ajouter (règle 8)",
+    );
+    expect(text).toContain("Au relevé suivant, ce mode est comparé comme les autres.");
   });
 
   it("omet une partie à zéro de l'intention", () => {

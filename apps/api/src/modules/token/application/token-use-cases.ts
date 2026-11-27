@@ -1,3 +1,4 @@
+import type { addMode } from "./add-mode.ts";
 import type { addToken } from "./add-token.ts";
 import type { checkContrast } from "./check-contrast.ts";
 import type { checkTokens } from "./check-tokens.ts";
@@ -9,6 +10,7 @@ import type { readProjectTokens, readTokens } from "./read-tokens.ts";
 
 export type TokenUseCases = {
   readonly addToken: ReturnType<typeof addToken>;
+  readonly addMode: ReturnType<typeof addMode>;
   readonly deleteToken: ReturnType<typeof deleteToken>;
   readonly readTokens: ReturnType<typeof readTokens>;
   readonly checkTokens: ReturnType<typeof checkTokens>;
