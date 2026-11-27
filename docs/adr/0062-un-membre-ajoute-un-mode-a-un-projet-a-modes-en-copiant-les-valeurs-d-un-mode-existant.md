@@ -87,7 +87,7 @@ Au relevé Figma suivant, le nouveau mode est un mode connu (ADR 0059 §5 règle
 
 ### 3. Une proposition en attente refuse l'ajout
 
-Tant que le projet a une proposition en attente, l'ajout est refusé, comme l'import (ADR 0041 §3) : la proposition n'aurait pas de valeur pour le nouveau mode. Le refus répond 409, avec un message qui renvoie à la relecture des lots en attente.
+Tant que le projet a une proposition en attente, l'ajout est refusé, comme l'import (ADR 0041 §3) : la proposition n'aurait pas de valeur pour le nouveau mode. Le refus répond 400, comme l'import, avec un message qui renvoie à la relecture des lots en attente.
 
 ### 4. Le nouveau mode s'ajoute en dernier
 
@@ -135,7 +135,7 @@ L'ajout laisse une entrée de la nouvelle action `mode.added`, au nom du membre,
 
 ### Risques et mitigations
 
-- **Le nom saisi ne correspond pas au mode Figma** : le relevé suivant ne compare pas le nouveau mode et signale de nouveau le mode Figma ; la correspondance se fait par nom (ADR 0059 §5 règle 2).
+- **Le nom saisi ne correspond pas au mode Figma** : le relevé suivant ne compare pas le nouveau mode et signale de nouveau le mode Figma ; un mode Figma correspond au mode du projet de même nom : la comparaison porte sur les modes que le projet connaît (ADR 0059 §5 règle 3).
 - **Le relevé suivant ouvre un gros lot** pour le nouveau mode : un token dont la valeur Figma égale la valeur copiée ne crée aucune proposition (écriture identique, ADR 0013).
 - **Une proposition s'écrit pendant l'ajout** : la vérification des propositions en attente et l'écriture des valeurs se font dans la même transaction.
 
