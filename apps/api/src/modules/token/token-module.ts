@@ -12,6 +12,7 @@ import type {
 } from "#modules/space/contracts/storage-alert.ts";
 import type { Clock } from "#platform/clock.ts";
 
+import { addMode } from "./application/add-mode.ts";
 import { addToken, type PendingProposals } from "./application/add-token.ts";
 import { checkContrast } from "./application/check-contrast.ts";
 import { checkTokens } from "./application/check-tokens.ts";
@@ -22,6 +23,7 @@ import { exportTokens } from "./application/export-tokens.ts";
 import { importTokens } from "./application/import-tokens.ts";
 import { readProjectTokens, readTokens, readValidatedTokens } from "./application/read-tokens.ts";
 import { parseTokenDefinition } from "./contracts/token-definition.ts";
+import { postgresModeUnitOfWork } from "./infrastructure/postgres-modes.ts";
 import {
   postgresCitationReader,
   postgresFigmaStateReader,
@@ -99,6 +101,22 @@ export const tokenModule = ({
     addToken: addToken({
       access,
       unitOfWork: postgresTokenUnitOfWork({
+        db,
+        projectLockOn,
+        historyWriterOn,
+        proposalReplacerOn,
+        storageMeterOn,
+        storageAlertOn,
+        newId: randomUUID,
+      }),
+      sendStorageAlert,
+      signals,
+      newId: randomUUID,
+      now: clock,
+    }),
+    addMode: addMode({
+      access,
+      unitOfWork: postgresModeUnitOfWork({
         db,
         projectLockOn,
         historyWriterOn,

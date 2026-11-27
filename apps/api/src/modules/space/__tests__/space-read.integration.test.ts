@@ -61,6 +61,7 @@ describe("lire un espace (ADR 0017 §3)", () => {
           "token.create",
           "token.delete",
           "token.declareFigmaState",
+          "mode.create",
           "proposal.review",
           "subscription.checkout",
         ],

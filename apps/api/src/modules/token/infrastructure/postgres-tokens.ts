@@ -108,7 +108,7 @@ const postgresImportTargetLock = (tx: Queryable, projectLock: ProjectLock): Impo
   },
 });
 
-const insertValues = async (
+export const insertValues = async (
   tx: Queryable,
   {
     newId,

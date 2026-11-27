@@ -192,7 +192,7 @@ describe("lecture d'un espace du membre dans l'app web (ADR 0044 §5)", () => {
   it("donne l'espace avec le rôle du membre et les actions que ce rôle permet", async () => {
     const editorSpace = makeReadSpace({
       role: "editor",
-      allowedActions: ["space.read", "token.create", "proposal.review"],
+      allowedActions: ["space.read", "token.create", "mode.create", "proposal.review"],
     });
     const { spaces } = answering(json(editorSpace));
 
@@ -202,7 +202,7 @@ describe("lecture d'un espace du membre dans l'app web (ADR 0044 §5)", () => {
         name: "Studio Ada",
         plan: "free",
         role: "editor",
-        allowedActions: ["space.read", "token.create", "proposal.review"],
+        allowedActions: ["space.read", "token.create", "mode.create", "proposal.review"],
         storage: { usedBytes: 1_200_000, limitBytes: 500_000_000, alertReached: false },
         frozen: false,
         exceededFreeLimits: [],

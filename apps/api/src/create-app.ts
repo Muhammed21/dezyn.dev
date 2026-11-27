@@ -266,6 +266,13 @@ export const createApp = ({
       replayable: allowedOnProject({ projectAccess, action: "token.create" }),
     }),
   );
+  v1.post(
+    "/projects/:projectId/modes",
+    idempotentRequest({
+      idempotent,
+      replayable: allowedOnProject({ projectAccess, action: "mode.create" }),
+    }),
+  );
   v1.delete(
     "/projects/:projectId/tokens/:name",
     idempotentRequest({

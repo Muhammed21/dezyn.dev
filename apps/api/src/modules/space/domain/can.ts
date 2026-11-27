@@ -10,6 +10,7 @@ export const ACTIONS = [
   "token.create",
   "token.delete",
   "token.declareFigmaState",
+  "mode.create",
   "proposal.review",
   "subscription.checkout",
 ] as const;
@@ -33,6 +34,7 @@ const PERMISSIONS: Readonly<Record<Role, ReadonlySet<Action>>> = {
     "token.create",
     "token.delete",
     "token.declareFigmaState",
+    "mode.create",
     "proposal.review",
     "subscription.checkout",
   ]),
@@ -43,6 +45,7 @@ const PERMISSIONS: Readonly<Record<Role, ReadonlySet<Action>>> = {
     "token.create",
     "token.delete",
     "token.declareFigmaState",
+    "mode.create",
     "proposal.review",
   ]),
 };

@@ -33,6 +33,7 @@ const EDITOR_ACTIONS = [
   "token.create",
   "token.delete",
   "token.declareFigmaState",
+  "mode.create",
   "proposal.review",
 ];
 

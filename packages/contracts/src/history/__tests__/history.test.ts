@@ -134,6 +134,7 @@ describe("le contrat de sortie de l'historique reste ouvert (ADR 0023)", () => {
                       "token.created",
                       "token.deleted",
                       "modes.created",
+                      "mode.added",
                       "proposal.validated",
                       "proposal.rejected",
                       "mcp.read_history",

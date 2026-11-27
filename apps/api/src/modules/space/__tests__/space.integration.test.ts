@@ -39,6 +39,7 @@ const OWNER_ACTIONS = [
   "token.create",
   "token.delete",
   "token.declareFigmaState",
+  "mode.create",
   "proposal.review",
   "subscription.checkout",
 ];

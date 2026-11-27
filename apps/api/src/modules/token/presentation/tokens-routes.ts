@@ -4,8 +4,9 @@ import { z } from "zod";
 import type { MemberEnv } from "#platform/member-identity.ts";
 import { invalidRequest, type Problem, problemResponse } from "#platform/problem.ts";
 import { validate } from "#platform/validate.ts";
-import { Uuid } from "@repo/contracts";
+import { AddModeInput, PENDING_PROPOSALS_PROBLEM_TYPE, Uuid } from "@repo/contracts";
 
+import type { ModeAdditionFailure } from "../application/add-mode.ts";
 import type { AddedToken } from "../application/add-token.ts";
 import type { TokenDeletionFailure } from "../application/delete-token.ts";
 import type { ImportFailure } from "../application/import-tokens.ts";
@@ -80,8 +81,36 @@ const importProblem = (failure: Exclude<ImportFailure, "not_found">): Problem =>
         ],
       };
 
+const MODE_ADDITION_PROBLEMS: Readonly<Record<Exclude<ModeAdditionFailure, "not_found">, Problem>> =
+  {
+    pending_proposals: {
+      type: PENDING_PROPOSALS_PROBLEM_TYPE,
+      title: "Propositions en attente",
+      status: 400,
+      errors: [
+        {
+          path: "modes",
+          message: "Propositions en attente : relisez les lots en attente avant d'ajouter un mode",
+        },
+      ],
+    },
+    no_modes: invalidRequest([
+      { path: "modes", message: "Projet sans modes : aucun mode à copier" },
+    ]),
+    unknown_source: invalidRequest([
+      { path: "copiedFrom", message: "Mode à copier absent du projet" },
+    ]),
+    name_taken: {
+      type: "about:blank",
+      title: "Mode déjà présent",
+      status: 409,
+      errors: [{ path: "name", message: "Mode déjà présent dans le projet" }],
+    },
+  };
+
 export const tokensRoutes = ({
   addToken,
+  addMode,
   deleteToken,
   readProjectTokens,
   exportTokens,
@@ -144,6 +173,24 @@ export const tokensRoutes = ({
       return deleted.error === "not_found"
         ? c.notFound()
         : problemResponse(c, deletionConflict(deleted.error));
+    })
+    .post("/:projectId/modes", validate("json", AddModeInput), async (c) => {
+      const projectId = Uuid.safeParse(c.req.param("projectId")).data;
+      if (projectId === undefined) {
+        return c.notFound();
+      }
+      const added = await addMode({
+        projectId,
+        userId: c.get("identity").userId,
+        ...c.req.valid("json"),
+        correlationId: c.get("correlationId"),
+      });
+      if (added.ok) {
+        return c.json(added.value, 201);
+      }
+      return added.error === "not_found"
+        ? c.notFound()
+        : problemResponse(c, MODE_ADDITION_PROBLEMS[added.error]);
     })
     .post("/:projectId/tokens", validate("json", TokenDefinitionInput), async (c) => {
       const projectId = Uuid.safeParse(c.req.param("projectId")).data;

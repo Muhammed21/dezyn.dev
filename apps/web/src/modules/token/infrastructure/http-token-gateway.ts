@@ -1,9 +1,17 @@
-import type { z } from "zod";
+import { z } from "zod";
 
-import { type TokenOutput, TokensOutput } from "@repo/contracts";
+import {
+  AddedModeOutput,
+  PendingProposalsProblem,
+  type TokenOutput,
+  TokensOutput,
+} from "@repo/contracts";
 import { err, ok } from "@repo/result";
 
 import {
+  BAD_REQUEST,
+  CONFLICT,
+  CREATED,
   failureOf,
   type Fetch,
   NOT_FOUND,
@@ -15,6 +23,7 @@ import {
 import type { TokenGateway } from "../application/token-gateway.ts";
 import {
   figmaStateOf,
+  type ModeAdditionFailure,
   type Token,
   type TokenFigmaState,
   type TokenValue,
@@ -58,6 +67,43 @@ const tokenOf = ({
   figma: figma === undefined ? undefined : figmaOf(figma),
 });
 
+const InvalidRequestProblem = z.looseObject({
+  errors: z.array(z.looseObject({ path: z.string() })),
+});
+
+const INVALID_PATHS: ReadonlyMap<string, ModeAdditionFailure> = new Map([
+  ["modes", "no_modes"],
+  ["copiedFrom", "unknown_source"],
+]);
+
+const invalidAdditionOf = async (response: Response): Promise<ModeAdditionFailure> => {
+  const body: unknown = await response.json().catch(() => undefined);
+  if (PendingProposalsProblem.safeParse(body).success) {
+    return "pending_proposals";
+  }
+  const paths = InvalidRequestProblem.safeParse(body).data?.errors.map(({ path }) => path) ?? [];
+  return (
+    paths.map((path) => INVALID_PATHS.get(path)).find((failure) => failure !== undefined) ??
+    "invalid_name"
+  );
+};
+
+const additionRefusalOf = async (response: Response): Promise<ModeAdditionFailure> => {
+  if (response.status === BAD_REQUEST) {
+    return invalidAdditionOf(response);
+  }
+  if (response.status === CONFLICT) {
+    return "name_taken";
+  }
+  if (response.status === UNAUTHORIZED) {
+    return "unauthenticated";
+  }
+  if (response.status === NOT_FOUND) {
+    return "not_found";
+  }
+  return failureOf(response);
+};
+
 export const createHttpTokenGateway = ({
   apiUrl,
   fetch,
@@ -85,5 +131,25 @@ export const createHttpTokenGateway = ({
       return body;
     }
     return ok({ modes: body.value.modes, tokens: body.value.tokens.map(tokenOf) });
+  },
+  addMode: async ({ projectId, name, copiedFrom }) => {
+    const sent = await send(fetch, `${apiUrl}/v1/projects/${projectId}/modes`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name, copiedFrom }),
+    });
+    if (!sent.ok) {
+      return sent;
+    }
+    const response = sent.value;
+    if (response.status !== CREATED) {
+      return err(await additionRefusalOf(response));
+    }
+    const body = await parseJson(response, AddedModeOutput);
+    if (!body.ok) {
+      return body;
+    }
+    const { mode, copiedFrom: copied, modes } = body.value;
+    return ok({ mode, copiedFrom: copied, modes });
   },
 });

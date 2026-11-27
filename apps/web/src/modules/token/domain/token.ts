@@ -48,6 +48,26 @@ export type ProjectTokens = {
 
 export type TokensFailure = "unauthenticated" | "not_found" | "unavailable" | "invalid_response";
 
+export type AddedMode = {
+  readonly mode: string;
+  readonly copiedFrom: string;
+  readonly modes: readonly string[];
+};
+
+export type ModeAddition = {
+  readonly projectId: string;
+  readonly name: string;
+  readonly copiedFrom: string;
+};
+
+export type ModeAdditionFailure =
+  | TokensFailure
+  | "invalid_name"
+  | "name_taken"
+  | "unknown_source"
+  | "no_modes"
+  | "pending_proposals";
+
 export const tokenTypeOf = (value: string): TokenType =>
   TOKEN_TYPES.find((type) => type === value) ?? "unknown";
 

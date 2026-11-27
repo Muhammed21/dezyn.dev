@@ -155,3 +155,52 @@ describe("lecture des tokens d'un projet par l'app web, contre la vraie API (ADR
       expect(await anonymous.readTokens({ projectId })).toEqual(err("unauthenticated"));
     }));
 });
+
+describe("ajout d'un mode par l'app web, contre la vraie API (ADR 0062)", () => {
+  it("un membre ajoute un mode en copiant un mode, et la lecture des tokens le montre en dernier", () =>
+    withIdentityApp(async (app, db) => {
+      const { projectId, addToken, tokens } = await projectOf(app, db);
+      await seedModes(db, { projectId, modes: ["clair", "sombre"] });
+      await addToken({
+        name: "couleur.fond.primaire",
+        $type: "color",
+        modes: { clair: PRIMARY_BLUE, sombre: NIGHT_BLUE },
+      });
+
+      const added = await tokens.addMode({
+        projectId,
+        name: "contraste-eleve",
+        copiedFrom: "sombre",
+      });
+
+      expect(added).toEqual(
+        ok({
+          mode: "contraste-eleve",
+          copiedFrom: "sombre",
+          modes: ["clair", "sombre", "contraste-eleve"],
+        }),
+      );
+      const read = await tokens.readTokens({ projectId });
+      expect(read.ok && read.value.tokens.map(({ value }) => value)).toEqual([
+        {
+          kind: "by_mode",
+          values: { clair: PRIMARY_BLUE, sombre: NIGHT_BLUE, "contraste-eleve": NIGHT_BLUE },
+        },
+      ]);
+    }));
+
+  it("les refus de l'API arrivent sous l'échec qui les nomme", () =>
+    withIdentityApp(async (app, db) => {
+      const { projectId, tokens } = await projectOf(app, db);
+      const withoutModes = await tokens.addMode({ projectId, name: "sombre", copiedFrom: "clair" });
+      await seedModes(db, { projectId, modes: ["clair"] });
+
+      expect(withoutModes).toEqual(err("no_modes"));
+      expect(await tokens.addMode({ projectId, name: "clair", copiedFrom: "clair" })).toEqual(
+        err("name_taken"),
+      );
+      expect(await tokens.addMode({ projectId, name: "sombre", copiedFrom: "nuit" })).toEqual(
+        err("unknown_source"),
+      );
+    }));
+});

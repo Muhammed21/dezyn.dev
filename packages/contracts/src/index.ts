@@ -31,6 +31,12 @@ export {
   FigmaFileOutput,
 } from "./project/figma-file.ts";
 export { DeclaredFigmaStatesOutput, TokenOutput, TokensOutput } from "./token/tokens.ts";
+export {
+  AddedModeOutput,
+  AddModeInput,
+  PENDING_PROPOSALS_PROBLEM_TYPE,
+  PendingProposalsProblem,
+} from "./token/mode-addition.ts";
 export { HistoryOutput } from "./history/history.ts";
 export {
   AccountDeletionInput,

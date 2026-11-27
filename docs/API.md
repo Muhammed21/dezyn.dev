@@ -12,6 +12,10 @@ Une erreur répond en `application/problem+json` (RFC 9457) : `type`, `title`, `
 
 Toute requête d'un éditeur sur un espace gelé reçoit `https://dezyn.dev/problems/space-frozen` (403), et un outil MCP lui répond en erreur avec le code `space_frozen`. Le propriétaire n'est jamais refusé. La lecture d'un espace porte `frozen` et `exceededFreeLimits` (`projects`, `storage`, `members`) (ADR 0050 §5). Contrats : `SpaceFrozenProblem` et `SpaceOutput` dans `@repo/contracts`.
 
+### Propositions en attente
+
+L'ajout d'un mode (`POST /v1/projects/{projectId}/modes`, ADR 0062) dans un projet qui a une proposition en attente reçoit `https://dezyn.dev/problems/pending-proposals` (400) : les lots en attente se relisent avant l'ajout. Contrats : `AddModeInput`, `AddedModeOutput` et `PendingProposalsProblem` dans `@repo/contracts`.
+
 ## Idempotence des écritures
 
 Un client qui renvoie une écriture après un timeout, sans savoir si la première est passée, joint l'en-tête `Idempotency-Key`. Tant que la même clé revient, dezyn rejoue la réponse de la première requête sans rien réécrire.
@@ -25,6 +29,7 @@ Routes qui acceptent la clé, avec le droit revérifié avant un rejeu :
 | `POST /v1/invitations/{token}/accept`           | Acceptation d'une invitation | Membre actif de l'espace de l'invitation |
 | `POST /v1/projects/{projectId}/tokens`          | Ajout d'un token             | `token.create` sur le projet             |
 | `POST /v1/projects/{projectId}/tokens/import`   | Import                       | `token.create` sur le projet             |
+| `POST /v1/projects/{projectId}/modes`           | Ajout d'un mode              | `mode.create` sur le projet              |
 | `DELETE /v1/projects/{projectId}/tokens/{name}` | Suppression d'un token       | `token.delete` sur le projet             |
 | `POST /v1/proposals/{proposalId}/validate`      | Validation d'une proposition | `proposal.review` sur le projet          |
 | `POST /v1/proposals/{proposalId}/reject`        | Rejet d'une proposition      | `proposal.review` sur le projet          |
