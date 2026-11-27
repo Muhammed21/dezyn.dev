@@ -1,6 +1,6 @@
 # 0041 — Un membre importe un document DTCG ou Resolver en tokens validés, sans rien perdre ni remplacer
 
-- Statut : Accepté
+- Statut : Accepté — §3 et option C des modes (un projet à modes gagne un mode par un geste dédié d'un membre) amendés par [0062](0062-un-membre-ajoute-un-mode-a-un-projet-a-modes-en-copiant-les-valeurs-d-un-mode-existant.md)
 - Date : 2026-10-28
 - Décideurs : Muhammed Cavus
 
