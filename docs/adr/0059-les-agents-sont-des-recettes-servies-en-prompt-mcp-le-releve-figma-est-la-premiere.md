@@ -1,6 +1,6 @@
 # 0059 — Les agents sont des recettes servies en prompt MCP ; le relevé Figma est la première
 
-- Statut : Accepté
+- Statut : Accepté — §5 règle 8 et négatives (comment ajouter un mode présent seulement dans Figma) amendées par [0062](0062-un-membre-ajoute-un-mode-a-un-projet-a-modes-en-copiant-les-valeurs-d-un-mode-existant.md)
 - Date : 2026-11-25
 - Décideurs : Muhammed Cavus
 - Amende : ADR 0002 (§1 et §2, dezyn sert aussi des recettes en prompt MCP : des modèles que l'IA du client choisit de suivre, qui ne la contrôlent pas), ADR 0013 (§1, une IA peut tenir plusieurs lots ouverts dans un projet, chacun désigné par son identifiant ; §2, une écriture sans identifiant garde le comportement actuel)

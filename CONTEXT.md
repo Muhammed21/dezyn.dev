@@ -55,7 +55,7 @@ Une valeur de design nommée d'un projet : couleur, typographie, dimension, effe
 _À éviter_ : variable, style
 
 **Mode** :
-Une des valeurs d'un modificateur, par exemple clair ou sombre ; chaque mode déclare les mêmes tokens.
+Une des valeurs d'un modificateur, par exemple clair ou sombre ; chaque mode déclare les mêmes tokens. Un membre ajoute un mode à un projet qui en a déjà, en copiant les valeurs d'un mode existant ; l'IA n'en crée jamais.
 _À éviter_ : thème, contexte
 
 **Modificateur** :
